@@ -291,28 +291,44 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 			}
 			return nullptr;
 		};
-		myMat.diffuse = loadTexture(aiTextureType_BASE_COLOR, &myMat.diffuseUV);
-		myMat.normal = loadTexture(aiTextureType_NORMALS, &myMat.normalUV);
-		myMat.emissive = loadTexture(aiTextureType_EMISSIVE, &myMat.emissiveUV);
-		myMat.ao = loadTexture(aiTextureType_AMBIENT_OCCLUSION, &myMat.aoUV);
-		myMat.metallicRoughness = loadTexture(aiTextureType_UNKNOWN, &myMat.metallicRoughnessUV);
+		myMat.tex.diffuse = loadTexture(aiTextureType_BASE_COLOR, &myMat.tex.diffuseUV);
+		myMat.tex.normal = loadTexture(aiTextureType_NORMALS, &myMat.tex.normalUV);
+		myMat.tex.emissive = loadTexture(aiTextureType_EMISSIVE, &myMat.tex.emissiveUV);
+		myMat.tex.ao = loadTexture(aiTextureType_AMBIENT_OCCLUSION, &myMat.tex.aoUV);
+		myMat.tex.metallicRoughness = loadTexture(aiTextureType_UNKNOWN, &myMat.tex.metallicRoughnessUV);
 
 
-		glm::vec4 baseColorFactor;
-		glm::vec4 emissiveFactor;
-		glm::vec4 diffuseFactor;
-		glm::vec4 specularFactor;
+		// get material propertys
+		{
+			aiColor3D col;
+			mat->Get(AI_MATKEY_COLOR_AMBIENT, col);
+			float opacity = 0.0f;
+			mat->Get(AI_MATKEY_OPACITY, opacity);
+			myMat.baseColorFactor = { col.r, col.g, col.b, opacity };
 
-		float roughnessFactor = 0.0f;
-		float metallicFactor = 0.0f;
-		float alphaMask = 0.0f;
-		float alphaCutoff = 0.0f;
-		
-		float workflow = 0.0f;
+			mat->Get(AI_MATKEY_COLOR_EMISSIVE, col);
+			myMat.baseColorFactor = { col.r, col.g, col.b, opacity };
 
+			mat->Get(AI_MATKEY_COLOR_DIFFUSE, col);
+			myMat.diffuseFactor = { col.r, col.g, col.b, opacity };
 
+			mat->Get(AI_MATKEY_COLOR_SPECULAR, col);
+			myMat.specularFactor = { col.r, col.g, col.b, opacity };
 
+			mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, myMat.roughnessFactor);
 
+			mat->Get(AI_MATKEY_METALLIC_FACTOR, myMat.metallicFactor);
+
+			mat->Get("$mat.gltf.alphaCutoff", 0, 0, myMat.alphaCutoff);
+
+			if (myMat.alphaCutoff < 1.0f)
+			{
+				myMat.alphaMask = 1.0f;
+			}
+			// TODO: WORKFLOW SETTING IS NOT SET YET
+
+			CreateMaterialUniform(&myMat);
+		}
 	}
 
 	

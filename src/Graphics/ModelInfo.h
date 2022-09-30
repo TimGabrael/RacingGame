@@ -44,16 +44,34 @@ struct Texture
 };
 struct Material
 {
-	Texture* diffuse;
-	Texture* normal;
-	Texture* emissive;
-	Texture* ao;
-	Texture* metallicRoughness;
-	uint8_t diffuseUV;
-	uint8_t normalUV;
-	uint8_t emissiveUV;
-	uint8_t aoUV;
-	uint8_t metallicRoughnessUV;
+	struct TextureInfo
+	{
+		Texture* diffuse;
+		Texture* normal;
+		Texture* emissive;
+		Texture* ao;
+		Texture* metallicRoughness;
+		uint8_t diffuseUV;
+		uint8_t normalUV;
+		uint8_t emissiveUV;
+		uint8_t aoUV;
+		uint8_t metallicRoughnessUV;
+	}tex;
+
+	glm::vec4 baseColorFactor;
+	glm::vec4 emissiveFactor;
+	glm::vec4 diffuseFactor;
+	glm::vec4 specularFactor;
+
+	float roughnessFactor = 0.0f;
+	float metallicFactor = 0.0f;
+	float alphaMask = 0.0f;
+	float alphaCutoff = 0.0f;
+
+	float workflow = 0.0f;
+
+
+	GLuint uniform;
 };
 
 struct Mesh
@@ -94,3 +112,6 @@ void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx,
 
 void CreateBoneDataFromAnimation(const Animation* anim, GLuint* uniform);
 void UpdateBoneDataFromAnimation(const Animation* anim, GLuint uniform, float oldTime, float newTime);
+
+void CreateMaterialUniform(Material* mat);
+void UpdateMaterialUniform(Material* mat);

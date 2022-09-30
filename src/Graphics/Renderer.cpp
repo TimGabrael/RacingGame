@@ -56,12 +56,21 @@ in vec2 fragUV1;\n\
 in vec2 fragUV2;\n\
 in vec4 fragColor;\n\
 layout (std140) uniform Material {\n\
-	vec4 ambient;\n\
-	vec4 diffuse;\n\
-	vec4 specular;\n\
-	float shininess;\n\
-	float reflectivness;\n\
-};\n\
+	vec4 baseColorFactor;\n\
+	vec4 emissiveFactor;\n\
+	vec4 diffuseFactor;\n\
+	vec4 specularFactor;\n\
+	int diffuseUV;\n\
+	int normalUV;\n\
+	int emissiveUV;\n\
+	int aoUV;\n\
+	int metallicRoughnessUV;\n\
+	float roughnessFactor;\n\
+	float metallicFactor;\n\
+	float alphaMask;\n\
+	float alphaCutoff;\n\
+	float workflow;\n\
+}mat;\n\
 struct PointLight\n\
 {\n\
 	vec4 color;\n\
@@ -74,7 +83,9 @@ layout (std140) uniform LightData {\n\
 	PointLight pointLights;\n\
 }lights;\n\
 \n\
-uniform samplerCube cubeMap;\n\
+uniform samplerCube samplerIrradiance;\n\
+uniform samplerCube prefilteredMap;\n\
+uniform sampler2D samplerBRDFLUT;\n\
 uniform sampler2D colorMap;\n\
 uniform sampler2D normalMap;\n\
 uniform sampler2D aoMap;\n\
@@ -95,6 +106,70 @@ void main()\n\
 	outColor = vec4(1.0f, 0.0f, 1.0f, 1.0f) * vec4(diff, diff, diff, 1.0f);\n\
 }\n\
 ";
+
+
+
+
+
+
+const char* filterCubeVertShader = "#version 330\n\
+layout (location = 0) in vec3 inPos;\n\
+uniform mat4 mvp;\n\
+out vec3 outUVW;\n\
+void main()\n\
+{\n\
+	outUVW = inPos;\n\
+	gl_Position = mvp * vec4(inPos.xyz, 1.0);\n\
+}";
+const char* filterIrradianceCubeFragmentShader = "#version 330\n\
+in vec3 outUVW;\n\
+out vec4 outColor;\n\
+uniform samplerCube samplerEnv;\n\
+uniform float deltaPhi;\n\
+uniform float deltaTheta;\n\
+#define PI 3.1415926535897932384626433832795\n\
+void main()\n\
+{\n\
+	vec3 N = normalize(outUVW);\n\
+	vec3 up = vec3(0.0, 1.0, 0.0);\n\
+	vec3 right = normalize(cross(up, N));\n\
+	up = cross(N, right);\n\
+	const float TWO_PI = PI * 2.0;\n\
+	const float HALF_PI = PI * 0.5;\n\
+	vec3 color = vec3(0.0);\n\
+	uint sampleCount = 0u;\n\
+	for (float phi = 0.0; phi < TWO_PI; phi += deltaPhi) {\n\
+		for (float theta = 0.0; theta < HALF_PI; theta += deltaTheta) {\n\
+			vec3 tempVec = cos(phi) * right + sin(phi) * up;\n\
+			vec3 sampleVector = cos(theta) * N + sin(theta) * tempVec;\n\
+			color += texture(samplerEnv, sampleVector).rgb * cos(theta) * sin(theta);\n\
+			sampleCount++;\n\
+		}\n\
+	}\n\
+	outColor = vec4(PI * color / float(sampleCount), 1.0);\n\
+}";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 static GLuint CreateProgram(const char* vtxShader, const char* frgShader)
 {
@@ -154,6 +229,124 @@ static GLuint CreateProgram(const char* vtxShader, const char* frgShader)
 
 	return out;
 }
+static GLuint CreateBRDFLut(uint32_t width, uint32_t height)
+{
+	const char* vertShader = "#version 330\n\
+	out vec2 outUV;\n\
+	void main()\n\
+	{\n\
+		outUV = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n\
+		gl_Position = vec4(outUV * 2.0f - 1.0f, 0.0f, 1.0f);\n\
+	}";
+	const char* fragShader = "#version 330\n\
+	in vec2 outUV;\n\
+	out vec4 outColor;\n\
+	const uint NUM_SAMPLES = 1024u;\n\
+	const float PI = 3.1415926536;\n\
+	float random(vec2 co)\n\
+	{\n\
+		float a = 12.9898;\n\
+		float b = 78.233;\n\
+		float c = 43758.5453;\n\
+		float dt = dot(co.xy, vec2(a, b));\n\
+		float sn = mod(dt, 3.14);\n\
+		return fract(sin(sn) * c);\n\
+	}\n\
+	vec2 hammersley2d(uint i, uint N)\n\
+	{\n\
+		uint bits = (i << 16u) | (i >> 16u);\n\
+		bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);\n\
+		bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);\n\
+		bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);\n\
+		bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);\n\
+		float rdi = float(bits) * 2.3283064365386963e-10;\n\
+		return vec2(float(i) / float(N), rdi);\n\
+	}\n\
+	vec3 importanceSample_GGX(vec2 Xi, float roughness, vec3 normal)\n\
+	{\n\
+		float alpha = roughness * roughness;\n\
+		float phi = 2.0 * PI * Xi.x + random(normal.xz) * 0.1;\n\
+		float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (alpha * alpha - 1.0) * Xi.y));\n\
+		float sinTheta = sqrt(1.0 - cosTheta * cosTheta);\n\
+		vec3 H = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);\n\
+		vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);\n\
+		vec3 tangentX = normalize(cross(up, normal));\n\
+		vec3 tangentY = normalize(cross(normal, tangentX));\n\
+		return normalize(tangentX * H.x + tangentY * H.y + normal * H.z);\n\
+	}\n\
+	float G_SchlicksmithGGX(float dotNL, float dotNV, float roughness)\n\
+	{\n\
+		float k = (roughness * roughness) / 2.0;\n\
+		float GL = dotNL / (dotNL * (1.0 - k) + k);\n\
+		float GV = dotNV / (dotNV * (1.0 - k) + k);\n\
+		return GL * GV;\n\
+	}\n\
+	vec2 BRDF(float NoV, float roughness)\n\
+	{\n\
+		const vec3 N = vec3(0.0, 0.0, 1.0);\n\
+		vec3 V = vec3(sqrt(1.0 - NoV * NoV), 0.0, NoV);\n\
+		vec2 LUT = vec2(0.0);\n\
+		for (uint i = 0u; i < NUM_SAMPLES; i++) {\n\
+			vec2 Xi = hammersley2d(i, NUM_SAMPLES);\n\
+			vec3 H = importanceSample_GGX(Xi, roughness, N);\n\
+			vec3 L = 2.0 * dot(V, H) * H - V;\n\
+			float dotNL = max(dot(N, L), 0.0);\n\
+			float dotNV = max(dot(N, V), 0.0);\n\
+			float dotVH = max(dot(V, H), 0.0);\n\
+			float dotNH = max(dot(H, N), 0.0);\n\
+			if (dotNL > 0.0) {\n\
+				float G = G_SchlicksmithGGX(dotNL, dotNV, roughness);\n\
+				float G_Vis = (G * dotVH) / (dotNH * dotNV);\n\
+				float Fc = pow(1.0 - dotVH, 5.0);\n\
+				LUT += vec2((1.0 - Fc) * G_Vis, Fc * G_Vis);\n\
+			}\n\
+		}\n\
+		return LUT / float(NUM_SAMPLES);\n\
+	}\n\
+	void main()\n\
+	{\n\
+		outColor = vec4(BRDF(outUV.s, 1.0 - outUV.t), 0.0, 1.0);\n\
+	}";
+
+	GLuint program = CreateProgram(vertShader, fragShader);
+
+	GLuint framebuffer;
+	glGenFramebuffers(1, &framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+	GLuint brdfLut;
+	glGenTextures(1, &brdfLut);
+	glBindTexture(GL_TEXTURE_2D, brdfLut);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdfLut, 0);
+
+	GLenum drawBuffers = GL_COLOR_ATTACHMENT0;
+	glDrawBuffers(1, &drawBuffers);
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (status != GL_FRAMEBUFFER_COMPLETE) {
+		LOG("FAILED TO CREATE FRAMEBUFFER OBJECT, STATUS: %d\n", status);
+		return 0;
+	}
+
+
+	glDisable(GL_DEPTH_TEST);
+	glUseProgram(program);
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glViewport(0, 0, width, height);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+
+	glDeleteProgram(program);
+	glDeleteFramebuffers(1, &framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	return brdfLut;
+}
 
 struct BaseProgramUniforms
 {
@@ -162,11 +355,14 @@ struct BaseProgramUniforms
 	GLuint projLoc;
 	GLuint camPosLoc;
 	GLuint boneDataLoc;
+	GLuint materialDataLoc;
 };
 
 enum BASE_SHADER_TEXTURE
 {
-	BASE_SHADER_TEXTURE_CUBEMAP,
+	BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE,
+	BASE_SHADER_TEXTURE_PREFILTERED_MAP,
+	BASE_SHADER_TEXTURE_BRDFLUT,
 	BASE_SHADER_TEXTURE_COLORMAP,
 	BASE_SHADER_TEXTURE_NORMALMAP,
 	BASE_SHADER_TEXTURE_AOMAP,
@@ -180,16 +376,23 @@ struct CubemapRenderInfo
 	GLuint vtxBuf;
 	GLuint program;
 	GLuint viewProjLoc;
+	GLuint irradianceFilterProgram;
+	GLuint preFilterProgram;
+	GLuint irradianceFilterMVPLoc;
+	GLuint irradianceFilterdeltaPhiLoc;
+	GLuint irradianceFilterdeltaThetaLoc;
 };
 
 struct Renderer
 {
 	const CameraBase* currentCam;
+	const EnvironmentData* currentEnvironmentData;
 	GLuint baseProgram;
 	BaseProgramUniforms baseUniforms;
 	CubemapRenderInfo cubemapInfo;
 
 	GLuint defaultBoneData;
+	GLuint brdfLut;
 	GLuint whiteTexture;	// these are not owned by the renderer
 	GLuint blackTexture;	// these are not owned by the renderer
 
@@ -201,6 +404,37 @@ struct Renderer
 
 
 
+static void BindMaterial(Renderer* r, Material* mat)
+{
+	if (mat)
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, r->baseUniforms.materialDataLoc, mat->uniform);
+		
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
+		if (mat->tex.diffuse) glBindTexture(GL_TEXTURE_2D, mat->tex.diffuse->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_NORMALMAP);
+		if (mat->tex.normal) glBindTexture(GL_TEXTURE_2D, mat->tex.normal->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_AOMAP);
+		if (mat->tex.ao) glBindTexture(GL_TEXTURE_2D, mat->tex.ao->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_EMISSIVEMAP);
+		if (mat->tex.emissive) glBindTexture(GL_TEXTURE_2D, mat->tex.emissive->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+	}
+	else
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_NORMALMAP);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_AOMAP);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_EMISSIVEMAP);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+	}
+}
 
 static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint program)
 {
@@ -212,13 +446,20 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 
 	un.boneDataLoc = glGetUniformBlockIndex(program, "BoneData");
 	glUniformBlockBinding(program, un.boneDataLoc, un.boneDataLoc);
-
+	un.materialDataLoc = glGetUniformBlockIndex(program, "Material");
+	glUniformBlockBinding(program, un.materialDataLoc, un.materialDataLoc);
 
 
 	glUseProgram(program);
-	GLint curTexture = glGetUniformLocation(program, "cubeMap");
-	if (curTexture == -1) { LOG("failed to Get cubeMap Texture Loaction of GLTF shader program\n"); }
-	glUniform1i(curTexture, BASE_SHADER_TEXTURE_CUBEMAP);
+	GLint curTexture = glGetUniformLocation(program, "samplerIrradiance");
+	if (curTexture == -1) { LOG("failed to Get samplerIrradiance Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
+	curTexture = glGetUniformLocation(program, "prefilteredMap");
+	if (curTexture == -1) { LOG("failed to Get prefilteredMap Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_PREFILTERED_MAP);
+	curTexture = glGetUniformLocation(program, "samplerBRDFLUT");
+	if (curTexture == -1) { LOG("failed to Get samplerBRDFLUT Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_BRDFLUT);
 	curTexture = glGetUniformLocation(program, "colorMap");
 	if (curTexture == -1) { LOG("failed to Get colorMap Texture Loaction of GLTF shader program\n"); }
 	glUniform1i(curTexture, BASE_SHADER_TEXTURE_COLORMAP);
@@ -260,21 +501,17 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 	// CREATE SKYBOX SHADER DATA
 	{
 		static const char* cubemapVS = "#version 330\n\
-		layout (location = 0) in vec3  aPos;\n\
+		layout (location = 0) in vec3 aPos;\n\
 		out vec3 TexCoords;\n\
-		\
 		uniform mat4 viewProj;\n\
-		\
 		void main(){\
 			TexCoords = aPos;\
 			vec4 pos = viewProj * vec4(aPos, 0.0);\n\
 			gl_Position = pos.xyww;\
 		}";
 		static const char* cubemapFS = "#version 330\n\
-		out vec4 FragColor;\n\
-		\
 		in vec3 TexCoords;\n\
-		\
+		out vec4 FragColor;\n\
 		uniform samplerCube skybox;\n\
 		void main()\
 		{\
@@ -296,13 +533,21 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 		};
 		renderer->cubemapInfo.program = CreateProgram(cubemapVS, cubemapFS);
 		renderer->cubemapInfo.viewProjLoc = glGetUniformLocation(renderer->cubemapInfo.program, "viewProj");
+		glUseProgram(renderer->cubemapInfo.program);
+		GLint curTexture = glGetUniformLocation(renderer->cubemapInfo.program, "skybox");
+		glUniform1i(curTexture, 0);
+
+
+		renderer->cubemapInfo.irradianceFilterProgram = CreateProgram(filterCubeVertShader, filterIrradianceCubeFragmentShader);
+		renderer->cubemapInfo.irradianceFilterMVPLoc = glGetUniformLocation(renderer->cubemapInfo.program, "mvp");
+		renderer->cubemapInfo.irradianceFilterdeltaPhiLoc = glGetUniformLocation(renderer->cubemapInfo.program, "deltaPhi");
+		renderer->cubemapInfo.irradianceFilterdeltaThetaLoc = glGetUniformLocation(renderer->cubemapInfo.program, "deltaTheta");
+
+
 		glGenVertexArrays(1, &renderer->cubemapInfo.vao);
 		glGenBuffers(1, &renderer->cubemapInfo.vtxBuf);
 		glBindBuffer(GL_ARRAY_BUFFER, renderer->cubemapInfo.vtxBuf);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
-		glUseProgram(renderer->cubemapInfo.program);
-		GLint curTexture = glGetUniformLocation(renderer->cubemapInfo.program, "skybox");
-		glUniform1i(curTexture, 0);
 
 		glBindVertexArray(renderer->cubemapInfo.vao);
 
@@ -311,11 +556,15 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 		glEnableVertexAttribArray(0);
 
 		glBindVertexArray(0);
+
 	}
+
+	renderer->brdfLut = CreateBRDFLut(512, 512);
 	return renderer;
 }
 void RE_CleanUpRenderer(struct Renderer* renderer)
 {
+	glDeleteTextures(1, &renderer->brdfLut);
 	glDeleteBuffers(1, &renderer->defaultBoneData);
 	// delete base Shader
 	{
@@ -326,6 +575,7 @@ void RE_CleanUpRenderer(struct Renderer* renderer)
 		glDeleteBuffers(1, &renderer->cubemapInfo.vtxBuf);
 		glDeleteVertexArrays(1, &renderer->cubemapInfo.vao);
 		glDeleteProgram(renderer->cubemapInfo.program);
+		glDeleteProgram(renderer->cubemapInfo.irradianceFilterProgram);
 	}
 	delete renderer;
 }
@@ -340,6 +590,42 @@ void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBas
 {
 	renderer->currentCam = camBase;
 }
+void RE_SetEnvironmentData(struct Renderer* renderer, const EnvironmentData* data)
+{
+	renderer->currentEnvironmentData = data;
+}
+
+
+
+void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta)
+{
+	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert(renderer->currentEnvironmentData != nullptr, "The Camera base needs to be set before rendering");
+
+	glUseProgram(renderer->cubemapInfo.irradianceFilterProgram);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+
+	
+	glm::mat4 mvp = renderer->currentCam->proj * renderer->currentCam->view;
+
+	glUniform1f(renderer->cubemapInfo.irradianceFilterdeltaPhiLoc, deltaPhi);
+	glUniform1f(renderer->cubemapInfo.irradianceFilterdeltaThetaLoc, deltaTheta);
+	glUniformMatrix4fv(renderer->cubemapInfo.irradianceFilterMVPLoc, 1, GL_FALSE, (const GLfloat*)&mvp);
+
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->environmentMap);
+
+	glBindVertexArray(renderer->cubemapInfo.vao);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+
+}
+
+
+
+
+
 
 void RE_RenderOpaque(struct Renderer* renderer)
 {

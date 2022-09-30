@@ -50,3 +50,54 @@ void UpdateBoneDataFromAnimation(const Animation* anim, GLuint uniform, float ol
 {
 
 }
+
+void CreateMaterialUniform(Material* mat)
+{
+	MaterialData data;
+	data.baseColorFactor = mat->baseColorFactor;
+	data.emissiveFactor = mat->emissiveFactor;
+	data.diffuseFactor = mat->diffuseFactor;
+	data.specularFactor = mat->specularFactor;
+	data.diffuseUV = mat->tex.diffuseUV > 5 ? -1 : mat->tex.diffuseUV;
+	data.normalUV = mat->tex.normalUV > 5 ? -1 : mat->tex.normalUV;
+	data.emissiveUV = mat->tex.emissiveUV > 5 ? -1 : mat->tex.emissiveUV;
+	data.aoUV = mat->tex.aoUV > 5 ? -1 : mat->tex.aoUV;
+	data.metallicRoughnessUV = mat->tex.metallicRoughnessUV > 5 ? -1 : mat->tex.metallicRoughnessUV;
+	data.roughnessFactor = mat->roughnessFactor;
+	data.metallicFactor = mat->metallicFactor;
+	data.alphaMask = mat->alphaMask;
+	data.alphaCutoff = mat->alphaCutoff;
+	data.workflow = mat->workflow;
+	data._align1 = 0;
+	data._align2 = 0;
+
+
+	glGenBuffers(1, &mat->uniform);
+	glBindBuffer(GL_UNIFORM_BUFFER, mat->uniform);
+	glBufferData(GL_UNIFORM_BUFFER, sizeof(MaterialData), &data, GL_STATIC_DRAW);
+
+
+}
+void UpdateMaterialUniform(Material* mat)
+{
+	MaterialData data;
+	data.baseColorFactor = mat->baseColorFactor;
+	data.emissiveFactor = mat->emissiveFactor;
+	data.diffuseFactor = mat->diffuseFactor;
+	data.specularFactor = mat->specularFactor;
+	data.diffuseUV = mat->tex.diffuseUV > 5 ? -1 : mat->tex.diffuseUV;
+	data.normalUV = mat->tex.normalUV > 5 ? -1 : mat->tex.normalUV;
+	data.emissiveUV = mat->tex.emissiveUV > 5 ? -1 : mat->tex.emissiveUV;
+	data.aoUV = mat->tex.aoUV > 5 ? -1 : mat->tex.aoUV;
+	data.metallicRoughnessUV = mat->tex.metallicRoughnessUV > 5 ? -1 : mat->tex.metallicRoughnessUV;
+	data.roughnessFactor = mat->roughnessFactor;
+	data.metallicFactor = mat->metallicFactor;
+	data.alphaMask = mat->alphaMask;
+	data.alphaCutoff = mat->alphaCutoff;
+	data.workflow = mat->workflow;
+	data._align1 = 0;
+	data._align2 = 0;
+
+	glBindBuffer(GL_UNIFORM_BUFFER, mat->uniform);
+	glBufferData(GL_UNIFORM_BUFFER, sizeof(MaterialData), &data, GL_STATIC_DRAW);
+}
