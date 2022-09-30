@@ -4,6 +4,7 @@
 #include "Graphics/ModelInfo.h"
 #include "Graphics/Scene.h"
 
+
 int main()
 {
 	if (!glfwInit())
@@ -32,6 +33,24 @@ int main()
 	base.rigidBody = nullptr;
 	base.transform = glm::mat4(1.0f);
 	SC_AddStaticObject(game->scene, &base);
+
+
+
+	// !!!!ONLY DO THIS WHILE TESTING AFTER THAT DELETE ELSE ERROR!!!!
+	{
+		auto defaultCubemap = game->assets->textures[DEFUALT_CUBE_MAP];
+		EnvironmentData data{};
+		data.environmentMap = defaultCubemap->uniform;
+		data.width = defaultCubemap->width;
+		data.height = defaultCubemap->height;
+	
+		RE_CreateEnvironment(game->renderer, &data);
+		defaultCubemap->uniform = data.prefilteredMap;
+	}
+
+
+
+
 
 	while (true)
 	{

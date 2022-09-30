@@ -7,6 +7,8 @@ struct EnvironmentData
 	GLuint environmentMap;
 	GLuint prefilteredMap;
 	GLuint irradianceMap;
+	uint32_t width;
+	uint32_t height;
 };
 
 struct BoneData
@@ -45,6 +47,8 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets);
 void RE_CleanUpRenderer(struct Renderer* renderer);
 
 
+// Creates the prefiltered-/irradiance-Map from the environmentMap
+void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env);
 
 
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num);
@@ -55,7 +59,7 @@ void RE_SetEnvironmentData(struct Renderer* renderer, const EnvironmentData* dat
 
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta);
-
+void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint32_t numSamples);
 
 void RE_RenderOpaque(struct Renderer* renderer);
 void RE_RenderTransparent(struct Renderer* renderer);

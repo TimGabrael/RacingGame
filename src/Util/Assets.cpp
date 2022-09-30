@@ -53,35 +53,44 @@ AssetManager* AM_CreateAssetManager()
 	}
 
 	{
-		Texture* defaultCubemap = new Texture;
-		defaultCubemap->width = 1;
-		defaultCubemap->height = 1;
-		defaultCubemap->type = GL_TEXTURE_CUBE_MAP;
-		glGenTextures(1, &defaultCubemap->uniform);
-		glBindTexture(defaultCubemap->type, defaultCubemap->uniform);
+		//Texture* defaultCubemap = new Texture;
+		//defaultCubemap->width = 1;
+		//defaultCubemap->height = 1;
+		//defaultCubemap->type = GL_TEXTURE_CUBE_MAP;
+		//glGenTextures(1, &defaultCubemap->uniform);
+		//glBindTexture(defaultCubemap->type, defaultCubemap->uniform);
+		//
+		//uint32_t data[6][2] = { 
+		//	{ 0xFF603040, 0xFF603040 },
+		//	{ 0xFF207040, 0xFF207040 },
+		//	{ 0xFF203090, 0xFF203090 },
+		//	{ 0xFF909040, 0xFF909040 },
+		//	{ 0xFF903090, 0xFF903090 },
+		//	{ 0xFF200000, 0xFF200000 },
+		//};
+		//for (uint32_t i = 0; i < 6; i++)
+		//{
+		//
+		//	glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, defaultCubemap->width, defaultCubemap->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data[i]);
+		//
+		//}
+		//
+		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+		// 
+		//out->textures[DEFUALT_CUBE_MAP] = defaultCubemap;
 
-		uint32_t data[6][2] = { 
-			{ 0xFF603040, 0xFF603040 },
-			{ 0xFF207040, 0xFF207040 },
-			{ 0xFF203090, 0xFF203090 },
-			{ 0xFF909040, 0xFF909040 },
-			{ 0xFF903090, 0xFF903090 },
-			{ 0xFF200000, 0xFF200000 },
-		};
-		for (uint32_t i = 0; i < 6; i++)
-		{
+		AM_AddCubemapTexture(out, DEFUALT_CUBE_MAP,
+			"Assets/CitySkybox/top.jpg", 
+			"Assets/CitySkybox/bottom.jpg", 
+			"Assets/CitySkybox/left.jpg", 
+			"Assets/CitySkybox/right.jpg", 
+			"Assets/CitySkybox/front.jpg", 
+			"Assets/CitySkybox/back.jpg");
 
-			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, defaultCubemap->width, defaultCubemap->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data[i]);
-
-		}
-
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-		out->textures[DEFUALT_CUBE_MAP] = defaultCubemap;
 	}
 
 
@@ -282,7 +291,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 			}
 			else if (textureFile.length > 0)
 			{
-				LOG("TEXTUREFILE: %s\n", textureFile.C_Str());
 				return AM_AddTexture(m, (filePath + textureFile.C_Str()).c_str());
 			}
 			else
@@ -358,6 +366,46 @@ struct Texture* AM_AddTexture(AssetManager* m, const char* file)
 		return resTex;
 	}
 	return nullptr;
+}
+struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const char* top, const char* bottom, const char* left, const char* right, const char* front, const char* back)
+{
+	if (m->textures.find(name) != m->textures.end()) return m->textures[name];
+
+	const char* files[6] = { right, left, top, bottom, front, back };
+
+	Texture* resTex = nullptr;
+	for (int i = 0; i < 6; i++)
+	{
+		int x = 0, y = 0, comp = 0;
+		stbi_uc* c = stbi_load(files[i], &x, &y, &comp, 4);
+		if (c)
+		{
+			if (!resTex)
+			{
+				resTex = new Texture;
+				resTex->width = x;
+				resTex->height = y;
+				resTex->type = GL_TEXTURE_CUBE_MAP;
+				glGenTextures(1, &resTex->uniform);
+				glBindTexture(resTex->type, resTex->uniform);
+			}
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, resTex->width, resTex->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, c);
+			stbi_image_free(c);
+		}
+		else
+		{
+			LOG("ERROR FAILED TO LOAD FILE: %s\n", files[i]);
+		}
+	}
+	if (resTex)
+	{
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+		m->textures[name] = resTex;
+	}
 }
 struct AudioFile* AM_AddAudioSample(AssetManager* m, const char* file)
 {
