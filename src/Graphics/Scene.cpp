@@ -1,4 +1,5 @@
 #include "Scene.h"
+#include "../Game/Entitys.h"
 
 #define NUM_OBJECTS_IN_LIST sizeof(uintptr_t)
 
@@ -16,6 +17,10 @@ struct Scene
 	uint32_t numStaticObjects;
 	uint32_t numDynamicObjects;
 	PhysicsScene* physics;
+
+	SceneObject** cachedList;
+	uint32_t cachedListCapacity;
+	bool needRebuild;
 };
 
 static void FreeObject(SceneObject* obj)
@@ -131,11 +136,18 @@ struct Scene* SC_CreateScene(struct PhysicsScene* ph)
 	Scene* scene = new Scene;
 	memset(scene, 0, sizeof(Scene));
 	scene->physics = ph;
+	scene->needRebuild = true;
 	return scene;
 }
 void SC_CleanUpScene(struct Scene* scene)
 {
 	SC_RemoveAll(scene);
+	if (scene->cachedList)
+	{
+		delete[] scene->cachedList;
+		scene->cachedList = nullptr;
+		scene->cachedListCapacity = 0;
+	}
 	delete scene;
 }
 void SC_RemoveAll(struct Scene* scene)
@@ -144,18 +156,23 @@ void SC_RemoveAll(struct Scene* scene)
 	FreeEntireList(&scene->dynamicObjects);
 	scene->numStaticObjects = 0;
 	scene->numDynamicObjects = 0;
+	scene->needRebuild = true;
 }
 SceneObject* SC_AddStaticObject(struct Scene* scene, const SceneObject* obj)
 {
 	SceneObject* out = AllocateObjectFromList(&scene->staticObjects);
 	scene->numStaticObjects = scene->numStaticObjects + 1;
 	memcpy(out, obj, sizeof(SceneObject));
+	out->flags &= ~SCENE_OBJECT_FLAG_DYNAMIC;
+	out->flags |= SCENE_OBJECT_FLAG_VISIBLE;
+	scene->needRebuild = true;
 	return out;
 }
 void SC_RemoveStaticObject(struct Scene* scene, SceneObject* obj)
 {
 	FreeObjectFromList(&scene->staticObjects, obj);
 	scene->numStaticObjects = scene->numStaticObjects - 1;
+	scene->needRebuild = true;
 }
 
 SceneObject* SC_AddDynamicObject(struct Scene* scene, const SceneObject* obj)
@@ -163,10 +180,80 @@ SceneObject* SC_AddDynamicObject(struct Scene* scene, const SceneObject* obj)
 	SceneObject* out = AllocateObjectFromList(&scene->dynamicObjects);
 	scene->numDynamicObjects = scene->numDynamicObjects + 1;
 	memcpy(out, obj, sizeof(SceneObject));
+	out->flags |= SCENE_OBJECT_FLAG_DYNAMIC | SCENE_OBJECT_FLAG_VISIBLE;
+	scene->needRebuild = true;
 	return out;
 }
 void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj)
 {
 	FreeObjectFromList(&scene->dynamicObjects, obj);
 	scene->numDynamicObjects = scene->numDynamicObjects - 1;
+	scene->needRebuild = true;
+}
+
+
+SceneObject** SC_GetAllSceneObjects(struct Scene* scene, uint32_t* num)
+{
+	const uint32_t totalNum = scene->numStaticObjects + scene->numDynamicObjects;
+	*num = totalNum;
+	if (scene->needRebuild)
+	{
+		if (scene->cachedListCapacity <= totalNum)
+		{
+			if (scene->cachedList) delete[] scene->cachedList;
+			scene->cachedListCapacity = totalNum + 10;
+			scene->cachedList = new SceneObject * [scene->cachedListCapacity];
+		}
+
+		uint32_t curIdx = 0;
+		SceneObjectList* curList = &scene->staticObjects;
+		while (curList)
+		{
+			for (int i = 0; i < NUM_OBJECTS_IN_LIST; i++)
+			{
+				const uintptr_t remaining = ~((1LL << i) - 1 | (1LL << i));
+				if (curList->fillMask & (1LL << i))
+				{
+					scene->cachedList[curIdx] = &curList->objects[i];
+					curIdx++;
+				}
+				if (!(remaining & curList->fillMask)) break;
+			}
+			curList = curList->next;
+		}
+		curList = &scene->dynamicObjects;
+		while (curList)
+		{
+			for (int i = 0; i < NUM_OBJECTS_IN_LIST; i++)
+			{
+				const uintptr_t remaining = ~((1LL << i) - 1 | (1LL << i));
+				if (curList->fillMask & (1LL << i))
+				{
+					scene->cachedList[curIdx] = &curList->objects[i];
+					curIdx++;
+				}
+				if (!(remaining & curList->fillMask)) break;
+			}
+			curList = curList->next;
+		}
+		scene->needRebuild = false;
+	}
+	return scene->cachedList;
+}
+
+
+
+void SC_Update(struct Scene* scene, float dt)
+{
+	uint32_t num = 0;
+	SceneObject** obj = SC_GetAllSceneObjects(scene, &num);
+	for (int i = 0; i < num; i++)
+	{
+		if (obj[i]->entity)
+		{
+			obj[i]->entity->Update(dt);
+		}
+	}
+	// rebuild in case any objects were created in the entity update function
+	SC_GetAllSceneObjects(scene, &num);
 }

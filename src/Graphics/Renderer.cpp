@@ -2,6 +2,7 @@
 #include "../Util/Assets.h"
 #include "ModelInfo.h"
 #include "Camera.h"
+#include "Scene.h"
 
 const char* baseVertexShader = "#version 330\n\
 layout(location = 0) in vec3 position;\n\
@@ -54,6 +55,24 @@ in vec3 fragNormal;\n\
 in vec2 fragUV1;\n\
 in vec2 fragUV2;\n\
 in vec4 fragColor;\n\
+layout (std140) uniform Material {\n\
+	vec4 ambient;\n\
+	vec4 diffuse;\n\
+	vec4 specular;\n\
+	float shininess;\n\
+	float reflectivness;\n\
+};\n\
+struct PointLight\n\
+{\n\
+	vec4 color;\n\
+	vec4 point;\n\
+	float constant;\n\
+	float linear;\n\
+	float quadratic;\n\
+};\n\
+layout (std140) uniform LightData {\n\
+	PointLight pointLights;\n\
+}lights;\n\
 \n\
 uniform samplerCube cubeMap;\n\
 uniform sampler2D colorMap;\n\
@@ -69,7 +88,11 @@ uniform vec3 camPos; \n\
 out vec4 outColor;\n\
 void main()\n\
 {\n\
-	outColor = fragColor;\n\
+	vec3 normal = normalize(fragNormal);\n\
+	vec3 lightPos = vec3(0.0f, 30.0f, 0.0f);\n\
+	vec3 lightDir = normalize(lightPos - worldPos);\n\
+	float diff = max(dot(normal, lightDir), 0.0);\n\
+	outColor = vec4(1.0f, 0.0f, 1.0f, 1.0f) * vec4(diff, diff, diff, 1.0f);\n\
 }\n\
 ";
 
@@ -169,6 +192,9 @@ struct Renderer
 	GLuint defaultBoneData;
 	GLuint whiteTexture;	// these are not owned by the renderer
 	GLuint blackTexture;	// these are not owned by the renderer
+
+	uint32_t numObjs;
+	struct SceneObject** objList;
 };
 
 
@@ -186,6 +212,8 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 
 	un.boneDataLoc = glGetUniformBlockIndex(program, "BoneData");
 	glUniformBlockBinding(program, un.boneDataLoc, un.boneDataLoc);
+
+
 
 	glUseProgram(program);
 	GLint curTexture = glGetUniformLocation(program, "cubeMap");
@@ -220,7 +248,7 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 
 	// Create Material Defaults
 	{
-		CreateBoneDataDataFromAnimation(nullptr, &renderer->defaultBoneData);
+		CreateBoneDataFromAnimation(nullptr, &renderer->defaultBoneData);
 		renderer->whiteTexture = assets->textures[DEFAULT_WHITE_TEXTURE]->uniform;
 		renderer->blackTexture = assets->textures[DEFAULT_BLACK_TEXTURE]->uniform;
 	}
@@ -281,7 +309,8 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 		glBindBuffer(GL_ARRAY_BUFFER, renderer->cubemapInfo.vtxBuf);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (const void*)0);
 		glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glBindVertexArray(0);
 	}
 	return renderer;
 }
@@ -301,9 +330,10 @@ void RE_CleanUpRenderer(struct Renderer* renderer)
 	delete renderer;
 }
 
-void RE_BeginScene(struct Renderer* renderer, struct Scene* scene)
+void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num)
 {
-	
+	renderer->numObjs = num;
+	renderer->objList = objList;
 }
 
 void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBase)
@@ -311,25 +341,83 @@ void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBas
 	renderer->currentCam = camBase;
 }
 
-void RE_RenderOpaque(struct Renderer* renderer, struct Scene* scene)
+void RE_RenderOpaque(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 
+	if (renderer->numObjs == 0) return;
+	
+	glUseProgram(renderer->baseProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LEQUAL);
 
 
+	glUniform3fv(renderer->baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.boneDataLoc, renderer->defaultBoneData);
+	
+	for (uint32_t i = 0; i < renderer->numObjs; i++)
+	{
+		SceneObject* obj = renderer->objList[i];
+		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE) && (obj->model->flags & MODEL_FLAG_OPAQUE))
+		{
+			glm::mat4 mat = obj->transform * obj->model->baseTransform;
+			glUniformMatrix4fv(renderer->baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+			
+			glBindVertexArray(obj->model->vao);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+			
+			glDrawElements(GL_TRIANGLES, obj->model->numIndices, GL_UNSIGNED_INT, nullptr);
+		}
+	}
+
 
 }
-void RE_RenderTransparent(struct Renderer* renderer, struct Scene* scene)
+void RE_RenderTransparent(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	if (renderer->numObjs == 0) return;
+
+	glUseProgram(renderer->baseProgram);
+
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+
+	glUniform3fv(renderer->baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.boneDataLoc, renderer->defaultBoneData);
+
+
+	for (uint32_t i = 0; i < renderer->numObjs; i++)
+	{
+		SceneObject* obj = renderer->objList[i];
+		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE) && (obj->model->flags & MODEL_FLAG_TRANSPARENT))
+		{
+			glm::mat4 mat = obj->transform * obj->model->baseTransform;
+			glUniformMatrix4fv(renderer->baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+
+			glBindVertexArray(obj->model->vao);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+
+			glDrawElements(GL_TRIANGLES, obj->model->numIndices, GL_UNSIGNED_INT, nullptr);
+		}
+	}
+
 
 }
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 
@@ -343,4 +431,13 @@ void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 
 	glBindVertexArray(renderer->cubemapInfo.vao);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
+}
+
+
+
+
+void RE_EndScene(struct Renderer* renderer)
+{
+	renderer->numObjs = 0xFFFFFFFF;
+	renderer->objList = nullptr;
 }

@@ -3,6 +3,11 @@
 #include "../Util/Math.h"
 
 
+enum SCENE_OBJECT_FLAG
+{
+	SCENE_OBJECT_FLAG_DYNAMIC = 1,
+	SCENE_OBJECT_FLAG_VISIBLE = 2,
+};
 
 struct SceneObject
 {
@@ -27,3 +32,9 @@ void SC_RemoveStaticObject(struct Scene* scene, SceneObject* obj);
 
 SceneObject* SC_AddDynamicObject(struct Scene* scene, const SceneObject* obj);
 void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj);
+
+
+
+SceneObject** SC_GetAllSceneObjects(struct Scene* scene, uint32_t* num);
+
+void SC_Update(struct Scene* scene, float dt);

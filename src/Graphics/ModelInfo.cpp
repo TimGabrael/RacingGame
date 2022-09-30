@@ -7,9 +7,9 @@ void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx,
 	glGenBuffers(1, vtxBufOut);
 	
 	glBindVertexArray(*vaoOut);
-	glBindBuffer(GL_VERTEX_ARRAY, *vtxBufOut);
+	glBindBuffer(GL_ARRAY_BUFFER, *vtxBufOut);
 
-	glBufferData(GL_VERTEX_ARRAY, sizeof(Vertex3D) * num, vtx, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * num, vtx, GL_STATIC_DRAW);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), nullptr);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, nor));
@@ -17,7 +17,7 @@ void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx,
 	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, uv2));
 	glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, joint));
 	glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, weights));
-	glVertexAttribPointer(6, 3, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, col));
+	glVertexAttribPointer(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, col));
 
 
 	glEnableVertexArrayAttrib(*vaoOut, 0);
@@ -26,13 +26,13 @@ void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx,
 	glEnableVertexArrayAttrib(*vaoOut, 3);
 	glEnableVertexArrayAttrib(*vaoOut, 4);
 	glEnableVertexArrayAttrib(*vaoOut, 5);
-	glEnableVertexArrayAttrib(*vaoOut, 5);
 	glEnableVertexArrayAttrib(*vaoOut, 6);
+
 
 	glBindVertexArray(0);
 }
 
-void CreateBoneDataDataFromAnimation(const Animation* anim, GLuint* uniform)
+void CreateBoneDataFromAnimation(const Animation* anim, GLuint* uniform)
 {
 	if (anim)
 	{

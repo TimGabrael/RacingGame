@@ -29,7 +29,23 @@ static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 {
 	if (g_gameState)
 	{
-
+		if (g_gameState->localPlayer)
+		{
+			if (action == GLFW_PRESS)
+			{
+				if (key == GLFW_KEY_W) g_gameState->localPlayer->input.forward = true;
+				if (key == GLFW_KEY_A) g_gameState->localPlayer->input.left = true;
+				if (key == GLFW_KEY_S) g_gameState->localPlayer->input.back = true;
+				if (key == GLFW_KEY_D) g_gameState->localPlayer->input.right = true;
+			}
+			else if(action == GLFW_RELEASE)
+			{
+				if (key == GLFW_KEY_W) g_gameState->localPlayer->input.forward = false;
+				if (key == GLFW_KEY_A) g_gameState->localPlayer->input.left = false;
+				if (key == GLFW_KEY_S) g_gameState->localPlayer->input.back = false;
+				if (key == GLFW_KEY_D) g_gameState->localPlayer->input.right = false;
+			}
+		}
 	}
 }
 static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
@@ -41,9 +57,21 @@ static void MouseButtonCallback(GLFWwindow* window, int button, int action, int 
 }
 static void MousePositionCallback(GLFWwindow* window, double x, double y)
 {
+	static double oldX = x;
+	static double oldY = y;
 	if (g_gameState)
 	{
-
+		double dx = x - oldX;
+		double dy = oldY - y;
+		if (g_gameState->localPlayer)
+		{
+			g_gameState->localPlayer->camera.yaw += dx;
+			g_gameState->localPlayer->camera.pitch += dy;
+			g_gameState->localPlayer->camera.pitch = glm::max(glm::min(g_gameState->localPlayer->camera.pitch, 89.9f), -89.9f);
+			CA_UpdatePerspectiveCamera(&g_gameState->localPlayer->camera);
+		}
+		oldX = x;
+		oldY = y;
 	}
 }
 static void WindowFocusCallback(GLFWwindow* window, int focused)
