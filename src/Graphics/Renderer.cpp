@@ -47,8 +47,7 @@ void main(){\n\
 	fragUV2 = uv2;\n\
 	fragColor = color;\n\
 	gl_Position = projection * view * vec4(worldPos, 1.0);\n\
-}\
-";
+}";
 const char* baseFragmentShader = "#version 330\n\
 in vec3 worldPos;\n\
 in vec3 fragNormal;\n\
@@ -220,16 +219,14 @@ void main()\n\
 \n\
 	vec3 f0 = vec3(0.04f);\n\
 \n\
-	if (mat.alphaMask == 1.0f) {\n\
-		if (mat.baseColorUV > -1) {\n\
-			baseColor = texture(colorMap, mat.baseColorUV == 0 ? fragUV1 : fragUV2) * mat.baseColorFactor;\n\
-		}\n\
-		else {\n\
-			baseColor = mat.baseColorFactor;\n\
-		}\n\
-		if (baseColor.a < mat.alphaCutoff) {\n\
-			discard;\n\
-		}\n\
+	if (mat.baseColorUV > -1) {\n\
+		baseColor = texture(colorMap, mat.baseColorUV == 0 ? fragUV1 : fragUV2) * mat.baseColorFactor;\n\
+	}\n\
+	else {\n\
+		baseColor = mat.baseColorFactor;\n\
+	}\n\
+	if (baseColor.a < mat.alphaCutoff) {\n\
+		discard;\n\
 	}\n\
 \n\
 	if (mat.workflow == PBR_WORKFLOW_METALLIC_ROUGHNESS) {\n\
@@ -381,7 +378,48 @@ void main()\n\
 	outColor = vec4(color, baseColor.a);\n\
 }\n\
 ";
-
+const char* baseGeometryFragmentShader = "#version 330\n\
+in vec3 worldPos;\n\
+in vec3 fragNormal;\n\
+in vec2 fragUV1;\n\
+in vec2 fragUV2;\n\
+in vec4 fragColor;\n\
+layout (std140) uniform Material {\n\
+	vec4 baseColorFactor;\n\
+	vec4 emissiveFactor;\n\
+	vec4 diffuseFactor;\n\
+	vec4 specularFactor;\n\
+	int baseColorUV;\n\
+	int normalUV;\n\
+	int emissiveUV;\n\
+	int aoUV;\n\
+	int metallicRoughnessUV;\n\
+	float roughnessFactor;\n\
+	float metallicFactor;\n\
+	float alphaMask;\n\
+	float alphaCutoff;\n\
+	float workflow;\n\
+}mat;\n\
+uniform sampler2D colorMap;\n\
+\n\
+uniform mat4 model; \n\
+uniform mat4 view; \n\
+uniform mat4 projection; \n\
+uniform vec3 camPos; \n\
+\n\
+void main()\n\
+{\n\
+	vec4 baseColor;\n\
+	if (mat.baseColorUV > -1) {\n\
+		baseColor = texture(colorMap, mat.baseColorUV == 0 ? fragUV1 : fragUV2) * mat.baseColorFactor;\n\
+	}\n\
+	else {\n\
+		baseColor = mat.baseColorFactor;\n\
+	}\n\
+	if (baseColor.a < mat.alphaCutoff) {\n\
+		discard;\n\
+	}\n\
+}";
 
 
 
@@ -724,6 +762,15 @@ struct BaseProgramUniforms
 	GLuint scaleIBLAmbientLoc;
 	GLuint lightDataLoc;
 };
+struct BaseGeometryProgramUniforms
+{
+	GLuint modelLoc;
+	GLuint viewLoc;
+	GLuint projLoc;
+	GLuint camPosLoc;
+	GLuint boneDataLoc;
+	GLuint materialDataLoc;
+};
 
 enum BASE_SHADER_TEXTURE
 {
@@ -756,17 +803,28 @@ struct CubemapRenderInfo
 	GLuint preFilterNumSamples;
 };
 
+struct PBRRenderInfo
+{
+	GLuint baseProgram;
+	BaseProgramUniforms baseUniforms;
+	GLuint geomProgram;
+	BaseGeometryProgramUniforms geomUniforms;
+	GLuint defaultBoneData;
+	GLuint brdfLut;
+};
+struct PostProcessingRenderInfo
+{
+	
+};
+
 struct Renderer
 {
 	const CameraBase* currentCam;
 	const EnvironmentData* currentEnvironmentData;
 	GLuint currentLightData;
-	GLuint baseProgram;
-	BaseProgramUniforms baseUniforms;
+	PBRRenderInfo pbrData;
 	CubemapRenderInfo cubemapInfo;
 
-	GLuint defaultBoneData;
-	GLuint brdfLut;
 	GLuint whiteTexture;	// these are not owned by the renderer
 	GLuint blackTexture;	// these are not owned by the renderer
 
@@ -782,7 +840,7 @@ static void BindMaterial(Renderer* r, Material* mat)
 {
 	if (mat)
 	{
-		glBindBufferBase(GL_UNIFORM_BUFFER, r->baseUniforms.materialDataLoc, mat->uniform);
+		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.baseUniforms.materialDataLoc, mat->uniform);
 		
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
 		if (mat->tex.baseColor) glBindTexture(GL_TEXTURE_2D, mat->tex.baseColor->uniform);
@@ -814,7 +872,21 @@ static void BindMaterial(Renderer* r, Material* mat)
 		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 	}
 }
-
+static void BindMaterialGeometry(Renderer* r, Material* mat)
+{
+	if (mat)
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.geomUniforms.materialDataLoc, mat->uniform);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
+		if (mat->tex.baseColor) glBindTexture(GL_TEXTURE_2D, mat->tex.baseColor->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+	}
+	else
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+	}
+}
 static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint program)
 {
 	BaseProgramUniforms un;
@@ -863,6 +935,25 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 
 	return un;
 }
+static BaseGeometryProgramUniforms LoadBaseGeometryProgramUniformLocationsFromProgram(GLuint program)
+{
+	BaseGeometryProgramUniforms un;
+	un.modelLoc = glGetUniformLocation(program, "model");
+	un.viewLoc = glGetUniformLocation(program, "view");
+	un.projLoc = glGetUniformLocation(program, "projection");
+	un.camPosLoc = glGetUniformLocation(program, "camPos");
+
+	un.boneDataLoc = glGetUniformBlockIndex(program, "BoneData");
+	glUniformBlockBinding(program, un.boneDataLoc, un.boneDataLoc);
+	un.materialDataLoc = glGetUniformBlockIndex(program, "Material");
+	glUniformBlockBinding(program, un.materialDataLoc, un.materialDataLoc);
+
+	glUseProgram(program);
+	GLuint curTexture = glGetUniformLocation(program, "colorMap");
+	if (curTexture == -1) { LOG("failed to Get colorMap Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_COLORMAP);
+	return un;
+}
 
 
 
@@ -877,14 +968,18 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 	renderer->currentLightData = 0;
 	// Create Material Defaults
 	{
-		CreateBoneDataFromAnimation(nullptr, &renderer->defaultBoneData);
+		CreateBoneDataFromAnimation(nullptr, &renderer->pbrData.defaultBoneData);
 		renderer->whiteTexture = assets->textures[DEFAULT_WHITE_TEXTURE]->uniform;
 		renderer->blackTexture = assets->textures[DEFAULT_BLACK_TEXTURE]->uniform;
 	}
 	// Create Main 3d shader
 	{
-		renderer->baseProgram = CreateProgram(baseVertexShader, baseFragmentShader);
-		renderer->baseUniforms = LoadBaseProgramUniformsLocationsFromProgram(renderer->baseProgram);
+		renderer->pbrData.baseProgram = CreateProgram(baseVertexShader, baseFragmentShader);
+		renderer->pbrData.baseUniforms = LoadBaseProgramUniformsLocationsFromProgram(renderer->pbrData.baseProgram);
+
+		renderer->pbrData.geomProgram = CreateProgram(baseVertexShader, baseGeometryFragmentShader);
+		renderer->pbrData.geomUniforms = LoadBaseGeometryProgramUniformLocationsFromProgram(renderer->pbrData.geomProgram);
+
 	}
 	// CREATE SKYBOX SHADER DATA
 	{
@@ -956,16 +1051,17 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 
 	}
 
-	renderer->brdfLut = CreateBRDFLut(512, 512);
+	renderer->pbrData.brdfLut = CreateBRDFLut(512, 512);
 	return renderer;
 }
 void RE_CleanUpRenderer(struct Renderer* renderer)
 {
-	glDeleteTextures(1, &renderer->brdfLut);
-	glDeleteBuffers(1, &renderer->defaultBoneData);
+	glDeleteTextures(1, &renderer->pbrData.brdfLut);
+	glDeleteBuffers(1, &renderer->pbrData.defaultBoneData);
 	// delete base Shader
 	{
-		glDeleteProgram(renderer->baseProgram);
+		glDeleteProgram(renderer->pbrData.baseProgram);
+		glDeleteProgram(renderer->pbrData.geomProgram);
 	}
 	// Delete cubemap infos
 	{
@@ -1125,6 +1221,207 @@ void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env)
 
 	glDeleteFramebuffers(1, &framebuffer);
 }
+void RE_CleanUpEnvironment(EnvironmentData* env)
+{
+	glDeleteTextures(1, &env->irradianceMap);
+	glDeleteTextures(1, &env->prefilteredMap);
+	env->irradianceMap = 0;
+	env->prefilteredMap = 0;
+}
+
+
+
+
+void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uint32_t height, uint32_t numSamples)
+{
+	glGenFramebuffers(1, &data->fbo);
+	glBindFramebuffer(1, data->fbo);
+	data->width = width;
+	data->height = height;
+	data->msaaCount = numSamples;
+
+	// only initialize depth if it is asked to finish the antialiased data (thats what i call it now)
+	data->intermediateDepth = 0;
+	data->intermediateFbo = 0;
+	data->intermediateTexture = 0;
+
+	glGenTextures(1, &data->texture);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->texture);
+	glTextureStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_RGBA16F, width, height, GL_TRUE);
+
+
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, data->texture, 0);
+
+	glGenTextures(1, &data->depth);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->depth);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_DEPTH_COMPONENT32F, width, height, GL_TRUE);
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, data->depth, 0);
+
+
+}
+void RE_FinishAntialiasingData(AntialiasingRenderData* data)
+{
+	if (!data->intermediateFbo)
+	{
+		glCreateFramebuffers(1, &data->intermediateFbo);
+		glGenTextures(1, &data->intermediateTexture);
+		glBindTexture(GL_TEXTURE_2D, data->intermediateTexture);
+		glTextureStorage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, data->width, data->height);
+
+		glGenTextures(1, &data->intermediateDepth);
+		glBindTexture(GL_TEXTURE_2D, data->intermediateDepth);
+		glTextureStorage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, data->width, data->height);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, data->intermediateFbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->texture, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->depth, 0);
+	}
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, data->intermediateFbo);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, data->fbo);
+	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+}
+void RE_CleanUpAntialiasingData(AntialiasingRenderData* data)
+{
+	glDeleteFramebuffers(1, &data->fbo);
+	glDeleteTextures(1, &data->texture);
+	glDeleteTextures(1, &data->depth);
+	if (data->intermediateFbo && data->intermediateTexture && data->intermediateDepth)
+	{
+		glDeleteFramebuffers(1, &data->intermediateFbo);
+		glDeleteTextures(1, &data->intermediateTexture);
+		glDeleteTextures(1, &data->depth);
+		data->intermediateFbo = 0;
+		data->intermediateDepth = 0;
+		data->intermediateTexture = 0;
+	}
+}
+
+void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t width, uint32_t height)
+{
+	data->width = width;
+	data->height = height;
+
+	data->blurRadius = 4.0f;		// set standard value for blur
+	data->bloomIntensity = 1.0f;	// set standard value for bloom
+
+
+	data->numPPFbos = 1 + floor(log2(glm::max(data->width, data->height)));
+	int curX = width; int curY = height;
+	for (int i = 1; i < data->numPPFbos; i++)
+	{
+		curX = glm::max((curX >> 1), 1);
+		curY = glm::max((curY >> 1), 1);
+		if (curX < 16 && curY < 16 && false)
+		{
+			data->numPPFbos = i;
+			break;
+		}
+	}
+	data->numPPFbos = glm::min(data->numPPFbos, MAX_BLOOM_MIPMAPS);
+	{
+		data->ppFBOs1 = new GLuint[data->numPPFbos];
+		glGenFramebuffers(data->numPPFbos, data->ppFBOs1);
+
+		glGenTextures(1, &data->ppTexture1);
+		glBindTexture(GL_TEXTURE_2D, data->ppTexture1);
+		glTexStorage2D(GL_TEXTURE_2D, data->numPPFbos, GL_RGBA16F, width, height);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		for (int i = 0; i < data->numPPFbos; i++)
+		{
+			glBindFramebuffer(GL_FRAMEBUFFER, data->ppFBOs1[i]);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->ppTexture1, i);
+			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+				LOG("FAILED  TO CREATE FRAMEBUFFER\n");
+			}
+		}
+	}
+	{
+		data->ppFBOs2 = new GLuint[data->numPPFbos];
+		glGenFramebuffers(data->numPPFbos, data->ppFBOs2);
+
+		glGenTextures(1, &data->ppTexture2);
+		glBindTexture(GL_TEXTURE_2D, data->ppTexture2);
+		glTexStorage2D(GL_TEXTURE_2D, data->numPPFbos, GL_RGBA16F, width, height);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		for (int i = 0; i < data->numPPFbos; i++)
+		{
+			glBindFramebuffer(GL_FRAMEBUFFER, data->ppFBOs2[i]);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->ppTexture2, i);
+			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+				LOG("FAILED  TO CREATE FRAMEBUFFER\n");
+			}
+		}
+
+
+		glGenTextures(1, &data->intermediateTexture);
+		glBindTexture(GL_TEXTURE_2D, data->intermediateTexture);
+		glTexStorage2D(GL_TEXTURE_2D, data->intermediateTexture, GL_RGBA16F, width, height);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+}
+void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data)
+{
+	
+	glDeleteTextures(1, &data->intermediateTexture);
+	glDeleteTextures(1, &data->ppTexture1);
+	glDeleteTextures(1, &data->ppTexture2);
+	glDeleteFramebuffers(data->numPPFbos, data->ppFBOs1);
+	glDeleteFramebuffers(data->numPPFbos, data->ppFBOs2);
+	delete[] data->ppFBOs1;
+	delete[] data->ppFBOs2;
+
+	data->numPPFbos = 0;
+	data->ppFBOs1 = nullptr;
+	data->ppFBOs2 = nullptr;
+	data->ppTexture1 = 0;
+	data->ppTexture2 = 0;
+	data->intermediateTexture = 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num)
 {
@@ -1233,7 +1530,45 @@ void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint3
 
 
 
+void RE_RenderGeometry(struct Renderer* renderer)
+{
+	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	if (renderer->numObjs == 0) return;
 
+	glUseProgram(renderer->pbrData.geomProgram);
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glDepthFunc(GL_LEQUAL);
+
+
+	glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+
+
+	for (uint32_t i = 0; i < renderer->numObjs; i++)
+	{
+		SceneObject* obj = renderer->objList[i];
+		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+		{
+			glm::mat4 mat = obj->transform * obj->model->baseTransform;
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+
+			glBindVertexArray(obj->model->vao);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
+			{
+				Mesh* m = &obj->model->meshes[j];
+				BindMaterialGeometry(renderer, m->material);
+				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+			}
+		}
+	}
+}
 
 void RE_RenderOpaque(struct Renderer* renderer)
 {
@@ -1243,7 +1578,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numObjs == 0) return;
 	
-	glUseProgram(renderer->baseProgram);
+	glUseProgram(renderer->pbrData.baseProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LEQUAL);
@@ -1253,18 +1588,18 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->irradianceMap);
 	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
-	glBindTexture(GL_TEXTURE_2D, renderer->brdfLut);
+	glBindTexture(GL_TEXTURE_2D, renderer->pbrData.brdfLut);
 
 
-	glUniform3fv(renderer->baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+	glUniform3fv(renderer->pbrData.baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->pbrData.baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->pbrData.baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
 
-	glUniform1f(renderer->baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
-	glUniform1f(renderer->baseUniforms.scaleIBLAmbientLoc, 1.0f);
+	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
+	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.lightDataLoc, renderer->currentLightData);
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.boneDataLoc, renderer->defaultBoneData);
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData);
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 	
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
@@ -1272,7 +1607,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
 		{
 			glm::mat4 mat = obj->transform * obj->model->baseTransform;
-			glUniformMatrix4fv(renderer->baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 			
 			glBindVertexArray(obj->model->vao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
@@ -1295,7 +1630,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numObjs == 0) return;
 
-	glUseProgram(renderer->baseProgram);
+	glUseProgram(renderer->pbrData.baseProgram);
 
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
@@ -1306,17 +1641,17 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
 	glBindTexture(GL_TEXTURE_2D, renderer->currentEnvironmentData->irradianceMap);
 	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
-	glBindTexture(GL_TEXTURE_2D, renderer->brdfLut);
+	glBindTexture(GL_TEXTURE_2D, renderer->pbrData.brdfLut);
 
 
-	glUniform3fv(renderer->baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+	glUniform3fv(renderer->pbrData.baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->pbrData.baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->pbrData.baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
 
-	glUniform1f(renderer->baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
-	glUniform1f(renderer->baseUniforms.scaleIBLAmbientLoc, 1.0f);
+	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
+	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.boneDataLoc, renderer->defaultBoneData);
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 
 
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
@@ -1325,7 +1660,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
 		{
 			glm::mat4 mat = obj->transform * obj->model->baseTransform;
-			glUniformMatrix4fv(renderer->baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 
 			glBindVertexArray(obj->model->vao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);

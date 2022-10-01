@@ -72,6 +72,8 @@ int main()
 			RE_SetEnvironmentData(game->renderer, &game->manager->env);
 			RE_SetLightData(game->renderer, game->manager->lightUniform);
 
+			RE_RenderGeometry(game->renderer);
+
 			RE_RenderCubeMap(game->renderer, game->manager->env.environmentMap);
 
 			RE_RenderOpaque(game->renderer);

@@ -1,7 +1,9 @@
 #pragma once
 #include "GLIncludes.h"
+#include "Camera.h"
 #define MAX_NUM_JOINTS 128
 #define MAX_NUM_LIGHTS 20
+#define MAX_BLOOM_MIPMAPS 8
 
 struct EnvironmentData
 {
@@ -87,14 +89,77 @@ enum CUBE_MAP_SIDE
 };
 
 
+struct DirShadowLight
+{
+	DirectionalLight light;
+	CameraBase cam;
+	GLuint framebuffer;
+	GLuint texture;
+	uint32_t textureWidth;
+	uint32_t textureHeight;
+	uint32_t numCascades;
+	float cascadeSteps[4];
+};
+struct PointShadowLight
+{
+	PointLight light;
+	CameraBase cam;
+	GLuint framebuffer;
+	GLuint texture;
+	uint32_t textureWidth;
+	uint32_t textureHeight;
+};
+
+
+struct AntialiasingRenderData
+{
+	GLuint fbo;
+	GLuint texture;
+	GLuint depth;
+
+	// INTERMEDIATE DOESN'T HAVE AA, SO IT CAN BE SAMPLED IN SHADERS
+	GLuint intermediateFbo;
+	GLuint intermediateTexture;
+	GLuint intermediateDepth;
+	
+	GLuint width;
+	GLuint height;
+	uint32_t msaaCount;
+};
+struct PostProcessingRenderData
+{
+	GLuint* ppFBOs1;
+	GLuint* ppFBOs2;
+	GLuint ppTexture1;
+	GLuint ppTexture2;
+	GLuint intermediateTexture;
+
+	uint32_t width;
+	uint32_t height;
+	float blurRadius;
+	float bloomIntensity;
+	int numPPFbos; // numPPFbos == min(numMipMaps, MAX_BLOOM_MIPMAPS)
+};
+
+
+
 
 struct Renderer* RE_CreateRenderer(struct AssetManager* assets);
 void RE_CleanUpRenderer(struct Renderer* renderer);
 
 
-// Creates the prefiltered-/irradiance-Map from the environmentMap
-void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env);
 
+void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uint32_t height, uint32_t numSamples);
+void RE_FinishAntialiasingData(AntialiasingRenderData* data);	// copys contents of msaa texture to intermediate texture
+void RE_CleanUpAntialiasingData(AntialiasingRenderData* data);
+
+void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t width, uint32_t height);
+void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data);
+
+
+// Creates the prefiltered-/irradiance-Map from the environmentMap or cleanes those to up
+void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env);
+void RE_CleanUpEnvironment(EnvironmentData* env);
 
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num);
 
@@ -106,6 +171,9 @@ void RE_SetLightData(struct Renderer* renderer, GLuint lightUniform);
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side);
 void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint32_t numSamples, CUBE_MAP_SIDE side);
+
+
+void RE_RenderGeometry(struct Renderer* renderer);
 
 void RE_RenderOpaque(struct Renderer* renderer);
 void RE_RenderTransparent(struct Renderer* renderer);
