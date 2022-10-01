@@ -9,6 +9,7 @@ struct EnvironmentData
 	GLuint irradianceMap;
 	uint32_t width;
 	uint32_t height;
+	uint32_t mipLevels;
 };
 
 struct BoneData
@@ -26,7 +27,7 @@ struct MaterialData
 	glm::vec4 diffuseFactor;
 	glm::vec4 specularFactor;
 
-	int diffuseUV;
+	int baseColorUV;
 	int normalUV;
 	int emissiveUV;
 	int aoUV;

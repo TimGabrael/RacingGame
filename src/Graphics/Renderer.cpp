@@ -60,7 +60,7 @@ layout (std140) uniform Material {\n\
 	vec4 emissiveFactor;\n\
 	vec4 diffuseFactor;\n\
 	vec4 specularFactor;\n\
-	int diffuseUV;\n\
+	int baseColorUV;\n\
 	int normalUV;\n\
 	int emissiveUV;\n\
 	int aoUV;\n\
@@ -71,16 +71,17 @@ layout (std140) uniform Material {\n\
 	float alphaCutoff;\n\
 	float workflow;\n\
 }mat;\n\
+#define MAX_NUM_LIGHTS 20\n\
 struct PointLight\n\
 {\n\
 	vec4 color;\n\
-	vec4 point;\n\
+	vec4 pos;\n\
 	float constant;\n\
 	float linear;\n\
 	float quadratic;\n\
 };\n\
 layout (std140) uniform LightData {\n\
-	PointLight pointLights;\n\
+	PointLight pointLights[MAX_NUM_LIGHTS];\n\
 }lights;\n\
 \n\
 uniform samplerCube samplerIrradiance;\n\
@@ -90,20 +91,238 @@ uniform sampler2D colorMap;\n\
 uniform sampler2D normalMap;\n\
 uniform sampler2D aoMap;\n\
 uniform sampler2D emissiveMap;\n\
+uniform sampler2D metallicRoughnessMap;\n\
 \n\
 uniform mat4 model; \n\
 uniform mat4 view; \n\
 uniform mat4 projection; \n\
 uniform vec3 camPos; \n\
 \n\
+uniform float prefilteredCubeMipLevels; \n\
+uniform float scaleIBLAmbient;\n\
+\n\
+const float M_PI = 3.141592653589793;\n\
+const float c_MinRoughness = 0.04;\n\
+const float PBR_WORKFLOW_METALLIC_ROUGHNESS = 0.0;\n\
+const float PBR_WORKFLOW_SPECULAR_GLOSINESS = 1.0f;\n\
+\n\
+struct PBRInfo\n\
+{\n\
+	float NdotL;					\n\
+	float NdotV;					\n\
+	float NdotH;					\n\
+	float LdotH;					\n\
+	float VdotH;					\n\
+	float perceptualRoughness;		\n\
+	float metalness;				\n\
+	float shadowVal;				\n\
+	vec3 reflectance0;				\n\
+	vec3 reflectance90;				\n\
+	float alphaRoughness;			\n\
+	vec3 diffuseColor;				\n\
+	vec3 specularColor;				\n\
+};\n\
+vec3 getNormal()\n\
+{\n\
+\n\
+	vec3 tangentNormal = texture(normalMap, mat.normalUV == 0 ? fragUV1 : fragUV2).xyz * 2.0f - 1.0f;\n\
+\n\
+	vec3 q1 = dFdx(worldPos);\n\
+	vec3 q2 = dFdy(worldPos);\n\
+	vec2 st1 = dFdx(fragUV1);\n\
+	vec2 st2 = dFdy(fragUV1);\n\
+\n\
+	vec3 N = normalize(fragNormal);\n\
+	vec3 T = normalize(q1 * st2.t - q2 * st1.t);\n\
+	vec3 B = -normalize(cross(N, T));\n\
+	mat3 TBN = mat3(T, B, N);\n\
+\n\
+	return normalize(TBN * tangentNormal);\n\
+}\n\
+vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)\n\
+{\n\
+	float lod = (pbrInputs.perceptualRoughness * prefilteredCubeMipLevels);\n\
+	vec3 brdf = (texture(samplerBRDFLUT, vec2(pbrInputs.NdotV, 1.0f - pbrInputs.perceptualRoughness))).rgb;\n\
+	vec3 diffuseLight = texture(samplerIrradiance, n).rgb;\n\
+\n\
+	vec3 specularLight = textureLod(prefilteredMap, reflection, lod).rgb;\n\
+\n\
+	vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;\n\
+	vec3 specular = specularLight * (pbrInputs.specularColor * brdf.x + brdf.y);\n\
+\n\
+	diffuse *= scaleIBLAmbient;\n\
+	specular *= scaleIBLAmbient;\n\
+\n\
+	return diffuse + specular;\n\
+}\n\
+\n\
+vec3 diffuse(PBRInfo pbrInputs)\n\
+{\n\
+	return pbrInputs.diffuseColor / M_PI;\n\
+}\n\
+vec3 specularReflection(PBRInfo pbrInputs)\n\
+{\n\
+	return pbrInputs.reflectance0 + (pbrInputs.reflectance90 - pbrInputs.reflectance0) * pow(clamp(1.0 - pbrInputs.VdotH, 0.0, 1.0), 5.0);\n\
+}\n\
+float geometricOcclusion(PBRInfo pbrInputs)\n\
+{\n\
+	float NdotL = pbrInputs.NdotL;\n\
+	float NdotV = pbrInputs.NdotV;\n\
+	float r = pbrInputs.alphaRoughness;\n\
+	float attenuationL = 2.0 * NdotL / (NdotL + sqrt(r * r + (1.0 - r * r) * (NdotL * NdotL)));\n\
+	float attenuationV = 2.0 * NdotV / (NdotV + sqrt(r * r + (1.0 - r * r) * (NdotV * NdotV)));\n\
+	return attenuationL * attenuationV;\n\
+}\
+float microfacetDistribution(PBRInfo pbrInputs)\n\
+{\n\
+	float roughnessSq = pbrInputs.alphaRoughness * pbrInputs.alphaRoughness;\n\
+	float f = (pbrInputs.NdotH * roughnessSq - pbrInputs.NdotH) * pbrInputs.NdotH + 1.0;\n\
+	return roughnessSq / (M_PI * f * f);\n\
+}\n\
+float convertMetallic(vec3 diffuse, vec3 specular, float maxSpecular) {\n\
+	float perceivedDiffuse = sqrt(0.299f * diffuse.r * diffuse.r + 0.587f * diffuse.g * diffuse.g + 0.114f * diffuse.b * diffuse.b);\n\
+	float perceivedSpecular = sqrt(0.299f * specular.r * specular.r + 0.587f * specular.g * specular.g + 0.114f * specular.b * specular.b);\n\
+	if (perceivedSpecular < c_MinRoughness) {\n\
+		return 0.0;\n\
+	}\n\
+	float a = c_MinRoughness;\n\
+	float b = perceivedDiffuse * (1.0f - maxSpecular) / (1.0f - c_MinRoughness) + perceivedSpecular - 2.0f * c_MinRoughness;\n\
+	float c = c_MinRoughness - perceivedSpecular;\n\
+	float D = max(b * b - 4.0 * a * c, 0.0f);\n\
+	return clamp((-b + sqrt(D)) / (2.0f * a), 0.0f, 1.0f);\n\
+}\n\
+\n\
 out vec4 outColor;\n\
 void main()\n\
 {\n\
-	vec3 normal = normalize(fragNormal);\n\
-	vec3 lightPos = vec3(0.0f, 30.0f, 0.0f);\n\
-	vec3 lightDir = normalize(lightPos - worldPos);\n\
-	float diff = max(dot(normal, lightDir), 0.0);\n\
-	outColor = vec4(1.0f, 0.0f, 1.0f, 1.0f) * vec4(diff, diff, diff, 1.0f);\n\
+	float perceptualRoughness;\n\
+	float metallic;\n\
+	vec3 diffuseColor;\n\
+	vec4 baseColor;\n\
+\n\
+	vec3 f0 = vec3(0.04f);\n\
+\n\
+	if (mat.alphaMask == 1.0f) {\n\
+		if (mat.baseColorUV > -1) {\n\
+			baseColor = texture(colorMap, mat.baseColorUV == 0 ? fragUV1 : fragUV2) * mat.baseColorFactor;\n\
+		}\n\
+		else {\n\
+			baseColor = mat.baseColorFactor;\n\
+		}\n\
+		if (baseColor.a < mat.alphaCutoff) {\n\
+			discard;\n\
+		}\n\
+	}\n\
+\n\
+	if (mat.workflow == PBR_WORKFLOW_METALLIC_ROUGHNESS) {\n\
+		perceptualRoughness = mat.roughnessFactor;\n\
+		metallic = mat.metallicFactor;\n\
+		if (mat.metallicRoughnessUV > -1) {\n\
+			vec4 mrSample = texture(metallicRoughnessMap, mat.metallicRoughnessUV == 0 ? fragUV1 : fragUV2);\n\
+			perceptualRoughness = mrSample.g * perceptualRoughness;\n\
+			metallic = mrSample.b * metallic;\n\
+		}\n\
+		else {\n\
+			perceptualRoughness = clamp(perceptualRoughness, c_MinRoughness, 1.0);\n\
+			metallic = clamp(metallic, 0.0, 1.0);\n\
+		}\n\
+		if (mat.baseColorUV > -1) {\n\
+			baseColor = texture(colorMap, mat.baseColorUV == 0 ? fragUV1 : fragUV2) * mat.baseColorFactor;\n\
+		}\n\
+		else {\n\
+			baseColor = mat.baseColorFactor;\n\
+		}\n\
+	}\n\
+\n\
+	if (mat.workflow == PBR_WORKFLOW_SPECULAR_GLOSINESS) {\n\
+		if (mat.metallicRoughnessUV > -1) {\n\
+			perceptualRoughness = 1.0 - texture(metallicRoughnessMap, mat.metallicRoughnessUV == 0 ? fragUV1 : fragUV2).a;\n\
+		}\n\
+		else {\n\
+			perceptualRoughness = 0.0;\n\
+		}\n\
+\n\
+		const float epsilon = 1e-6;\n\
+\n\
+		vec4 diffuse = texture(colorMap, fragUV1);\n\
+		vec3 specular = texture(metallicRoughnessMap, fragUV1).rgb;\n\
+\n\
+		float maxSpecular = max(max(specular.r, specular.g), specular.b);\n\
+\n\
+		// Convert metallic value from specular glossiness inputs\n\
+		metallic = convertMetallic(diffuse.rgb, specular, maxSpecular);\n\
+\n\
+		vec3 baseColorDiffusePart = diffuse.rgb * ((1.0f - maxSpecular) / (1.0f - c_MinRoughness) / max(1.0f - metallic, epsilon)) * mat.diffuseFactor.rgb;\n\
+		vec3 baseColorSpecularPart = specular - (vec3(c_MinRoughness) * (1.0f - metallic) * (1.0f / max(metallic, epsilon))) * mat.specularFactor.rgb;\n\
+		baseColor = vec4(mix(baseColorDiffusePart, baseColorSpecularPart, metallic * metallic), diffuse.a);\n\
+	}\n\
+	baseColor *= fragColor;\n\
+\n\
+	diffuseColor = baseColor.rgb * (vec3(1.0f) - f0);\n\
+	diffuseColor *= 1.0f - metallic;\n\
+\n\
+	float alphaRoughness = perceptualRoughness * perceptualRoughness;\n\
+\n\
+	vec3 specularColor = mix(f0, baseColor.rgb, metallic);\n\
+\n\
+	float reflectance = max(max(specularColor.r, specularColor.g), specularColor.b);\n\
+\n\
+	float reflectance90 = clamp(reflectance * 25.0f, 0.0f, 1.0f);\n\
+	vec3 specularEnvironmentR0 = specularColor.rgb;\n\
+	vec3 specularEnvironmentR90 = vec3(1.0f, 1.0f, 1.0f) * reflectance90;\n\
+\n\
+	vec3 n = (mat.normalUV > -1) ? getNormal() : -normalize(fragNormal);\n\
+	vec3 v = normalize(camPos - worldPos);    // Vector from surface point to camera\n\
+	vec3 l = normalize(vec3(0.0f, 1.0f, 0.0f));\n\
+	vec3 h = normalize(l+v);\n\
+	vec3 reflection = -normalize(reflect(v, n));\n\
+\n\
+	float NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
+	float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);\n\
+	float NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
+	float LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
+	float VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
+\n\
+	PBRInfo pbrInputs = PBRInfo(\n\
+		NdotL,	// NdotL\n\
+		NdotV,\n\
+		NdotH,	// NdotH\n\
+		LdotH,	// LdotH\n\
+		VdotH,	// VdotH\n\
+		perceptualRoughness,\n\
+		metallic,\n\
+		1.0,	// shadowVal\n\
+		specularEnvironmentR0,\n\
+		specularEnvironmentR90,\n\
+		alphaRoughness,\n\
+		diffuseColor,\n\
+		specularColor\n\
+	);\n\
+\n\
+	vec3 F = specularReflection(pbrInputs);\n\
+	float G = geometricOcclusion(pbrInputs);\n\
+	float D = microfacetDistribution(pbrInputs);\n\
+	const vec3 u_LightColor = vec3(1.0) * 10.0;\n\
+	vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
+	vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);\n\
+	vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);\n\
+\n\
+	color += getIBLContribution(pbrInputs, n, reflection);\n\
+\n\
+	const float u_OcclusionStrength = 1.0f;\n\
+	if (mat.aoUV > -1) {\n\
+		float ao = texture(aoMap, (mat.aoUV == 0 ? fragUV1 : fragUV2)).r;\n\
+		color = mix(color, color * ao, u_OcclusionStrength);\n\
+	}\n\
+	color += vec3(0.4) * diffuseColor;\n\
+\n\
+	const float u_EmissiveFactor = 1.0f;\n\
+	if (mat.emissiveUV > -1) {\n\
+		vec3 emissive = texture(emissiveMap, mat.emissiveUV == 0 ? fragUV1 : fragUV2).rgb * u_EmissiveFactor;\n\
+		color += emissive * fragColor.rgb;\n\
+	}\n\
+\n\
+	outColor = vec4(color, baseColor.a);\n\
 }\n\
 ";
 
@@ -445,6 +664,9 @@ struct BaseProgramUniforms
 	GLuint camPosLoc;
 	GLuint boneDataLoc;
 	GLuint materialDataLoc;
+	GLuint prefilteredCubeMipLevelsLoc;
+	GLuint scaleIBLAmbientLoc;
+
 };
 
 enum BASE_SHADER_TEXTURE
@@ -456,6 +678,7 @@ enum BASE_SHADER_TEXTURE
 	BASE_SHADER_TEXTURE_NORMALMAP,
 	BASE_SHADER_TEXTURE_AOMAP,
 	BASE_SHADER_TEXTURE_EMISSIVEMAP,
+	BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS,
 	NUM_BASE_SHADER_TEXTURES,
 };
 
@@ -505,7 +728,7 @@ static void BindMaterial(Renderer* r, Material* mat)
 		glBindBufferBase(GL_UNIFORM_BUFFER, r->baseUniforms.materialDataLoc, mat->uniform);
 		
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
-		if (mat->tex.diffuse) glBindTexture(GL_TEXTURE_2D, mat->tex.diffuse->uniform);
+		if (mat->tex.baseColor) glBindTexture(GL_TEXTURE_2D, mat->tex.baseColor->uniform);
 		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_NORMALMAP);
 		if (mat->tex.normal) glBindTexture(GL_TEXTURE_2D, mat->tex.normal->uniform);
@@ -515,6 +738,9 @@ static void BindMaterial(Renderer* r, Material* mat)
 		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_EMISSIVEMAP);
 		if (mat->tex.emissive) glBindTexture(GL_TEXTURE_2D, mat->tex.emissive->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
+		if (mat->tex.emissive) glBindTexture(GL_TEXTURE_2D, mat->tex.metallicRoughness->uniform);
 		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 	}
 	else
@@ -527,6 +753,8 @@ static void BindMaterial(Renderer* r, Material* mat)
 		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_EMISSIVEMAP);
 		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 	}
 }
 
@@ -537,6 +765,9 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 	un.viewLoc = glGetUniformLocation(program, "view");
 	un.projLoc = glGetUniformLocation(program, "projection");
 	un.camPosLoc = glGetUniformLocation(program, "camPos");
+
+	un.prefilteredCubeMipLevelsLoc = glGetUniformLocation(program, "prefilteredCubeMipLevels");
+	un.scaleIBLAmbientLoc = glGetUniformLocation(program, "scaleIBLAmbient");
 
 	un.boneDataLoc = glGetUniformBlockIndex(program, "BoneData");
 	glUniformBlockBinding(program, un.boneDataLoc, un.boneDataLoc);
@@ -566,6 +797,9 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 	curTexture = glGetUniformLocation(program, "emissiveMap");
 	if (curTexture == -1) { LOG("failed to Get emissiveMap Texture Loaction of GLTF shader program\n"); }
 	glUniform1i(curTexture, BASE_SHADER_TEXTURE_EMISSIVEMAP);
+	curTexture = glGetUniformLocation(program, "metallicRoughnessMap");
+	if (curTexture == -1) { LOG("failed to Get metallicRoughnessMap Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
 
 
 	return un;
@@ -691,7 +925,7 @@ void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env)
 	constexpr uint32_t numSamples = 32;
 
 	uint32_t numMipLevels = 1 + floor(log2(glm::max(env->width, env->height)));
-
+	env->mipLevels = numMipLevels;
 	GLuint framebuffer;
 	glGenFramebuffers(1, &framebuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -951,17 +1185,27 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LEQUAL);
 
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->prefilteredMap);
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->irradianceMap);
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
+	glBindTexture(GL_TEXTURE_2D, renderer->brdfLut);
+
 
 	glUniform3fv(renderer->baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
 	glUniformMatrix4fv(renderer->baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
 	glUniformMatrix4fv(renderer->baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+	glUniform1f(renderer->baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
+	glUniform1f(renderer->baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.boneDataLoc, renderer->defaultBoneData);
 	
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
 		SceneObject* obj = renderer->objList[i];
-		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE) && (obj->model->flags & MODEL_FLAG_OPAQUE))
+		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
 		{
 			glm::mat4 mat = obj->transform * obj->model->baseTransform;
 			glUniformMatrix4fv(renderer->baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
@@ -991,10 +1235,20 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
+	glBindTexture(GL_TEXTURE_2D, renderer->currentEnvironmentData->environmentMap);
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
+	glBindTexture(GL_TEXTURE_2D, renderer->currentEnvironmentData->irradianceMap);
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
+	glBindTexture(GL_TEXTURE_2D, renderer->brdfLut);
+
 
 	glUniform3fv(renderer->baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
 	glUniformMatrix4fv(renderer->baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
 	glUniformMatrix4fv(renderer->baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+	glUniform1f(renderer->baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
+	glUniform1f(renderer->baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.boneDataLoc, renderer->defaultBoneData);
 
@@ -1002,7 +1256,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
 		SceneObject* obj = renderer->objList[i];
-		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE) && (obj->model->flags & MODEL_FLAG_TRANSPARENT))
+		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
 		{
 			glm::mat4 mat = obj->transform * obj->model->baseTransform;
 			glUniformMatrix4fv(renderer->baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
@@ -1010,7 +1264,12 @@ void RE_RenderTransparent(struct Renderer* renderer)
 			glBindVertexArray(obj->model->vao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 
-			glDrawElements(GL_TRIANGLES, obj->model->numIndices, GL_UNSIGNED_INT, nullptr);
+			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
+			{
+				Mesh* m = &obj->model->meshes[j];
+				BindMaterial(renderer, m->material);
+				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+			}
 		}
 	}
 

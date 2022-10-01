@@ -1,16 +1,6 @@
 #pragma once
 #include "GLIncludes.h"
 
-enum MESH_FLAG
-{
-	MESH_FLAG_OPAQUE = 1,
-	MESH_FLAG_TRANSPARENT = 2,
-};
-enum MODEL_FLAG
-{
-	MODEL_FLAG_OPAQUE = 1,
-	MODEL_FLAG_TRANSPARENT = 2,
-};
 
 struct AABB
 {
@@ -46,12 +36,12 @@ struct Material
 {
 	struct TextureInfo
 	{
-		Texture* diffuse;
+		Texture* baseColor;
 		Texture* normal;
 		Texture* emissive;
 		Texture* ao;
 		Texture* metallicRoughness;
-		uint8_t diffuseUV;
+		uint8_t baseColorUV;
 		uint8_t normalUV;
 		uint8_t emissiveUV;
 		uint8_t aoUV;

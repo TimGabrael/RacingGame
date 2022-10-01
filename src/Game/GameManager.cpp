@@ -3,22 +3,20 @@
 #include "../Graphics/ModelInfo.h"
 #include "../Graphics/Scene.h"
 
+#define CREATE_ACTUAL_ENVIRONMENT
 GameManager* GM_CreateGameManager(AssetManager* assets)
 {
 	GameManager* out = new GameManager;
 	GameState* state = GetGameState();
 	out->env.environmentMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
-#ifdef CREATE_ACTUAL_ENVIRONMENT
-	out->env.environmentMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
 	out->env.width = assets->textures[DEFAULT_CUBE_MAP]->width;
 	out->env.height = assets->textures[DEFAULT_CUBE_MAP]->height;
+	out->env.mipLevels = 1;
+#ifdef CREATE_ACTUAL_ENVIRONMENT
 	RE_CreateEnvironment(state->renderer, &out->env);
 #else
-	out->env.environmentMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
 	out->env.prefilteredMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
 	out->env.irradianceMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
-	out->env.width = assets->textures[DEFAULT_CUBE_MAP]->width;
-	out->env.height = assets->textures[DEFAULT_CUBE_MAP]->height;
 #endif // CREATE_ACTUAL_ENVIRONMENT
 
 	out->localPlayer = nullptr;

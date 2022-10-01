@@ -58,7 +58,7 @@ void CreateMaterialUniform(Material* mat)
 	data.emissiveFactor = mat->emissiveFactor;
 	data.diffuseFactor = mat->diffuseFactor;
 	data.specularFactor = mat->specularFactor;
-	data.diffuseUV = mat->tex.diffuseUV > 5 ? -1 : mat->tex.diffuseUV;
+	data.baseColorUV = mat->tex.baseColorUV > 5 ? -1 : mat->tex.baseColorUV;
 	data.normalUV = mat->tex.normalUV > 5 ? -1 : mat->tex.normalUV;
 	data.emissiveUV = mat->tex.emissiveUV > 5 ? -1 : mat->tex.emissiveUV;
 	data.aoUV = mat->tex.aoUV > 5 ? -1 : mat->tex.aoUV;
@@ -85,7 +85,7 @@ void UpdateMaterialUniform(Material* mat)
 	data.emissiveFactor = mat->emissiveFactor;
 	data.diffuseFactor = mat->diffuseFactor;
 	data.specularFactor = mat->specularFactor;
-	data.diffuseUV = mat->tex.diffuseUV > 5 ? -1 : mat->tex.diffuseUV;
+	data.baseColorUV = mat->tex.baseColorUV > 5 ? -1 : mat->tex.baseColorUV;
 	data.normalUV = mat->tex.normalUV > 5 ? -1 : mat->tex.normalUV;
 	data.emissiveUV = mat->tex.emissiveUV > 5 ? -1 : mat->tex.emissiveUV;
 	data.aoUV = mat->tex.aoUV > 5 ? -1 : mat->tex.aoUV;

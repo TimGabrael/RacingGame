@@ -53,36 +53,6 @@ AssetManager* AM_CreateAssetManager()
 	}
 
 	{
-		//Texture* defaultCubemap = new Texture;
-		//defaultCubemap->width = 1;
-		//defaultCubemap->height = 1;
-		//defaultCubemap->type = GL_TEXTURE_CUBE_MAP;
-		//glGenTextures(1, &defaultCubemap->uniform);
-		//glBindTexture(defaultCubemap->type, defaultCubemap->uniform);
-		//
-		//uint32_t data[6][2] = { 
-		//	{ 0xFF603040, 0xFF603040 },
-		//	{ 0xFF207040, 0xFF207040 },
-		//	{ 0xFF203090, 0xFF203090 },
-		//	{ 0xFF909040, 0xFF909040 },
-		//	{ 0xFF903090, 0xFF903090 },
-		//	{ 0xFF200000, 0xFF200000 },
-		//};
-		//for (uint32_t i = 0; i < 6; i++)
-		//{
-		//
-		//	glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, defaultCubemap->width, defaultCubemap->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data[i]);
-		//
-		//}
-		//
-		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-		// 
-		//out->textures[DEFUALT_CUBE_MAP] = defaultCubemap;
-
 		AM_AddCubemapTexture(out, DEFAULT_CUBE_MAP,
 			"Assets/CitySkybox/top.jpg", 
 			"Assets/CitySkybox/bottom.jpg", 
@@ -90,7 +60,6 @@ AssetManager* AM_CreateAssetManager()
 			"Assets/CitySkybox/right.jpg", 
 			"Assets/CitySkybox/front.jpg", 
 			"Assets/CitySkybox/back.jpg");
-
 	}
 
 
@@ -148,6 +117,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 		myMesh->startIdx = numInds;
 		myMesh->numInd = localNumInds;
 
+		myMesh->material = &model->materials[mesh->mMaterialIndex];
+
 		numVerts += mesh->mNumVertices;
 		numInds += localNumInds;
 	}
@@ -185,12 +156,12 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 				if (mesh->HasTextureCoords(0))
 				{
 					const aiVector3D& uv = mesh->mTextureCoords[0][j];
-					myV.uv1 = { uv.x, uv.y };
+					myV.uv1 = { uv.x, -uv.y };
 				}
 				if (mesh->HasTextureCoords(1))
 				{
 					const aiVector3D& uv = mesh->mTextureCoords[1][j];
-					myV.uv2 = { uv.x, uv.y };
+					myV.uv2 = { uv.x, -uv.y };
 				}
 
 				if (mesh->HasBones())
@@ -304,7 +275,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 			}
 			return nullptr;
 		};
-		myMat.tex.diffuse = loadTexture(aiTextureType_BASE_COLOR, &myMat.tex.diffuseUV);
+		myMat.tex.baseColor = loadTexture(aiTextureType_BASE_COLOR, &myMat.tex.baseColorUV);
 		myMat.tex.normal = loadTexture(aiTextureType_NORMALS, &myMat.tex.normalUV);
 		myMat.tex.emissive = loadTexture(aiTextureType_EMISSIVE, &myMat.tex.emissiveUV);
 		myMat.tex.ao = loadTexture(aiTextureType_AMBIENT_OCCLUSION, &myMat.tex.aoUV);
@@ -344,7 +315,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 		}
 	}
 	importer.FreeScene();
-	model->flags |= MODEL_FLAG::MODEL_FLAG_OPAQUE;
 	m->models.push_back(model);
 	return model;
 }
