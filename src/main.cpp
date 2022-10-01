@@ -70,6 +70,7 @@ int main()
 			RE_BeginScene(game->renderer, objs, numSceneObjects);
 			RE_SetCameraBase(game->renderer, &localPlayer->camera.base);
 			RE_SetEnvironmentData(game->renderer, &game->manager->env);
+			RE_SetLightData(game->renderer, game->manager->lightUniform);
 
 			RE_RenderCubeMap(game->renderer, game->manager->env.environmentMap);
 

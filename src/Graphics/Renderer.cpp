@@ -79,9 +79,28 @@ struct PointLight\n\
 	float constant;\n\
 	float linear;\n\
 	float quadratic;\n\
+	float padding;\n\
+};\n\
+struct DirectionalLight\n\
+{\n\
+	vec4 direction;\n\
+	vec4 color;\n\
+};\n\
+struct SpotLight\n\
+{\n\
+	vec4 color;\n\
+	vec4 direction;\n\
+	vec3 pos;\n\
+	float cutOff;\n\
 };\n\
 layout (std140) uniform LightData {\n\
 	PointLight pointLights[MAX_NUM_LIGHTS];\n\
+	DirectionalLight dirLights[MAX_NUM_LIGHTS];\n\
+	SpotLight spotLights[MAX_NUM_LIGHTS];\n\
+	vec4 ambientColor;\n\
+	int numPointLights;\n\
+	int numDirLights;\n\
+	int numSpotLights;\n\
 }lights;\n\
 \n\
 uniform samplerCube samplerIrradiance;\n\
@@ -115,7 +134,6 @@ struct PBRInfo\n\
 	float VdotH;					\n\
 	float perceptualRoughness;		\n\
 	float metalness;				\n\
-	float shadowVal;				\n\
 	vec3 reflectance0;				\n\
 	vec3 reflectance90;				\n\
 	float alphaRoughness;			\n\
@@ -273,40 +291,78 @@ void main()\n\
 \n\
 	vec3 n = (mat.normalUV > -1) ? getNormal() : normalize(fragNormal);\n\
 	vec3 v = normalize(camPos - worldPos);    // Vector from surface point to camera\n\
-	vec3 l = normalize(vec3(0.0f, 1.0f, 0.0f));\n\
-	vec3 h = normalize(l+v);\n\
 	vec3 reflection = normalize(reflect(v, n));\n\
 	reflection.y *= -1.0;\n\
-\n\
-	float NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
+	\n\
 	float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);\n\
-	float NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
-	float LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
-	float VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
-\n\
 	PBRInfo pbrInputs = PBRInfo(\n\
-		NdotL,	// NdotL\n\
+		0.001,	// NdotL\n\
 		NdotV,\n\
-		NdotH,	// NdotH\n\
-		LdotH,	// LdotH\n\
-		VdotH,	// VdotH\n\
+		0.0,	// NdotH\n\
+		0.0,	// LdotH\n\
+		0.0,	// VdotH\n\
 		perceptualRoughness,\n\
 		metallic,\n\
-		1.0,	// shadowVal\n\
 		specularEnvironmentR0,\n\
 		specularEnvironmentR90,\n\
 		alphaRoughness,\n\
 		diffuseColor,\n\
 		specularColor\n\
 	);\n\
-\n\
-	vec3 F = specularReflection(pbrInputs);\n\
-	float G = geometricOcclusion(pbrInputs);\n\
-	float D = microfacetDistribution(pbrInputs);\n\
-	const vec3 u_LightColor = vec3(1.0) * 10.0;\n\
-	vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-	vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);\n\
-	vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);\n\
+	vec3 color = lights.ambientColor.rgb * diffuseColor;\n\
+	for(int i = 0; i < lights.numDirLights; i++)\n\
+	{\n\
+		vec3 l = normalize(-lights.dirLights[i].direction.xyz); // Vector from surface point to light\n\
+		vec3 h = normalize(l+v);\n\
+		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
+		pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
+		pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
+		pbrInputs.VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
+		vec3 F = specularReflection(pbrInputs);\n\
+		float G = geometricOcclusion(pbrInputs);\n\
+		float D = microfacetDistribution(pbrInputs);\n\
+		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
+		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
+		color += pbrInputs.NdotL * lights.dirLights[i].color.rgb * (diffuseContrib + specContrib);\n\
+	}\n\
+	for(int i = 0; i < lights.numPointLights; i++)\n\
+	{\n\
+		vec3 l = normalize(lights.pointLights[i].pos.xyz - worldPos);\n\
+		vec3 h = normalize(l+v);\n\
+		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
+		pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
+		pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
+		pbrInputs.VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
+		vec3 F = specularReflection(pbrInputs);\n\
+		float G = geometricOcclusion(pbrInputs);\n\
+		float D = microfacetDistribution(pbrInputs);\n\
+		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
+		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
+		color += pbrInputs.NdotL * lights.pointLights[i].color.rgb * (diffuseContrib + specContrib);\n\
+	}\n\
+	for(int i = 0; i < lights.numSpotLights; i++)\n\
+	{\n\
+		vec3 l = normalize(lights.spotLights[i].pos.xyz - worldPos);\n\
+		float theta = dot(-l, normalize(lights.spotLights[i].direction.xyz));\n\
+		vec3 h = normalize(l+v);\n\
+		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
+		pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
+		pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
+		pbrInputs.VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
+		vec3 F = specularReflection(pbrInputs);\n\
+		float G = geometricOcclusion(pbrInputs);\n\
+		float D = microfacetDistribution(pbrInputs);\n\
+		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
+		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
+		if(theta > lights.spotLights[i].cutOff)\n\
+		{\n\
+			color += pbrInputs.NdotL * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
+		}\n\
+		else\n\
+		{\n\
+			color += pbrInputs.NdotL * lights.spotLights[i].color.rgb * (specContrib);\n\
+		}\n\
+	}\n\
 \n\
 	color += getIBLContribution(pbrInputs, n, reflection);\n\
 \n\
@@ -315,7 +371,6 @@ void main()\n\
 		float ao = texture(aoMap, (mat.aoUV == 0 ? fragUV1 : fragUV2)).r;\n\
 		color = mix(color, color * ao, u_OcclusionStrength);\n\
 	}\n\
-	color += vec3(0.4) * diffuseColor;\n\
 \n\
 	const float u_EmissiveFactor = 1.0f;\n\
 	if (mat.emissiveUV > -1) {\n\
@@ -667,7 +722,7 @@ struct BaseProgramUniforms
 	GLuint materialDataLoc;
 	GLuint prefilteredCubeMipLevelsLoc;
 	GLuint scaleIBLAmbientLoc;
-
+	GLuint lightDataLoc;
 };
 
 enum BASE_SHADER_TEXTURE
@@ -705,6 +760,7 @@ struct Renderer
 {
 	const CameraBase* currentCam;
 	const EnvironmentData* currentEnvironmentData;
+	GLuint currentLightData;
 	GLuint baseProgram;
 	BaseProgramUniforms baseUniforms;
 	CubemapRenderInfo cubemapInfo;
@@ -774,6 +830,9 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 	glUniformBlockBinding(program, un.boneDataLoc, un.boneDataLoc);
 	un.materialDataLoc = glGetUniformBlockIndex(program, "Material");
 	glUniformBlockBinding(program, un.materialDataLoc, un.materialDataLoc);
+	un.lightDataLoc = glGetUniformBlockIndex(program, "LightData");
+	glUniformBlockBinding(program, un.lightDataLoc, un.lightDataLoc);
+
 
 
 	glUseProgram(program);
@@ -802,7 +861,6 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 	if (curTexture == -1) { LOG("failed to Get metallicRoughnessMap Texture Loaction of GLTF shader program\n"); }
 	glUniform1i(curTexture, BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
 
-
 	return un;
 }
 
@@ -815,7 +873,8 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 {
 	Renderer* renderer = new Renderer;
 	renderer->currentCam = nullptr;
-
+	renderer->currentEnvironmentData = nullptr;
+	renderer->currentLightData = 0;
 	// Create Material Defaults
 	{
 		CreateBoneDataFromAnimation(nullptr, &renderer->defaultBoneData);
@@ -1067,7 +1126,6 @@ void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env)
 	glDeleteFramebuffers(1, &framebuffer);
 }
 
-
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num)
 {
 	renderer->numObjs = num;
@@ -1082,7 +1140,10 @@ void RE_SetEnvironmentData(struct Renderer* renderer, const EnvironmentData* dat
 {
 	renderer->currentEnvironmentData = data;
 }
-
+void RE_SetLightData(struct Renderer* renderer, GLuint lightUniform)
+{
+	renderer->currentLightData = lightUniform;
+}
 
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side)
@@ -1178,7 +1239,8 @@ void RE_RenderOpaque(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
-
+	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numObjs == 0) return;
 	
 	glUseProgram(renderer->baseProgram);
@@ -1201,6 +1263,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glUniform1f(renderer->baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
 	glUniform1f(renderer->baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.lightDataLoc, renderer->currentLightData);
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->baseUniforms.boneDataLoc, renderer->defaultBoneData);
 	
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
@@ -1228,6 +1291,8 @@ void RE_RenderTransparent(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numObjs == 0) return;
 
 	glUseProgram(renderer->baseProgram);
@@ -1279,7 +1344,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 
@@ -1302,4 +1367,9 @@ void RE_EndScene(struct Renderer* renderer)
 {
 	renderer->numObjs = 0xFFFFFFFF;
 	renderer->objList = nullptr;
+
+	renderer->currentCam = nullptr;
+	renderer->currentEnvironmentData = nullptr;
+	renderer->currentLightData = 0;
+
 }

@@ -71,6 +71,26 @@ void CreateMaterialUniform(Material* mat)
 	data._align1 = 0;
 	data._align2 = 0;
 
+	data.baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
+	data.emissiveFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
+	data.baseColorUV = 0;
+
+#ifdef DEBUG_PRINT_MATERIAL
+	LOG("BASECOLORFACTOR: (%f, %f, %f, %f)\n", data.baseColorFactor.r, data.baseColorFactor.g, data.baseColorFactor.b, data.baseColorFactor.a);
+	LOG("EMISSIVEFACTOR: (%f, %f, %f, %f)\n", data.emissiveFactor.r, data.emissiveFactor.g, data.emissiveFactor.b, data.emissiveFactor.a);
+	LOG("DIFFUSEFACTOR: (%f, %f, %f, %f)\n", data.diffuseFactor.r, data.diffuseFactor.g, data.diffuseFactor.b, data.diffuseFactor.a);
+	LOG("SPECULARFACTOR: (%f, %f, %f, %f)\n", data.specularFactor.r, data.specularFactor.g, data.specularFactor.b, data.specularFactor.a);
+	LOG("BASECOLORUV: %d\n", data.baseColorUV);
+	LOG("NORMALUV: %d\n", data.normalUV);
+	LOG("EMISSIVEUV: %d\n", data.emissiveUV);
+	LOG("AOUV: %d\n", data.aoUV);
+	LOG("METALLICROUGHNESSUV: %d\n", data.metallicRoughnessUV);
+	LOG("ROUGHNESSFACTOR: %f\n", data.roughnessFactor);
+	LOG("METALLICFACTOR: %f\n", data.metallicFactor);
+	LOG("ALPHAMASK: %f\n", data.alphaMask);
+	LOG("ALPHACUTOFF: %f\n", data.alphaCutoff);
+	LOG("WORKFLOW: %f\n", data.workflow);
+#endif
 
 	glGenBuffers(1, &mat->uniform);
 	glBindBuffer(GL_UNIFORM_BUFFER, mat->uniform);

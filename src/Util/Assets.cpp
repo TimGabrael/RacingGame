@@ -251,7 +251,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 			{
 				Texture* resTex = new Texture;
 				resTex->width = texture->mWidth;
-				resTex->height = texture->mHeight;
+				resTex->height = glm::max(texture->mHeight, 1u);
 				resTex->type = GL_TEXTURE_2D;
 				glGenTextures(1, &resTex->uniform);
 				glBindTexture(resTex->type, resTex->uniform);
@@ -305,11 +305,9 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 
 			mat->Get("$mat.gltf.alphaCutoff", 0, 0, myMat.alphaCutoff);
 
-			if (myMat.alphaCutoff < 1.0f)
-			{
-				myMat.alphaMask = 1.0f;
-			}
+			myMat.alphaMask = 1.0f;
 			// TODO: WORKFLOW SETTING IS NOT SET YET
+
 
 			CreateMaterialUniform(&myMat);
 		}

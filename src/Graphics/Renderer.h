@@ -1,6 +1,7 @@
 #pragma once
 #include "GLIncludes.h"
 #define MAX_NUM_JOINTS 128
+#define MAX_NUM_LIGHTS 20
 
 struct EnvironmentData
 {
@@ -42,6 +43,38 @@ struct MaterialData
 	float _align1;
 	float _align2;
 };
+struct PointLight
+{
+	glm::vec4 color;
+	glm::vec4 pos;
+	float constant;
+	float linear;
+	float quadratic;
+	float padding;
+};
+struct DirectionalLight
+{
+	glm::vec4 direction;
+	glm::vec4 color;
+};
+struct SpotLight
+{
+	glm::vec4 color;
+	glm::vec4 direction;
+	glm::vec3 pos;
+	float cutOff;
+};
+struct LightData 
+{
+	PointLight pointLights[MAX_NUM_LIGHTS];
+	DirectionalLight dirLights[MAX_NUM_LIGHTS];
+	SpotLight spotLights[MAX_NUM_LIGHTS];
+	glm::vec4 ambientColor;
+	int numPointLights;
+	int numDirLights;
+	int numSpotLights;
+	int padding;
+};
 
 enum CUBE_MAP_SIDE
 {
@@ -68,6 +101,7 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 // the objects passed to the functions need to stay alive for the entire renderpass!!!
 void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBase);
 void RE_SetEnvironmentData(struct Renderer* renderer, const EnvironmentData* data);
+void RE_SetLightData(struct Renderer* renderer, GLuint lightUniform);
 
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side);

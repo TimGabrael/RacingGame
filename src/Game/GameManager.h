@@ -4,6 +4,7 @@
 
 struct GameManager
 {
+	GLuint lightUniform;
 	EnvironmentData env;
 	Player* localPlayer;
 };

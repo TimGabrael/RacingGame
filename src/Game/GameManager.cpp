@@ -3,6 +3,7 @@
 #include "../Graphics/ModelInfo.h"
 #include "../Graphics/Scene.h"
 
+
 GameManager* GM_CreateGameManager(AssetManager* assets)
 {
 	GameManager* out = new GameManager;
@@ -17,6 +18,25 @@ GameManager* GM_CreateGameManager(AssetManager* assets)
 	out->env.prefilteredMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
 	out->env.irradianceMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
 #endif // CREATE_ACTUAL_ENVIRONMENT
+
+	// LightData lightData{};
+	// lightData.dirLights[0].direction = { 0.0f, -1.0f, 0.0f, 0.0f };
+	// lightData.dirLights[0].color = { 10.0f, 10.0f, 10.0f, 1.0f };
+	// lightData.numDirLights = 1;
+	// lightData.ambientColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+	LightData lightData{};
+	lightData.pointLights[0].pos = { 0.0f, 8.0f, 0.0f, 0.0f };
+	lightData.pointLights[0].color = { 10.0f, 10.0f, 10.0f, 1.0f };
+	lightData.numPointLights = 1;
+	lightData.ambientColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+	
+	glGenBuffers(1, &out->lightUniform);
+	glBindBuffer(GL_UNIFORM_BUFFER, out->lightUniform);
+	glBufferData(GL_UNIFORM_BUFFER, sizeof(lightData), &lightData, GL_STATIC_DRAW);
+
+
+
 
 	out->localPlayer = nullptr;
 
