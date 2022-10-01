@@ -6,7 +6,7 @@
 #define DEFAULT_WHITE_TEXTURE ":DefaultWhite"
 #define DEFAULT_BLACK_TEXTURE ":DefaultBlack"
 
-#define DEFUALT_CUBE_MAP ":DefaultCubemap"
+#define DEFAULT_CUBE_MAP ":DefaultCubemap"
 
 
 struct AssetManager

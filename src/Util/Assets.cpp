@@ -83,7 +83,7 @@ AssetManager* AM_CreateAssetManager()
 		// 
 		//out->textures[DEFUALT_CUBE_MAP] = defaultCubemap;
 
-		AM_AddCubemapTexture(out, DEFUALT_CUBE_MAP,
+		AM_AddCubemapTexture(out, DEFAULT_CUBE_MAP,
 			"Assets/CitySkybox/top.jpg", 
 			"Assets/CitySkybox/bottom.jpg", 
 			"Assets/CitySkybox/left.jpg", 
@@ -124,6 +124,11 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 	memset(model->textures, 0, sizeof(Texture*) * scene->mNumTextures);
 	model->materials = new Material[scene->mNumMaterials];
 	memset(model->materials, 0, sizeof(Material) * scene->mNumMaterials);
+	model->numMeshes = scene->mNumMeshes;
+	model->numTextures = scene->mNumTextures;
+	model->numMaterials = scene->mNumMaterials;
+
+	model->baseTransform = glm::mat4(1.0f);
 
 	uint32_t numVerts = 0;
 	uint32_t numInds = 0;
@@ -338,10 +343,10 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 			CreateMaterialUniform(&myMat);
 		}
 	}
-
-	
 	importer.FreeScene();
-	return nullptr;
+	model->flags |= MODEL_FLAG::MODEL_FLAG_OPAQUE;
+	m->models.push_back(model);
+	return model;
 }
 struct Texture* AM_AddTexture(AssetManager* m, const char* file)
 {

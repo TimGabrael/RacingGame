@@ -3,6 +3,7 @@
 #include "Util/Assets.h"
 #include "Util/Math.h"
 #include "Game/Entitys.h"
+#include "Game/GameManager.h"
 
 struct GameState
 {
@@ -10,7 +11,7 @@ struct GameState
 	struct Scene* scene;
 	struct PhysicsScene* physics;
 	AssetManager* assets;
-	struct Player* localPlayer;
+	GameManager* manager;
 	struct GLFWwindow* window;
 	uint32_t winX;
 	uint32_t winY;
@@ -24,5 +25,3 @@ struct GameState
 
 GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint32_t windowHeight);
 GameState* GetGameState();
-
-void AddPlayerToScene(GameState* game, const glm::vec3& pos, float yaw, float pitch);

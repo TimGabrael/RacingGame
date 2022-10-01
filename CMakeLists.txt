@@ -8,7 +8,7 @@ add_subdirectory(3rd-party/glad)
 add_subdirectory(3rd-party/NFDriver)
 
 
-add_executable(RacingGame "src/main.cpp" "src/Graphics/Renderer.h" "src/Graphics/Renderer.cpp"   "src/Util/Math.h" "src/Util/Assets.h" "src/Graphics/Scene.h" "src/Graphics/Scene.cpp" "src/GameState.h" "src/Util/Assets.cpp" "src/Graphics/ModelInfo.h" "src/Graphics/ModelInfo.cpp" "src/Util/Utility.h" "src/Graphics/GLIncludes.h" "src/GameState.cpp" "src/Graphics/Camera.h" "src/Graphics/Camera.cpp" "src/Game/Entitys.h" "src/Game/Entitys.cpp" "src/Physics/Physics.h" "src/Physics/Physics.cpp")
+add_executable(RacingGame "src/main.cpp" "src/Graphics/Renderer.h" "src/Graphics/Renderer.cpp"   "src/Util/Math.h" "src/Util/Assets.h" "src/Graphics/Scene.h" "src/Graphics/Scene.cpp" "src/GameState.h" "src/Util/Assets.cpp" "src/Graphics/ModelInfo.h" "src/Graphics/ModelInfo.cpp" "src/Util/Utility.h" "src/Graphics/GLIncludes.h" "src/GameState.cpp" "src/Graphics/Camera.h" "src/Graphics/Camera.cpp" "src/Game/Entitys.h" "src/Game/Entitys.cpp" "src/Physics/Physics.h" "src/Physics/Physics.cpp" "src/Game/GameManager.h" "src/Game/GameManager.cpp")
 
 
 set(PHYSX_LIBRARIES

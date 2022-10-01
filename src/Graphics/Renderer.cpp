@@ -968,8 +968,12 @@ void RE_RenderOpaque(struct Renderer* renderer)
 			
 			glBindVertexArray(obj->model->vao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-			
-			glDrawElements(GL_TRIANGLES, obj->model->numIndices, GL_UNSIGNED_INT, nullptr);
+			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
+			{
+				Mesh* m = &obj->model->meshes[j];
+				BindMaterial(renderer, m->material);
+				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+			}
 		}
 	}
 

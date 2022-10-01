@@ -27,23 +27,24 @@ static void WindowResizeCallback(GLFWwindow* window, int w, int h)
 }
 static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (g_gameState)
+	if (g_gameState && g_gameState->manager)
 	{
-		if (g_gameState->localPlayer)
+		Player* p = g_gameState->manager->localPlayer;
+		if (p)
 		{
 			if (action == GLFW_PRESS)
 			{
-				if (key == GLFW_KEY_W) g_gameState->localPlayer->input.forward = true;
-				if (key == GLFW_KEY_A) g_gameState->localPlayer->input.left = true;
-				if (key == GLFW_KEY_S) g_gameState->localPlayer->input.back = true;
-				if (key == GLFW_KEY_D) g_gameState->localPlayer->input.right = true;
+				if (key == GLFW_KEY_W) p->input.forward = true;
+				if (key == GLFW_KEY_A) p->input.left = true;
+				if (key == GLFW_KEY_S) p->input.back = true;
+				if (key == GLFW_KEY_D) p->input.right = true;
 			}
 			else if(action == GLFW_RELEASE)
 			{
-				if (key == GLFW_KEY_W) g_gameState->localPlayer->input.forward = false;
-				if (key == GLFW_KEY_A) g_gameState->localPlayer->input.left = false;
-				if (key == GLFW_KEY_S) g_gameState->localPlayer->input.back = false;
-				if (key == GLFW_KEY_D) g_gameState->localPlayer->input.right = false;
+				if (key == GLFW_KEY_W) p->input.forward = false;
+				if (key == GLFW_KEY_A) p->input.left = false;
+				if (key == GLFW_KEY_S) p->input.back = false;
+				if (key == GLFW_KEY_D) p->input.right = false;
 			}
 		}
 	}
@@ -59,16 +60,17 @@ static void MousePositionCallback(GLFWwindow* window, double x, double y)
 {
 	static double oldX = x;
 	static double oldY = y;
-	if (g_gameState)
+	if (g_gameState && g_gameState->manager)
 	{
 		double dx = x - oldX;
 		double dy = oldY - y;
-		if (g_gameState->localPlayer)
+		Player* p = g_gameState->manager->localPlayer;
+		if (p)
 		{
-			g_gameState->localPlayer->camera.yaw += dx;
-			g_gameState->localPlayer->camera.pitch += dy;
-			g_gameState->localPlayer->camera.pitch = glm::max(glm::min(g_gameState->localPlayer->camera.pitch, 89.9f), -89.9f);
-			CA_UpdatePerspectiveCamera(&g_gameState->localPlayer->camera);
+			p->camera.yaw += dx;
+			p->camera.pitch += dy;
+			p->camera.pitch = glm::max(glm::min(p->camera.pitch, 89.9f), -89.9f);
+			CA_UpdatePerspectiveCamera(&p->camera);
 		}
 		oldX = x;
 		oldY = y;
@@ -99,7 +101,6 @@ GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint
 	g_gameState = new GameState;
 	g_gameState->swapChainInterval = 2;
 	g_gameState->isFullscreen = false;
-	g_gameState->localPlayer = nullptr;
 
 	glfwMakeContextCurrent(window);
 	glfwSetWindowAspectRatio(window, 16, 9);
@@ -118,6 +119,8 @@ GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint
 	g_gameState->physics = PH_CreatePhysicsScene();
 	g_gameState->scene = SC_CreateScene(g_gameState->physics);
 	g_gameState->renderer = RE_CreateRenderer(g_gameState->assets);
+
+	g_gameState->manager = GM_CreateGameManager(g_gameState->assets);
 
 	if (g_gameState->isFullscreen)
 	{
@@ -139,27 +142,4 @@ GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint
 GameState* GetGameState()
 {
 	return g_gameState;
-}
-
-
-
-
-
-void AddPlayerToScene(GameState* game, const glm::vec3& pos, float yaw, float pitch)
-{
-	SceneObject obj;
-	obj.boneData = 0;	// default bone
-	obj.flags = 0;	// for now
-	obj.material = nullptr;
-	obj.model = nullptr;
-	obj.rigidBody = nullptr;
-	Player* player = new Player;
-	obj.entity = player;
-	obj.transform = glm::mat4(1.0f);
-
-	CA_InitPerspectiveCamera(&player->camera, pos, yaw, pitch, game->winWidth, game->winHeight);
-
-
-	player->sceneObject = SC_AddDynamicObject(game->scene, &obj);
-	game->localPlayer = player;
 }
