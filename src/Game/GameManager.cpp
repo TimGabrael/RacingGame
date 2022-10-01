@@ -3,7 +3,6 @@
 #include "../Graphics/ModelInfo.h"
 #include "../Graphics/Scene.h"
 
-#define CREATE_ACTUAL_ENVIRONMENT
 GameManager* GM_CreateGameManager(AssetManager* assets)
 {
 	GameManager* out = new GameManager;

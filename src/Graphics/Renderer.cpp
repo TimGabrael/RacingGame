@@ -271,11 +271,12 @@ void main()\n\
 	vec3 specularEnvironmentR0 = specularColor.rgb;\n\
 	vec3 specularEnvironmentR90 = vec3(1.0f, 1.0f, 1.0f) * reflectance90;\n\
 \n\
-	vec3 n = (mat.normalUV > -1) ? getNormal() : -normalize(fragNormal);\n\
+	vec3 n = (mat.normalUV > -1) ? getNormal() : normalize(fragNormal);\n\
 	vec3 v = normalize(camPos - worldPos);    // Vector from surface point to camera\n\
 	vec3 l = normalize(vec3(0.0f, 1.0f, 0.0f));\n\
 	vec3 h = normalize(l+v);\n\
-	vec3 reflection = -normalize(reflect(v, n));\n\
+	vec3 reflection = normalize(reflect(v, n));\n\
+	reflection.y *= -1.0;\n\
 \n\
 	float NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
 	float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);\n\
