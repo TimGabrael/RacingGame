@@ -42,6 +42,17 @@ struct MaterialData
 	float _align2;
 };
 
+enum CUBE_MAP_SIDE
+{
+	CUBE_MAP_LEFT,
+	CUBE_MAP_RIGHT,
+	CUBE_MAP_TOP,
+	CUBE_MAP_BOTTOM,
+	CUBE_MAP_FRONT,
+	CUBE_MAP_BACK,
+};
+
+
 
 struct Renderer* RE_CreateRenderer(struct AssetManager* assets);
 void RE_CleanUpRenderer(struct Renderer* renderer);
@@ -58,8 +69,8 @@ void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBas
 void RE_SetEnvironmentData(struct Renderer* renderer, const EnvironmentData* data);
 
 
-void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta);
-void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint32_t numSamples);
+void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side);
+void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint32_t numSamples, CUBE_MAP_SIDE side);
 
 void RE_RenderOpaque(struct Renderer* renderer);
 void RE_RenderTransparent(struct Renderer* renderer);

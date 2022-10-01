@@ -45,7 +45,7 @@ int main()
 		data.height = defaultCubemap->height;
 	
 		RE_CreateEnvironment(game->renderer, &data);
-		defaultCubemap->uniform = data.prefilteredMap;
+		defaultCubemap->uniform = data.irradianceMap;
 	}
 
 
