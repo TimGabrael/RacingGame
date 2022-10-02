@@ -35,12 +35,20 @@ GameManager* GM_CreateGameManager(AssetManager* assets)
 	glBindBuffer(GL_UNIFORM_BUFFER, out->lightUniform);
 	glBufferData(GL_UNIFORM_BUFFER, sizeof(lightData), &lightData, GL_STATIC_DRAW);
 
-
+	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 4);
+	RE_CreatePostProcessingRenderData(&out->PPbuffer, state->winWidth, state->winHeight);
 
 
 	out->localPlayer = nullptr;
 
 	return out;
+}
+void GM_CleanUpGameManager(GameManager* manager)
+{
+	glDeleteBuffers(1, &manager->lightUniform);
+	RE_CleanUpAntialiasingData(&manager->AAbuffer);
+	RE_CleanUpPostProcessingRenderData(&manager->PPbuffer);
+
 }
 
 void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, float pitch)
@@ -69,4 +77,14 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		player->sceneObject = SC_AddDynamicObject(state->scene, &obj);
 		game->localPlayer = player;
 	}
+}
+
+void GM_OnResizeCallback(GameManager* game, int width, int height)
+{
+	uint32_t prevSamples = game->AAbuffer.msaaCount;
+	RE_CleanUpAntialiasingData(&game->AAbuffer);
+	RE_CleanUpPostProcessingRenderData(&game->PPbuffer);
+
+	RE_CreateAntialiasingData(&game->AAbuffer, width, height, prevSamples);
+	RE_CreatePostProcessingRenderData(&game->PPbuffer, width, height);
 }

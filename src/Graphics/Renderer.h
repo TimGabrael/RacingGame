@@ -151,6 +151,7 @@ void RE_CleanUpRenderer(struct Renderer* renderer);
 
 void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uint32_t height, uint32_t numSamples);
 void RE_FinishAntialiasingData(AntialiasingRenderData* data);	// copys contents of msaa texture to intermediate texture
+void RE_CopyAntialiasingDataToFBO(AntialiasingRenderData* data, GLuint dstFbo, uint32_t dstWidth, uint32_t dstHeight);
 void RE_CleanUpAntialiasingData(AntialiasingRenderData* data);
 
 void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t width, uint32_t height);
@@ -178,6 +179,9 @@ void RE_RenderGeometry(struct Renderer* renderer);
 void RE_RenderOpaque(struct Renderer* renderer);
 void RE_RenderTransparent(struct Renderer* renderer);
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap);
+
+
+void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
 
 
 void RE_EndScene(struct Renderer* renderer);

@@ -569,6 +569,167 @@ void main()\n\
 
 
 
+static const char* quadFilterVertexShader = "#version 330\n\
+out vec2 UV;\n\
+out vec2 pos;\n\
+void main()\n\
+{\n\
+	UV = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n\
+	pos = UV * 2.0f - 1.0f;\n\
+	gl_Position = vec4(pos, 0.0f, 1.0f);\n\
+}";
+static const char* blurFragmentShader = "#version 330\n\
+in vec2 UV;\
+in vec2 pos;\
+uniform sampler2D tex;\
+uniform float blurRadius;\
+uniform int axis;\
+uniform vec2 texUV;\
+out vec4 outCol;\
+void main()\
+{\
+    vec2 textureSize = vec2(textureSize(tex, 0));\
+    float x,y,rr=blurRadius*blurRadius,d,w,w0;\
+    vec2 p = 0.5 * (vec2(1.0, 1.0) + pos) * texUV;\
+    vec4 col = vec4(0.0, 0.0, 0.0, 0.0);\
+    w0 = 0.5135 / pow(blurRadius, 0.96);\n\
+    if (axis == 0) for (d = 1.0 / textureSize.x, x = -blurRadius, p.x += x * d; x <= blurRadius; x++, p.x += d) { \n\
+    w = w0 * exp((-x * x) / (2.0 * rr)); col += texture(tex, p) * w;\n\
+ }\n\
+    if (axis == 1) for (d = 1.0 / textureSize.y, y = -blurRadius, p.y += y * d; y <= blurRadius; y++, p.y += d) { \n\
+    w = w0 * exp((-y * y) / (2.0 * rr)); col += texture(tex, p) * w; \n\
+}\n\
+    outCol = col;\
+}";
+static const char* bloomFragmentShader = "#version 330\n\
+in vec2 UV;\
+in vec2 pos;\
+uniform sampler2D tex;\
+uniform float blurRadius;\
+uniform int axis;\
+uniform float intensity;\
+uniform float mipLevel;\
+out vec4 outCol;\
+void main()\
+{\
+    vec2 textureSize = vec2(textureSize(tex, int(mipLevel)));\
+    float x,y,rr=blurRadius*blurRadius,d,w,w0;\
+    vec2 p = 0.5 * (vec2(1.0, 1.0) + pos);\
+    vec4 col = vec4(0.0, 0.0, 0.0, 0.0);\
+    w0 = 0.5135 / pow(blurRadius, 0.96);\n\
+    if (axis == 0) for (d = 1.0 / textureSize.x, x = -blurRadius, p.x += x * d; x <= blurRadius; x++, p.x += d) { w = w0 * exp((-x * x) / (2.0 * rr));\
+            vec3 addCol = textureLod(tex, p, mipLevel).rgb;\
+            vec3 remCol = vec3(1.0f, 1.0f, 1.0f) * intensity;\n\
+            addCol = max(addCol - remCol, vec3(0.0f));\
+            col += vec4(addCol, 0.0f) * w;\
+        }\n\
+    if (axis == 1) for (d = 1.0 / textureSize.y, y = -blurRadius, p.y += y * d; y <= blurRadius; y++, p.y += d) { w = w0 * exp((-y * y) / (2.0 * rr));\
+            vec3 addCol = textureLod(tex, p, mipLevel).rgb;\
+            vec3 remCol = vec3(1.0f, 1.0f, 1.0f) * intensity;\n\
+            addCol = max(addCol - remCol, vec3(0.0f));\
+            col += vec4(addCol, 0.0f) * w;\
+        }\n\
+    outCol = col;\
+}";
+static constexpr char* copyFragmentShader = "#version 330\n\
+in vec2 UV;\
+in vec2 pos;\
+uniform sampler2D tex;\
+uniform float mipLevel;\
+out vec4 outCol;\
+void main()\
+{\
+    outCol = textureLod(tex, UV, mipLevel);\
+}";
+static constexpr char* upsamplingFragmentShader = "#version 330\n\
+in vec2 UV;\
+in vec2 pos;\
+uniform sampler2D tex;\
+uniform float mipLevel;\
+out vec4 outCol;\
+void main()\
+{\
+    vec2 ts = vec2(1.0f) / vec2(textureSize(tex, int(mipLevel)));\
+    vec3 c1 = textureLod(tex, UV + vec2(-ts.x, -ts.y), mipLevel).rgb;\
+    vec3 c2 = 2.0f * textureLod(tex, UV + vec2(0.0f, -ts.y), mipLevel).rgb;\
+    vec3 c3 = textureLod(tex, UV + vec2(ts.x, -ts.y), mipLevel).rgb;\
+    vec3 c4 = 2.0f * textureLod(tex, UV + vec2(-ts.x, 0.0f), mipLevel).rgb;\
+    vec3 c5 = 4.0f * textureLod(tex, UV + vec2(0.0f, 0.0f), mipLevel).rgb;\
+    vec3 c6 = 2.0f * textureLod(tex, UV + vec2(ts.x, 0.0f), mipLevel).rgb;\
+    vec3 c7 = textureLod(tex, UV + vec2(-ts.x, ts.y), mipLevel).rgb;\
+    vec3 c8 = 2.0f * textureLod(tex, UV + vec2(0.0f, ts.y), mipLevel).rgb;\
+    vec3 c9 = textureLod(tex, UV + vec2(ts.x, ts.y), mipLevel).rgb;\
+    vec3 accum = 1.0f / 16.0f * (c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9);\
+    outCol = vec4(accum, 1.0f);\
+}";
+static constexpr char* copyDualFragmentShader = "#version 300 es\n\
+precision highp float;\n\
+in vec2 UV;\
+in vec2 pos;\
+uniform sampler2D tex1;\
+uniform sampler2D tex2;\
+uniform float mipLevel1;\
+uniform float mipLevel2;\
+vec3 aces(vec3 x) {\
+    const float a = 2.51;\
+    const float b = 0.03;\
+    const float c = 2.43;\
+    const float d = 0.59;\
+    const float e = 0.14;\
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);\
+}\
+vec3 filmic(vec3 x) {\
+    vec3 X = max(vec3(0.0), x - 0.004);\
+    vec3 result = (X * (6.2 * X + 0.5)) / (X * (6.2 * X + 1.7) + 0.06);\
+    return pow(result, vec3(2.2));\
+}\
+out vec4 outCol;\
+void main()\
+{\
+    vec4 c = textureLod(tex1, UV, mipLevel1) + textureLod(tex2, UV, mipLevel2);\n\
+    outCol = c;\
+}";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -814,7 +975,42 @@ struct PBRRenderInfo
 };
 struct PostProcessingRenderInfo
 {
-	
+	enum class BLUR_AXIS
+	{
+		X_AXIS,
+		Y_AXIS,
+	};
+	struct Blur
+	{
+		GLuint program;
+		GLuint radiusLoc;
+		GLuint axisLoc;
+		GLuint textureUVLoc;
+	}blur;
+	struct Bloom
+	{
+		GLuint program;
+		GLuint blurRadiusLoc;
+		GLuint blurAxisLoc;
+		GLuint intensityLoc;
+		GLuint mipLevelLoc;
+	}bloom;
+	struct Copy
+	{
+		GLuint program;
+		GLuint mipLevelLoc;
+	}copy;
+	struct DualCopy
+	{
+		GLuint program;
+		GLuint mipLevel1Loc;
+		GLuint mipLevel2Loc;
+	}dualCopy;
+	struct Upsampling
+	{
+		GLuint program;
+		GLuint mipLevelLoc;
+	}upsampling;
 };
 
 struct Renderer
@@ -824,6 +1020,7 @@ struct Renderer
 	GLuint currentLightData;
 	PBRRenderInfo pbrData;
 	CubemapRenderInfo cubemapInfo;
+	PostProcessingRenderInfo ppInfo;
 
 	GLuint whiteTexture;	// these are not owned by the renderer
 	GLuint blackTexture;	// these are not owned by the renderer
@@ -954,7 +1151,45 @@ static BaseGeometryProgramUniforms LoadBaseGeometryProgramUniformLocationsFromPr
 	glUniform1i(curTexture, BASE_SHADER_TEXTURE_COLORMAP);
 	return un;
 }
+static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
+{
+	info->blur.program = CreateProgram(quadFilterVertexShader, blurFragmentShader);
+	info->bloom.program = CreateProgram(quadFilterVertexShader, bloomFragmentShader);
+	info->copy.program = CreateProgram(quadFilterVertexShader, copyFragmentShader);
+	info->dualCopy.program = CreateProgram(quadFilterVertexShader, copyDualFragmentShader);
+	info->upsampling.program = CreateProgram(quadFilterVertexShader, upsamplingFragmentShader);
 
+	info->blur.radiusLoc = glGetUniformLocation(info->blur.program, "blurRadius");
+	info->blur.axisLoc = glGetUniformLocation(info->blur.program, "axis");
+	info->blur.textureUVLoc = glGetUniformLocation(info->blur.program, "texUV");
+
+	info->bloom.blurRadiusLoc = glGetUniformLocation(info->bloom.program, "blurRadius");
+	info->bloom.blurAxisLoc = glGetUniformLocation(info->bloom.program, "axis");
+	info->bloom.intensityLoc = glGetUniformLocation(info->bloom.program, "intensity");
+	info->bloom.mipLevelLoc = glGetUniformLocation(info->bloom.program, "mipLevel");
+
+	info->copy.mipLevelLoc = glGetUniformLocation(info->copy.program, "mipLevel");
+
+	info->dualCopy.mipLevel1Loc = glGetUniformLocation(info->dualCopy.program, "mipLevel1");
+	info->dualCopy.mipLevel2Loc = glGetUniformLocation(info->dualCopy.program, "mipLevel2");
+
+	glUseProgram(info->dualCopy.program);
+	GLuint idx = glGetUniformLocation(info->dualCopy.program, "tex1");
+	glUniform1i(idx, 0);
+	idx = glGetUniformLocation(info->dualCopy.program, "tex2");
+	glUniform1i(idx, 1);
+
+
+	info->upsampling.mipLevelLoc = glGetUniformLocation(info->upsampling.program, "mipLevel");
+}
+static void CleanUpPostProcessingRenderInfo(PostProcessingRenderInfo* info)
+{
+	glDeleteProgram(info->blur.program);
+	glDeleteProgram(info->bloom.program);
+	glDeleteProgram(info->copy.program);
+	glDeleteProgram(info->dualCopy.program);
+	glDeleteProgram(info->upsampling.program);
+}
 
 
 
@@ -1051,11 +1286,16 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 
 	}
 
+	LoadPostProcessingRenderInfo(&renderer->ppInfo);
+
+
 	renderer->pbrData.brdfLut = CreateBRDFLut(512, 512);
 	return renderer;
 }
 void RE_CleanUpRenderer(struct Renderer* renderer)
 {
+	CleanUpPostProcessingRenderInfo(&renderer->ppInfo);
+
 	glDeleteTextures(1, &renderer->pbrData.brdfLut);
 	glDeleteBuffers(1, &renderer->pbrData.defaultBoneData);
 	// delete base Shader
@@ -1234,8 +1474,6 @@ void RE_CleanUpEnvironment(EnvironmentData* env)
 
 void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uint32_t height, uint32_t numSamples)
 {
-	glGenFramebuffers(1, &data->fbo);
-	glBindFramebuffer(1, data->fbo);
 	data->width = width;
 	data->height = height;
 	data->msaaCount = numSamples;
@@ -1245,11 +1483,12 @@ void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uin
 	data->intermediateFbo = 0;
 	data->intermediateTexture = 0;
 
+	glGenFramebuffers(1, &data->fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, data->fbo);
+
 	glGenTextures(1, &data->texture);
 	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->texture);
-	glTextureStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_RGBA16F, width, height, GL_TRUE);
-
-
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_RGBA16F, width, height, GL_TRUE);
 	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1266,34 +1505,58 @@ void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uin
 	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, data->depth, 0);
 
-
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		LOG("FAILED TO CREATE ANTIALIASING FRAMEBUFFER\n");
+	}
 }
 void RE_FinishAntialiasingData(AntialiasingRenderData* data)
 {
 	if (!data->intermediateFbo)
 	{
-		glCreateFramebuffers(1, &data->intermediateFbo);
+		glGenFramebuffers(1, &data->intermediateFbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, data->intermediateFbo);
+
 		glGenTextures(1, &data->intermediateTexture);
 		glBindTexture(GL_TEXTURE_2D, data->intermediateTexture);
-		glTextureStorage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, data->width, data->height);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, data->width, data->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->intermediateTexture, 0);
 
 		glGenTextures(1, &data->intermediateDepth);
 		glBindTexture(GL_TEXTURE_2D, data->intermediateDepth);
-		glTextureStorage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, data->width, data->height);
-
-		glBindFramebuffer(GL_FRAMEBUFFER, data->intermediateFbo);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->texture, 0);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->depth, 0);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
+		
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
+		}
 	}
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, data->intermediateFbo);
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, data->fbo);
-	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+}
+void RE_CopyAntialiasingDataToFBO(AntialiasingRenderData* data, GLuint dstFbo, uint32_t dstWidth, uint32_t dstHeight)
+{
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, data->fbo);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dstFbo);
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+	glDrawBuffer(GL_COLOR_ATTACHMENT0);
+	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, dstWidth, dstHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, dstWidth, dstHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 }
 void RE_CleanUpAntialiasingData(AntialiasingRenderData* data)
 {
-	glDeleteFramebuffers(1, &data->fbo);
-	glDeleteTextures(1, &data->texture);
-	glDeleteTextures(1, &data->depth);
+	if(data->fbo) glDeleteFramebuffers(1, &data->fbo);
+	if(data->texture) glDeleteTextures(1, &data->texture);
+	if(data->depth) glDeleteTextures(1, &data->depth);
 	if (data->intermediateFbo && data->intermediateTexture && data->intermediateDepth)
 	{
 		glDeleteFramebuffers(1, &data->intermediateFbo);
@@ -1303,6 +1566,9 @@ void RE_CleanUpAntialiasingData(AntialiasingRenderData* data)
 		data->intermediateDepth = 0;
 		data->intermediateTexture = 0;
 	}
+	data->fbo = 0;
+	data->texture = 0;
+	data->depth = 0;
 }
 
 void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t width, uint32_t height)
@@ -1339,8 +1605,6 @@ void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-		glGenerateMipmap(GL_TEXTURE_2D);
-
 		for (int i = 0; i < data->numPPFbos; i++)
 		{
 			glBindFramebuffer(GL_FRAMEBUFFER, data->ppFBOs1[i]);
@@ -1362,8 +1626,6 @@ void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-		glGenerateMipmap(GL_TEXTURE_2D);
-
 		for (int i = 0; i < data->numPPFbos; i++)
 		{
 			glBindFramebuffer(GL_FRAMEBUFFER, data->ppFBOs2[i]);
@@ -1381,20 +1643,24 @@ void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glGenerateMipmap(GL_TEXTURE_2D);
 	}
 }
 void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data)
 {
 	
-	glDeleteTextures(1, &data->intermediateTexture);
-	glDeleteTextures(1, &data->ppTexture1);
-	glDeleteTextures(1, &data->ppTexture2);
-	glDeleteFramebuffers(data->numPPFbos, data->ppFBOs1);
-	glDeleteFramebuffers(data->numPPFbos, data->ppFBOs2);
-	delete[] data->ppFBOs1;
-	delete[] data->ppFBOs2;
-
+	if(data->intermediateTexture) glDeleteTextures(1, &data->intermediateTexture);
+	if(data->ppTexture1) glDeleteTextures(1, &data->ppTexture1);
+	if(data->ppTexture2) glDeleteTextures(1, &data->ppTexture2);
+	if (data->ppFBOs1)
+	{
+		glDeleteFramebuffers(data->numPPFbos, data->ppFBOs1);
+		delete[] data->ppFBOs1;
+	}
+	if (data->ppFBOs2)
+	{
+		glDeleteFramebuffers(data->numPPFbos, data->ppFBOs2);
+		delete[] data->ppFBOs2;
+	}
 	data->numPPFbos = 0;
 	data->ppFBOs1 = nullptr;
 	data->ppFBOs2 = nullptr;
@@ -1707,4 +1973,126 @@ void RE_EndScene(struct Renderer* renderer)
 	renderer->currentEnvironmentData = nullptr;
 	renderer->currentLightData = 0;
 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
+{
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+
+	glm::ivec2 fboSizes[MAX_BLOOM_MIPMAPS];
+	{	// Bloom src image into the pptexture1
+		glBindFramebuffer(GL_FRAMEBUFFER, ppData->ppFBOs2[0]);
+		glViewport(0, 0, ppData->width, ppData->height);
+		glUseProgram(renderer->ppInfo.bloom.program);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, srcTexture);
+
+
+		glUniform1f(renderer->ppInfo.bloom.blurRadiusLoc, ppData->blurRadius);
+		glUniform1i(renderer->ppInfo.bloom.blurAxisLoc, (int)PostProcessingRenderInfo::BLUR_AXIS::X_AXIS);
+		glUniform1f(renderer->ppInfo.bloom.intensityLoc, ppData->bloomIntensity);
+		glUniform1f(renderer->ppInfo.bloom.mipLevelLoc, 0);
+
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, ppData->ppFBOs1[0]);
+		glViewport(0, 0, ppData->width, ppData->height);
+
+		glBindTexture(GL_TEXTURE_2D, ppData->ppTexture2);
+
+		glUniform1f(renderer->ppInfo.bloom.intensityLoc, 0.0f);
+		glUniform1i(renderer->ppInfo.bloom.blurAxisLoc, (int)PostProcessingRenderInfo::BLUR_AXIS::Y_AXIS);
+
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+	}
+	fboSizes[0] = { ppData->width, ppData->height };
+	int curSizeX = ppData->width; int curSizeY = ppData->height;
+	{	// BLUR AND DOWNSAMPLE EACH ITERATION
+		for (int i = 1; i < ppData->numPPFbos; i++)
+		{
+			curSizeX = std::max(curSizeX >> 1, 1); curSizeY = std::max(curSizeY >> 1, 1);
+			fboSizes[i] = { curSizeX, curSizeY };
+			glBindFramebuffer(GL_FRAMEBUFFER, ppData->ppFBOs2[i]);
+			glViewport(0, 0, curSizeX, curSizeY);
+			glUseProgram(renderer->ppInfo.bloom.program);
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, ppData->ppTexture1);
+
+			glUniform1f(renderer->ppInfo.bloom.blurRadiusLoc, ppData->blurRadius);
+			glUniform1i(renderer->ppInfo.bloom.blurAxisLoc, (int)PostProcessingRenderInfo::BLUR_AXIS::X_AXIS);
+			glUniform1f(renderer->ppInfo.bloom.intensityLoc, 0.0f);
+			glUniform1f(renderer->ppInfo.bloom.mipLevelLoc, i - 1);
+
+			glDrawArrays(GL_TRIANGLES, 0, 3);
+
+			glBindFramebuffer(GL_FRAMEBUFFER, ppData->ppFBOs1[i]);
+
+			glBindTexture(GL_TEXTURE_2D, ppData->ppTexture2);
+
+			glUniform1f(renderer->ppInfo.bloom.blurRadiusLoc, ppData->blurRadius / 2.0f);
+			glUniform1f(renderer->ppInfo.bloom.intensityLoc, 0.0f);
+			glUniform1f(renderer->ppInfo.bloom.mipLevelLoc, i);
+			glUniform1i(renderer->ppInfo.bloom.blurAxisLoc, (int)PostProcessingRenderInfo::BLUR_AXIS::Y_AXIS);
+			glDrawArrays(GL_TRIANGLES, 0, 3);
+		}
+	}
+	{	// UPSAMPLE FROM LOWER MIPMAP TO HIGHER
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_ONE, GL_ONE);
+		for (int i = ppData->numPPFbos - 2; i >= 0; i--)
+		{
+			glBindFramebuffer(GL_FRAMEBUFFER, ppData->ppFBOs1[i]);
+			glViewport(0, 0, fboSizes[i].x, fboSizes[i].y);
+			glUseProgram(renderer->ppInfo.upsampling.program);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, ppData->ppTexture1);
+			glUniform1f(renderer->ppInfo.upsampling.mipLevelLoc, i + 1);
+			glDrawArrays(GL_TRIANGLES, 0, 3);
+		}
+	}
+
+	{	// COPY FINAL IMAGE TO OUTPUT FBO
+		glDisable(GL_BLEND);
+		glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
+		glViewport(0, 0, targetWidth, targetHeight);
+		glUseProgram(renderer->ppInfo.dualCopy.program);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, ppData->ppTexture1);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, srcTexture);
+
+		glUniform1f(renderer->ppInfo.dualCopy.mipLevel1Loc, 0);
+		glUniform1f(renderer->ppInfo.dualCopy.mipLevel2Loc, 0);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+	}
 }

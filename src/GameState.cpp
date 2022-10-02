@@ -23,6 +23,10 @@ static void WindowResizeCallback(GLFWwindow* window, int w, int h)
 	{
 		g_gameState->winWidth = w;
 		g_gameState->winHeight = h;
+		if (g_gameState->manager)
+		{
+			GM_OnResizeCallback(g_gameState->manager, w, h);
+		}
 	}
 }
 static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -92,6 +96,10 @@ static void WindowMaximizedCallback(GLFWwindow* window, int maximized)
 		g_gameState->isFullscreen = maximized;
 		g_gameState->winWidth = width;
 		g_gameState->winHeight = height;
+		if (g_gameState->manager)
+		{
+			GM_OnResizeCallback(g_gameState->manager, width, height);
+		}
 	}
 }
 
@@ -101,6 +109,11 @@ GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint
 	g_gameState = new GameState;
 	g_gameState->swapChainInterval = 2;
 	g_gameState->isFullscreen = false;
+	g_gameState->window = window;
+	g_gameState->winX = 0;
+	g_gameState->winY = 0;
+	g_gameState->winWidth = windowWidth;
+	g_gameState->winHeight = windowHeight;
 
 	glfwMakeContextCurrent(window);
 	glfwSetWindowAspectRatio(window, 16, 9);
@@ -114,13 +127,13 @@ GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint
 
 	gladLoadGL();
 	glfwSwapInterval(g_gameState->swapChainInterval);
+	glEnable(GL_MULTISAMPLE);
 
 	g_gameState->assets = AM_CreateAssetManager();
 	g_gameState->physics = PH_CreatePhysicsScene();
 	g_gameState->scene = SC_CreateScene(g_gameState->physics);
 	g_gameState->renderer = RE_CreateRenderer(g_gameState->assets);
 
-	g_gameState->manager = GM_CreateGameManager(g_gameState->assets);
 
 	if (g_gameState->isFullscreen)
 	{
@@ -129,12 +142,12 @@ GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint
 		int width, height;
 		glfwGetMonitorPhysicalSize(m[0], &width, &height);
 		glfwSetWindowMonitor(window, m[0], 0, 0, width, height, 60);
+		g_gameState->winWidth = width;
+		g_gameState->winHeight = height;
 	}
-	g_gameState->window = window;
-	g_gameState->winX = 0;
-	g_gameState->winY = 0;
-	g_gameState->winWidth = windowWidth;
-	g_gameState->winHeight = windowHeight;
+
+
+	g_gameState->manager = GM_CreateGameManager(g_gameState->assets);
 
 	return g_gameState;
 }
