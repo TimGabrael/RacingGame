@@ -78,17 +78,20 @@ struct PointLight\n\
 	float constant;\n\
 	float linear;\n\
 	float quadratic;\n\
-	float padding;\n\
+	int projIdx;\n\
 };\n\
 struct DirectionalLight\n\
 {\n\
-	vec4 direction;\n\
-	vec4 color;\n\
+	vec3 direction;\n\
+	int isCascaded;\n\
+	vec3 color;\n\
+	int projIdx;\n\
 };\n\
 struct SpotLight\n\
 {\n\
 	vec4 color;\n\
-	vec4 direction;\n\
+	vec3 direction;\n\
+	int projIdx;\n\
 	vec3 pos;\n\
 	float cutOff;\n\
 };\n\
@@ -96,10 +99,12 @@ layout (std140) uniform LightData {\n\
 	PointLight pointLights[MAX_NUM_LIGHTS];\n\
 	DirectionalLight dirLights[MAX_NUM_LIGHTS];\n\
 	SpotLight spotLights[MAX_NUM_LIGHTS];\n\
+	mat4 projections[MAX_NUM_LIGHTS];\n\
 	vec4 ambientColor;\n\
 	int numPointLights;\n\
 	int numDirLights;\n\
 	int numSpotLights;\n\
+	int numProjections;\n\
 }lights;\n\
 \n\
 uniform samplerCube samplerIrradiance;\n\
@@ -1013,6 +1018,14 @@ struct PostProcessingRenderInfo
 	}upsampling;
 };
 
+struct ShadowCastingLightData
+{
+	static constexpr uint32_t shadowTextureSize = 0x2000;
+	std::vector<Texture*> shadowMaps;
+
+};
+
+
 struct Renderer
 {
 	const CameraBase* currentCam;
@@ -1190,7 +1203,6 @@ static void CleanUpPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	glDeleteProgram(info->dualCopy.program);
 	glDeleteProgram(info->upsampling.program);
 }
-
 
 
 
@@ -1671,6 +1683,17 @@ void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data)
 
 
 
+
+DirShadowLight* RE_AddDirectionalShadowLight(struct Renderer* renderer, uint32_t shadowWidth, uint32_t shadowHeight)
+{
+	
+
+	return nullptr;
+}
+void RE_RemoveDirectionalShadowLight(struct Renderer* renderer, DirShadowLight* light)
+{
+
+}
 
 
 

@@ -34,6 +34,11 @@ struct Texture
 };
 struct Material
 {
+	enum ALPHA_MODE
+	{
+		ALPHA_MODE_OPAQUE,
+		ALPHA_MODE_BLEND,
+	};
 	struct TextureInfo
 	{
 		Texture* baseColor;
@@ -60,6 +65,7 @@ struct Material
 
 	float workflow = 0.0f;
 
+	int mode = 0;
 
 	GLuint uniform;
 };

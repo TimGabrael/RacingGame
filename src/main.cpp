@@ -22,7 +22,8 @@ int main()
 	GM_AddPlayerToScene(game->manager, { 0.0f, 0.0f, 0.0f }, 90.0f, 0.0f);
 
 	//Model* model = AM_AddModel(game->assets, "Assets/ScriptFactory.glb");
-	Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF/BoomBox.gltf");
+	//Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF/BoomBox.gltf");
+	Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF-Binary/BoomBox.glb"); model->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1000.0f, 1000.0f));
 	
 	SceneObject base;
 	base.boneData = 0;
@@ -30,7 +31,7 @@ int main()
 	base.material = nullptr;
 	base.model = model;
 	base.rigidBody = nullptr;
-	base.transform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1000.0f, 1000.0f));
+	base.transform = glm::mat4(1.0f);// glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1000.0f, 1000.0f));
 	SC_AddStaticObject(game->scene, &base);
 	
 

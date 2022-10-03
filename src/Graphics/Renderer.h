@@ -52,17 +52,20 @@ struct PointLight
 	float constant;
 	float linear;
 	float quadratic;
-	float padding;
+	int projIdx;
 };
 struct DirectionalLight
 {
-	glm::vec4 direction;
-	glm::vec4 color;
+	glm::vec3 direction;
+	int isCascaded;
+	glm::vec3 color;
+	int projIdx;
 };
 struct SpotLight
 {
 	glm::vec4 color;
-	glm::vec4 direction;
+	glm::vec3 direction;
+	int projIdx;
 	glm::vec3 pos;
 	float cutOff;
 };
@@ -71,11 +74,12 @@ struct LightData
 	PointLight pointLights[MAX_NUM_LIGHTS];
 	DirectionalLight dirLights[MAX_NUM_LIGHTS];
 	SpotLight spotLights[MAX_NUM_LIGHTS];
+	glm::mat4 projections[MAX_NUM_LIGHTS];
 	glm::vec4 ambientColor;
 	int numPointLights;
 	int numDirLights;
 	int numSpotLights;
-	int padding;
+	int numProjections;
 };
 
 enum CUBE_MAP_SIDE
@@ -93,21 +97,23 @@ struct DirShadowLight
 {
 	DirectionalLight light;
 	CameraBase cam;
-	GLuint framebuffer;
-	GLuint texture;
-	uint32_t textureWidth;
-	uint32_t textureHeight;
-	uint32_t numCascades;
+	struct Texture* texture;
 	float cascadeSteps[4];
+	int groupID;
+	bool useCascades;
 };
 struct PointShadowLight
 {
 	PointLight light;
 	CameraBase cam;
-	GLuint framebuffer;
-	GLuint texture;
-	uint32_t textureWidth;
-	uint32_t textureHeight;
+	struct Texture* texture;
+	int groupID;
+};
+struct SpotShadowLight
+{
+	SpotLight light;
+	CameraBase base;
+	int groupID;
 };
 
 
@@ -156,6 +162,9 @@ void RE_CleanUpAntialiasingData(AntialiasingRenderData* data);
 
 void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t width, uint32_t height);
 void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data);
+
+DirShadowLight* RE_AddDirectionalShadowLight(struct Renderer* renderer, uint32_t shadowWidth, uint32_t shadowHeight);
+void RE_RemoveDirectionalShadowLight(struct Renderer* renderer, DirShadowLight* light);
 
 
 // Creates the prefiltered-/irradiance-Map from the environmentMap or cleanes those to up

@@ -13,3 +13,6 @@
 [submodule "3rd-party/NFDriver"]
 	path = 3rd-party/NFDriver
 	url = https://github.com/spotify/NFDriver.git
+[submodule "3rd-party/rectpack2D"]
+	path = 3rd-party/rectpack2D
+	url = https://github.com/TeamHypersomnia/rectpack2D.git
