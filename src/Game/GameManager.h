@@ -6,12 +6,12 @@ struct GameManager
 {
 	AntialiasingRenderData AAbuffer;
 	PostProcessingRenderData PPbuffer;
-	GLuint lightUniform;
+	struct LightGroup* defaultLightGroup;
 	EnvironmentData env;
 	Player* localPlayer;
 };
 
-GameManager* GM_CreateGameManager(AssetManager* assets);
+GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* assets);
 void GM_CleanUpGameManager(GameManager* manager);
 
 void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, float pitch);

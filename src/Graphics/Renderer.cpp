@@ -4,6 +4,9 @@
 #include "Camera.h"
 #include "Scene.h"
 
+#include "finders_interface.h"
+#define MAX_NUM_SHADOW_POINT_LIGHTS MAX_NUM_LIGHTS / 6
+
 const char* baseVertexShader = "#version 330\n\
 layout(location = 0) in vec3 position;\n\
 layout(location = 1) in vec3 normal;\n\
@@ -346,23 +349,19 @@ void main()\n\
 	{\n\
 		vec3 l = normalize(lights.spotLights[i].pos.xyz - worldPos);\n\
 		float theta = dot(-l, normalize(lights.spotLights[i].direction.xyz));\n\
-		vec3 h = normalize(l+v);\n\
-		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
-		pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
-		pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
-		pbrInputs.VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
-		vec3 F = specularReflection(pbrInputs);\n\
-		float G = geometricOcclusion(pbrInputs);\n\
-		float D = microfacetDistribution(pbrInputs);\n\
-		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
 		if(theta > lights.spotLights[i].cutOff)\n\
 		{\n\
+			vec3 h = normalize(l+v);\n\
+			pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
+			pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
+			pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
+			pbrInputs.VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
+			vec3 F = specularReflection(pbrInputs);\n\
+			float G = geometricOcclusion(pbrInputs);\n\
+			float D = microfacetDistribution(pbrInputs);\n\
+			vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
+			vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
 			color += pbrInputs.NdotL * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
-		}\n\
-		else\n\
-		{\n\
-			color += pbrInputs.NdotL * lights.spotLights[i].color.rgb * (specContrib);\n\
 		}\n\
 	}\n\
 \n\
@@ -736,9 +735,6 @@ void main()\
 
 
 
-
-
-
 static GLuint CreateProgram(const char* vtxShader, const char* frgShader)
 {
 	GLuint out = glCreateProgram();
@@ -1018,22 +1014,97 @@ struct PostProcessingRenderInfo
 	}upsampling;
 };
 
-struct ShadowCastingLightData
+
+struct LightData
+{
+	PointLight pointLights[MAX_NUM_LIGHTS];
+	DirectionalLight dirLights[MAX_NUM_LIGHTS];
+	SpotLight spotLights[MAX_NUM_LIGHTS];
+	glm::mat4 projections[MAX_NUM_LIGHTS];
+	glm::vec4 ambientColor;
+	int numPointLights;
+	int numDirLights;
+	int numSpotLights;
+	int numProjections;
+};
+
+struct MappedRect
+{
+	uint16_t x;
+	uint16_t y;
+	uint16_t w;
+	uint16_t h;
+};
+
+struct InternalDirLight
+{
+	DirShadowLight light;
+	MappedRect map[4];
+	bool useCascades;
+	bool hasShadow;
+	bool isActive;
+};
+struct InternalPointLight
+{
+	PointShadowLight light;
+	MappedRect map[6];
+	bool hasShadow;
+	bool isActive;
+};
+struct InternalSpotLight
+{
+	SpotShadowLight light;
+	MappedRect mapped;
+	bool hasShadow;
+	bool isActive;
+};
+
+struct ShadowLightGroup
 {
 	static constexpr uint32_t shadowTextureSize = 0x2000;
-	std::vector<Texture*> shadowMaps;
-
+	GLuint fbo;
+	GLuint texture;
+	uint32_t numUsedProjections;
 };
+
+struct LightGroup
+{
+	enum LIGHT_ACTIVE_TYPE
+	{
+		LIGHT_INACTIVE,
+		LIGHT_ACTIVE_NORMAL,
+		LIGHT_ACTIVE_SHADOW,
+	};
+
+	ShadowLightGroup shadowGroup;
+	//LightData data;
+	glm::vec4 ambient;
+	InternalDirLight dirLights[MAX_NUM_LIGHTS];
+	InternalPointLight pointLights[MAX_NUM_LIGHTS];
+	InternalSpotLight spotLights[MAX_NUM_LIGHTS];
+
+	InternalDirLight* dirs[MAX_NUM_LIGHTS];
+	InternalPointLight* points[MAX_NUM_LIGHTS];
+	InternalSpotLight* spots[MAX_NUM_LIGHTS];
+
+	uint32_t numDirLights;
+	uint32_t numPointLights;
+	uint32_t numSpotLights;
+
+	GLuint uniform;
+};
+static constexpr size_t sz = sizeof(LightGroup);
 
 
 struct Renderer
 {
 	const CameraBase* currentCam;
 	const EnvironmentData* currentEnvironmentData;
-	GLuint currentLightData;
+	LightGroup* currentLightData;
 	PBRRenderInfo pbrData;
 	CubemapRenderInfo cubemapInfo;
 	PostProcessingRenderInfo ppInfo;
+	std::vector<LightGroup*> lightGroups;
 
 	GLuint whiteTexture;	// these are not owned by the renderer
 	GLuint blackTexture;	// these are not owned by the renderer
@@ -1043,6 +1114,151 @@ struct Renderer
 };
 
 
+
+
+
+static ShadowLightGroup* AddShadowLightGroup(LightGroup* data)
+{
+	if (!data->shadowGroup.fbo)
+	{
+		memset(&data->shadowGroup, 0, sizeof(ShadowLightGroup));
+
+		glGenFramebuffers(1, &data->shadowGroup.fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, data->shadowGroup.fbo);
+
+		glGenTextures(1, &data->shadowGroup.texture);
+		glBindTexture(GL_TEXTURE_2D, data->shadowGroup.texture);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, ShadowLightGroup::shadowTextureSize, ShadowLightGroup::shadowTextureSize, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->shadowGroup.texture, 0);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
+		}
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+	return &data->shadowGroup;
+}
+static void PackShadowLights(LightGroup* g)
+{
+	using namespace rectpack2D;
+	constexpr bool allow_flip = false;
+	const auto runtime_flipping_mode = rectpack2D::flipping_option::DISABLED;
+	using spaces_type = rectpack2D::empty_spaces<allow_flip, rectpack2D::default_empty_spaces>;
+	using rect_type = output_rect_t<spaces_type>;
+	auto report_successful = [&](rect_type&) { return callback_result::CONTINUE_PACKING; };
+	auto report_unsuccessful = [](rect_type&) { return callback_result::ABORT_PACKING; };
+	const auto max_side = ShadowLightGroup::shadowTextureSize;
+	const auto discard_step = -4;
+	std::vector<rect_type> rectangles;
+
+
+	for (int i = 0; i < g->numDirLights; i++)
+	{
+		const InternalDirLight& l = *g->dirs[i];
+		if (l.hasShadow)
+		{
+			if (l.useCascades)
+			{
+				for (int j = 0; j < 4; j++)
+				{
+					rectangles.emplace_back(0, 0, l.map[j].w, l.map[j].h);
+				}
+			}
+			else
+			{
+				rectangles.emplace_back(0, 0, l.map->w, l.map->h);
+			}
+		}
+	}
+	for (int i = 0; i < g->numPointLights; i++)
+	{
+		const InternalPointLight& l = *g->points[i];
+		if (l.hasShadow)
+		{
+			for (int j = 0; j < 6; j++)
+			{
+				rectangles.emplace_back(0, 0, l.map[j].w, l.map[j].h);
+			}
+		}
+	}
+	for (int i = 0; i < g->numSpotLights; i++)
+	{
+		const InternalSpotLight& l = *g->spots[i];
+		if (l.hasShadow)
+		{
+			rectangles.emplace_back(0, 0, l.mapped.w, l.mapped.h);
+		}
+	}
+
+	auto report_result = [&rectangles](const rect_wh& result_size) {
+		LOG("Resultant bin: %d, %d\n", result_size.w, result_size.h);
+		for (const auto& r : rectangles) {
+			LOG("%d %d %d %d\n", r.x, r.y, r.w, r.h);
+		}
+	};
+	const auto result_size = find_best_packing<spaces_type>(rectangles, make_finder_input(max_side, discard_step, report_successful, report_unsuccessful, runtime_flipping_mode));
+	report_result(result_size);
+
+	int curRecIdx = 0;
+	for (int i = 0; i < g->numDirLights; i++)
+	{
+		InternalDirLight& l = *g->dirs[i];
+		if (l.hasShadow)
+		{
+			if (l.useCascades)
+			{
+				for (int j = 0; j < 4; j++)
+				{
+					const auto& r = rectangles.at(curRecIdx);
+					l.map[j].x = r.x; l.map[j].y = r.y; l.map[j].w = r.w; l.map[j].h = r.h;
+					curRecIdx++;
+				}
+			}
+			else
+			{
+				const auto& r = rectangles.at(curRecIdx);
+				l.map->x = r.x; l.map->y = r.y; l.map->w = r.w; l.map->h = r.h;
+				curRecIdx++;
+			}
+		}
+	}
+	for (int i = 0; i < g->numPointLights; i++)
+	{
+		InternalPointLight& l = *g->points[i];
+		if (l.hasShadow)
+		{
+			for (int j = 0; j < 6; j++)
+			{
+				const auto& r = rectangles.at(curRecIdx);
+				l.map[j].x = r.x; l.map[j].y = r.y; l.map[j].w = r.w; l.map[j].h = r.h;
+				curRecIdx++;
+			}
+		}
+	}
+	for (int i = 0; i < g->numSpotLights; i++)
+	{
+		InternalSpotLight& l = *g->spots[i];
+		if (l.hasShadow && l.isActive)
+		{
+			const auto& r = rectangles.at(curRecIdx);
+			l.mapped.x = r.x; l.mapped.y = r.y; l.mapped.w = r.w; l.mapped.h = r.h;
+			curRecIdx++;
+		}
+	}
+}
+static void CheckShadowGroupAndDeleteIfEmpty(Renderer* r, LightGroup* g)
+{
+	if (g->shadowGroup.numUsedProjections > 0) return;
+
+	glDeleteTextures(1, &g->shadowGroup.texture);
+	glDeleteFramebuffers(1, &g->shadowGroup.fbo);
+	g->shadowGroup.texture = 0;
+	g->shadowGroup.fbo = 0;
+}
 
 
 
@@ -1683,16 +1899,262 @@ void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data)
 
 
 
-
-DirShadowLight* RE_AddDirectionalShadowLight(struct Renderer* renderer, uint32_t shadowWidth, uint32_t shadowHeight)
+struct LightGroup* RELI_AddLightGroup(struct Renderer* renderer)
 {
-	
+	LightGroup* out = new LightGroup;
+	memset(out, 0, sizeof(LightGroup));
+	renderer->lightGroups.push_back(out);
 
+	LightData emptyLightData{};
+
+
+	glGenBuffers(1, &out->uniform);
+	glBindBuffer(GL_UNIFORM_BUFFER, out->uniform);
+	glBufferData(GL_UNIFORM_BUFFER, sizeof(LightData), &emptyLightData, GL_STATIC_DRAW);
+	return out;
+}
+void RELI_RemoveLightGroup(struct Renderer* renderer, struct LightGroup* group)
+{
+	if (group->shadowGroup.fbo)
+	{
+		glDeleteFramebuffers(1, &group->shadowGroup.fbo);
+		glDeleteTextures(1, &group->shadowGroup.texture);
+		group->shadowGroup.fbo = 0;
+		group->shadowGroup.texture = 0;
+		group->numSpotLights = 0;
+	}
+	glDeleteBuffers(1, &group->uniform);
+	
+	delete group;
+	for (int i = 0; i < renderer->lightGroups.size(); i++)
+	{
+		if (renderer->lightGroups.at(i) == group)
+		{
+			renderer->lightGroups.erase(renderer->lightGroups.begin() + i);
+			break;
+		}
+	}
+}
+void RELI_Update(struct LightGroup* group)
+{
+	LightData data; memset(&data, 0, sizeof(LightData));
+	
+	for (int i = 0; i < group->numDirLights; i++)
+	{
+		InternalDirLight& l = *group->dirs[i];
+		data.dirLights[i] = l.light.light;
+		if (l.hasShadow)
+		{
+		}
+		else
+		{
+			data.dirLights[i].projIdx = -1;
+		}
+	}
+	for (int i = 0; i < group->numPointLights; i++)
+	{
+		InternalPointLight& l = *group->points[i];
+		data.pointLights[i] = l.light.light;
+		if (l.hasShadow)
+		{
+
+		}
+		else
+		{
+			data.pointLights[i].projIdx = -1;
+		}
+	}
+	for (int i = 0; i < group->numSpotLights; i++)
+	{
+		InternalSpotLight& l = *group->spots[i];
+		if (l.hasShadow)
+		{
+
+		}
+		else
+		{
+			data.spotLights[i] = l.light.light;
+		}
+	}
+
+	data.numPointLights = group->numPointLights;
+	data.numDirLights = group->numDirLights;
+	data.numSpotLights = group->numSpotLights;
+
+	data.ambientColor = group->ambient;
+
+	glBindBuffer(GL_UNIFORM_BUFFER, group->uniform);
+	glBufferData(GL_UNIFORM_BUFFER, sizeof(LightData), &data, GL_STATIC_DRAW);
+}
+
+void RELI_SetAmbientLightColor(struct LightGroup* group, const glm::vec3& col)
+{
+	group->ambient = { col.r, col.g, col.b, 1.0f };
+}
+
+DirectionalLight* RELI_AddDirectionalLight(struct LightGroup* group)
+{
+	if (group->numDirLights >= MAX_NUM_LIGHTS) return nullptr;
+	
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++)
+	{
+		if (!group->dirLights[i].isActive)
+		{
+			DirectionalLight* l = &group->dirLights[i].light.light;
+			group->dirLights[i].isActive = true;
+			group->dirs[group->numDirLights] = &group->dirLights[i];
+			group->numDirLights++;
+			return l;
+		}
+	}
 	return nullptr;
 }
-void RE_RemoveDirectionalShadowLight(struct Renderer* renderer, DirShadowLight* light)
+void RELI_RemoveDirectionalLight(struct LightGroup* group, DirectionalLight* light)
 {
+	const uintptr_t idx = ((uintptr_t)light - (uintptr_t)&group->dirLights[0]) / sizeof(InternalDirLight);
+	if (idx < MAX_NUM_LIGHTS && group->dirLights[idx].isActive)
+	{
+		InternalDirLight* l = &group->dirLights[idx];
+		memset(l, 0, sizeof(InternalDirLight));
+		InternalDirLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		int curListIdx = 0;
+		for (int i = 0; i < group->numDirLights; i++)
+		{
+			if (group->dirs[i] == l)
+			{
+				group->dirs[i] = nullptr;
+			}
+			else
+			{
+				remainingList[curListIdx] = group->dirs[i];
+				curListIdx++;
+			}
+		}
+		memcpy(group->dirs, remainingList, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		group->numDirLights--;
+	}
+}
 
+PointLight* RELI_AddPointLight(struct LightGroup* group)
+{
+	if (group->numPointLights >= MAX_NUM_LIGHTS) return nullptr;
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++)
+	{
+		if (!group->pointLights[i].isActive)
+		{
+			PointLight* l = &group->pointLights[i].light.light;
+			group->pointLights[i].hasShadow = false;
+			group->pointLights[i].isActive = true;
+			group->points[group->numPointLights] = &group->pointLights[i];
+			group->numPointLights++;
+			return l;
+		}
+	}
+	return nullptr;
+}
+void RELI_RemovePointLight(struct LightGroup* group, PointLight* light)
+{
+	const uintptr_t idx = ((uintptr_t)light - (uintptr_t)&group->pointLights[0]) / sizeof(InternalPointLight);
+	if (idx < MAX_NUM_LIGHTS && group->pointLights[idx].isActive)
+	{
+		InternalPointLight* l = &group->pointLights[idx];
+		memset(l, 0, sizeof(InternalPointLight));
+		InternalPointLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		int curListIdx = 0;
+		for (int i = 0; i < group->numDirLights; i++)
+		{
+			if (group->points[i] == l)
+			{
+				group->points[i] = nullptr;
+			}
+			else
+			{
+				remainingList[curListIdx] = group->points[i];
+				curListIdx++;
+			}
+		}
+		memcpy(group->dirs, remainingList, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		group->numPointLights--;
+	}
+}
+
+SpotLight* RELI_AddSpotLight(struct LightGroup* group)
+{
+	if (group->numSpotLights >= MAX_NUM_LIGHTS) return nullptr;
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++)
+	{
+		if (!group->spotLights[i].isActive)
+		{
+			SpotLight* l = &group->spotLights[i].light.light;
+			group->spotLights[i].hasShadow = false;
+			group->spotLights[i].isActive = true;
+			group->spots[group->numSpotLights] = &group->spotLights[i];
+			group->numSpotLights++;
+			return l;
+		}
+	}
+	return nullptr;
+}
+void RELI_RemoveSpotLight(struct LightGroup* group, SpotLight* light)
+{
+	const uintptr_t idx = ((uintptr_t)light - (uintptr_t)&group->spotLights[0]) / sizeof(InternalSpotLight);
+	if (idx < MAX_NUM_LIGHTS && group->spotLights[idx].isActive)
+	{
+		InternalSpotLight* l = &group->spotLights[idx];
+		memset(l, 0, sizeof(InternalSpotLight));
+		InternalSpotLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		int curListIdx = 0;
+		for (int i = 0; i < group->numDirLights; i++)
+		{
+			if (group->spots[i] == l)
+			{
+				group->spots[i] = nullptr;
+			}
+			else
+			{
+				remainingList[curListIdx] = group->spots[i];
+				curListIdx++;
+			}
+		}
+		memcpy(group->dirs, remainingList, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		group->numSpotLights--;
+	}
+}
+
+DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight, bool useCascade)
+{
+	if (shadowWidth > 0x1000 || shadowHeight > 0x1000 || group->numDirLights >= MAX_NUM_LIGHTS) return nullptr;
+	if (!group->shadowGroup.fbo)
+	{
+		AddShadowLightGroup(group);
+	}
+
+	
+	DirShadowLight* light = nullptr;
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++)
+	{
+		if (!group->dirLights[i].isActive)
+		{
+			light = &group->dirLights[i].light;
+			group->dirLights[i].hasShadow = true;
+			group->dirLights[i].isActive = true;
+			group->dirs[group->numDirLights] = &group->dirLights[i];
+			for (int j = 0; j < 4; j++)
+			{
+				group->dirLights[i].map[j] = { 0, 0, (uint16_t)shadowWidth, (uint16_t)shadowHeight };
+			}
+			group->numDirLights++;
+			break;
+		}
+	}
+
+	PackShadowLights(group);
+	return light;
+}
+void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight* light)
+{
+	
+	
 }
 
 
@@ -1726,11 +2188,64 @@ void RE_SetEnvironmentData(struct Renderer* renderer, const EnvironmentData* dat
 {
 	renderer->currentEnvironmentData = data;
 }
-void RE_SetLightData(struct Renderer* renderer, GLuint lightUniform)
+void RE_SetLightData(struct Renderer* renderer, LightGroup* group)
 {
-	renderer->currentLightData = lightUniform;
+	renderer->currentLightData = group;
 }
 
+void RE_RenderShadows(struct Renderer* renderer)
+{
+	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
+	LightGroup* g = renderer->currentLightData;
+	if (!g->shadowGroup.fbo) return;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, g->shadowGroup.fbo);
+	for (int i = 0; i < g->numDirLights; i++)
+	{
+		if (g->dirs[i]->hasShadow)
+		{
+			const InternalDirLight& l = *g->dirs[i];
+			glViewport(l.map->x, l.map->y, l.map->w, l.map->h);
+
+			glUseProgram(renderer->pbrData.geomProgram);
+			glEnable(GL_DEPTH_TEST);
+			glDisable(GL_BLEND);
+			glDepthFunc(GL_LEQUAL);
+
+			
+			CameraBase cam{};
+			// cam.pos = l.light.cam.pos;
+			// cam.view = glm::lookAtRH(l.light.cam.pos, l.light.cam.pos + l.light.light->direction, glm::vec3(0.0f, 1.0f, 0.0f));
+			// cam.proj = glm::orthoRH(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 1000.0f);
+			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&cam.pos);
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&cam.view);
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&cam.proj);
+
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+
+			for (uint32_t i = 0; i < renderer->numObjs; i++)
+			{
+				SceneObject* obj = renderer->objList[i];
+				if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+				{
+					glm::mat4 mat = obj->transform * obj->model->baseTransform;
+					glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+
+					glBindVertexArray(obj->model->vao);
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+					for (uint32_t j = 0; j < obj->model->numMeshes; j++)
+					{
+						Mesh* m = &obj->model->meshes[j];
+						BindMaterialGeometry(renderer, m->material);
+						glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+					}
+				}
+			}
+		}
+	}
+}
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side)
 {
@@ -1887,7 +2402,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
 	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData);
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 	
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
@@ -1940,6 +2455,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
 	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 
 

@@ -54,12 +54,22 @@ struct PointLight
 	float quadratic;
 	int projIdx;
 };
+struct PointShadowLight
+{
+	PointLight light;
+};
 struct DirectionalLight
 {
 	glm::vec3 direction;
 	int isCascaded;
 	glm::vec3 color;
 	int projIdx;
+};
+struct DirShadowLight
+{
+	DirectionalLight light;
+	glm::vec3 pos;
+	float cascadeSteps[4];
 };
 struct SpotLight
 {
@@ -69,17 +79,10 @@ struct SpotLight
 	glm::vec3 pos;
 	float cutOff;
 };
-struct LightData 
+struct SpotShadowLight
 {
-	PointLight pointLights[MAX_NUM_LIGHTS];
-	DirectionalLight dirLights[MAX_NUM_LIGHTS];
-	SpotLight spotLights[MAX_NUM_LIGHTS];
-	glm::mat4 projections[MAX_NUM_LIGHTS];
-	glm::vec4 ambientColor;
-	int numPointLights;
-	int numDirLights;
-	int numSpotLights;
-	int numProjections;
+	SpotLight light;
+	glm::vec3 pos;
 };
 
 enum CUBE_MAP_SIDE
@@ -90,30 +93,6 @@ enum CUBE_MAP_SIDE
 	CUBE_MAP_BOTTOM,
 	CUBE_MAP_FRONT,
 	CUBE_MAP_BACK,
-};
-
-
-struct DirShadowLight
-{
-	DirectionalLight light;
-	CameraBase cam;
-	struct Texture* texture;
-	float cascadeSteps[4];
-	int groupID;
-	bool useCascades;
-};
-struct PointShadowLight
-{
-	PointLight light;
-	CameraBase cam;
-	struct Texture* texture;
-	int groupID;
-};
-struct SpotShadowLight
-{
-	SpotLight light;
-	CameraBase base;
-	int groupID;
 };
 
 
@@ -163,8 +142,32 @@ void RE_CleanUpAntialiasingData(AntialiasingRenderData* data);
 void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t width, uint32_t height);
 void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data);
 
-DirShadowLight* RE_AddDirectionalShadowLight(struct Renderer* renderer, uint32_t shadowWidth, uint32_t shadowHeight);
-void RE_RemoveDirectionalShadowLight(struct Renderer* renderer, DirShadowLight* light);
+
+
+
+struct LightGroup* RELI_AddLightGroup(struct Renderer* renderer);
+void RELI_RemoveLightGroup(struct Renderer* renderer, struct LightGroup* group);
+void RELI_Update(struct LightGroup* group);
+
+void RELI_SetAmbientLightColor(struct LightGroup* group, const glm::vec3& col);
+
+
+DirectionalLight* RELI_AddDirectionalLight(struct LightGroup* group);
+void RELI_RemoveDirectionalLight(struct LightGroup* group, DirectionalLight* light);
+
+PointLight* RELI_AddPointLight(struct LightGroup* group);
+void RELI_RemovePointLight(struct LightGroup* group, PointLight* light);
+
+SpotLight* RELI_AddSpotLight(struct LightGroup* group);
+void RELI_RemoveSpotLight(struct LightGroup* group, SpotLight* light);
+
+
+DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight, bool useCascade);
+void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight* light);
+
+
+
+
 
 
 // Creates the prefiltered-/irradiance-Map from the environmentMap or cleanes those to up
@@ -176,8 +179,10 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 // the objects passed to the functions need to stay alive for the entire renderpass!!!
 void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBase);
 void RE_SetEnvironmentData(struct Renderer* renderer, const EnvironmentData* data);
-void RE_SetLightData(struct Renderer* renderer, GLuint lightUniform);
+void RE_SetLightData(struct Renderer* renderer, struct LightGroup* group);
 
+// Renders the shadow map of the current light group
+void RE_RenderShadows(struct Renderer* renderer);
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side);
 void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint32_t numSamples, CUBE_MAP_SIDE side);

@@ -4,7 +4,7 @@
 #include "../Graphics/Scene.h"
 
 
-GameManager* GM_CreateGameManager(AssetManager* assets)
+GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* assets)
 {
 	GameManager* out = new GameManager;
 	GameState* state = GetGameState();
@@ -26,16 +26,26 @@ GameManager* GM_CreateGameManager(AssetManager* assets)
 	// lightData.numDirLights = 1;
 	// lightData.ambientColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-	LightData lightData{};
-	lightData.pointLights[0].pos = { 0.0f, 8.0f, 0.0f, 0.0f };
-	lightData.pointLights[0].color = { 2.0f, 2.0f, 2.0f, 1.0f };
-	lightData.pointLights[0].projIdx = -1;
-	lightData.numPointLights = 1;
-	lightData.ambientColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+	out->defaultLightGroup = RELI_AddLightGroup(renderer);
+
 	
-	glGenBuffers(1, &out->lightUniform);
-	glBindBuffer(GL_UNIFORM_BUFFER, out->lightUniform);
-	glBufferData(GL_UNIFORM_BUFFER, sizeof(lightData), &lightData, GL_STATIC_DRAW);
+	DirectionalLight* l = RELI_AddDirectionalLight(out->defaultLightGroup);
+	l->direction = { 0.0f, -1.0f, 0.0f };
+	l->color = { 1.0f, 1.0f, 1.0f };
+
+	//DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 2048, 2048, false);
+	//sl->pos = { 0.0f, 20.0f, 0.0f };
+	//sl->light.direction = { 0.0f, -1.0f, 0.0f };
+	//sl->light.color = { 1.0f, 1.0f, 1.0f };
+	
+	SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
+	spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };
+	spot->direction = { 0.0f, -1.0f, 0.0f };
+	spot->cutOff = M_PI_4;
+	spot->pos = { 0.0f, 15.0f, 0.0f };
+
+	RELI_Update(out->defaultLightGroup);
+
 
 	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 4);
 	RE_CreatePostProcessingRenderData(&out->PPbuffer, state->winWidth, state->winHeight);
@@ -47,7 +57,6 @@ GameManager* GM_CreateGameManager(AssetManager* assets)
 }
 void GM_CleanUpGameManager(GameManager* manager)
 {
-	glDeleteBuffers(1, &manager->lightUniform);
 	RE_CleanUpAntialiasingData(&manager->AAbuffer);
 	RE_CleanUpPostProcessingRenderData(&manager->PPbuffer);
 

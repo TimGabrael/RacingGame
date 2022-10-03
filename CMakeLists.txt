@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 project(RacingGameProj)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(3rd-party/glfw)
 add_subdirectory(3rd-party/assimp)
@@ -23,7 +23,7 @@ set(PHYSX_LIBRARIES
 )
 
 #TO MAKE THIS WORK I ADDED THE FOLLOWING WARNING DISABLES INTO THE CMAKELISTS.TXT FILE OF PHYSX/WINDOWS
-#/wd5219 /wd5045 /wd5220 /wd5038 /wd4464 /wd4365 /wd5204 /wd5243
+#/wd5219 /wd5045 /wd5220 /wd5038 /wd4464 /wd4365 /wd5204 /wd5243 /wd26495 /wd4264 /wd4866
 set(PHYSX_ROOT_DIR D:/SDKs/PhysX-4.0.0/physx)
 set(TARGET_BUILD_PLATFORM "windows")
 set(PX_BUILDSNIPPETS OFF CACHE BOOL "Generate the snippets")

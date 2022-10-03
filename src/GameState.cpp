@@ -147,7 +147,7 @@ GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint
 	}
 
 
-	g_gameState->manager = GM_CreateGameManager(g_gameState->assets);
+	g_gameState->manager = GM_CreateGameManager(g_gameState->renderer, g_gameState->assets);
 
 	return g_gameState;
 }
