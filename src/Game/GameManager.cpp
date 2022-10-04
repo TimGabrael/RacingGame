@@ -3,7 +3,6 @@
 #include "../Graphics/ModelInfo.h"
 #include "../Graphics/Scene.h"
 
-
 GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* assets)
 {
 	GameManager* out = new GameManager;
@@ -12,12 +11,12 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	out->env.width = assets->textures[DEFAULT_CUBE_MAP]->width;
 	out->env.height = assets->textures[DEFAULT_CUBE_MAP]->height;
 	out->env.mipLevels = 1;
-#ifdef CREATE_ACTUAL_ENVIRONMENT
-	RE_CreateEnvironment(state->renderer, &out->env);
-#else
-	out->env.prefilteredMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
-	out->env.irradianceMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
-#endif // CREATE_ACTUAL_ENVIRONMENT
+
+	if (!AM_LoadEnvironment(&out->env, "Assets/Environment.menv"))
+	{
+		RE_CreateEnvironment(state->renderer, &out->env);
+		AM_StoreEnvironment(&out->env, "Assets/Environment.menv");
+	}
 
 	// LightData lightData{};
 	// lightData.dirLights[0].direction = { 0.0f, -1.0f, 0.0f };

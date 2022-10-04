@@ -24,3 +24,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file);
 struct Texture* AM_AddTexture(AssetManager* m, const char* file);
 struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const char* top, const char* bottom, const char* left, const char* right, const char* front, const char* back);
 struct AudioFile* AM_AddAudioSample(AssetManager* m, const char* file);
+
+
+
+void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName);
+bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName);

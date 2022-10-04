@@ -5,6 +5,7 @@
 #include "../Graphics/ModelInfo.h"
 #include "../Graphics/Renderer.h"
 #include "assimp/BaseImporter.h"
+#include "zlib.h"
 
 
 #define TINYGLTF_IMPLEMENTATION
@@ -815,10 +816,178 @@ struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const ch
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
 		m->textures[name] = resTex;
 	}
 }
 struct AudioFile* AM_AddAudioSample(AssetManager* m, const char* file)
 {
 	return nullptr;
+}
+
+
+
+
+
+
+struct EnvironmentFileHeader
+{
+	uint8_t numMipMaps;
+	uint16_t width;
+	uint16_t height;
+};
+void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName)
+{
+	glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
+
+	int w = 0;
+	int h = 0;
+	glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_WIDTH, &w);
+	glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_HEIGHT, &h);
+
+	
+
+	uint32_t dataSize = sizeof(EnvironmentFileHeader);
+	for (int i = 0; i < env->mipLevels; i++)
+	{
+		dataSize += (glm::max(w, 1) * glm::max(h, 1) * 4) * 2 * 6;
+	}
+	uint8_t* fullData = new uint8_t[dataSize];
+
+	EnvironmentFileHeader* header = (EnvironmentFileHeader*)fullData;
+	header->numMipMaps = env->mipLevels;
+	header->width = w;
+	header->height = h;
+	uint8_t* curData = fullData + sizeof(EnvironmentFileHeader);
+
+	for (int i = 0; i < env->mipLevels; i++)
+	{
+		const uint32_t cw = glm::max(w >> i, 1);
+		const uint32_t ch = glm::max(h >> i, 1);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
+
+		int testW = 0;
+		int testH = 0;
+		glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, i, GL_TEXTURE_WIDTH, &testW);
+		glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, i, GL_TEXTURE_HEIGHT, &testH);
+		if (testW != cw)
+		{
+			LOG("(env->irradianceMap): ERROR LEVEL WIDTH DOES NOT EQUAL REAL WIDTH: %d != %d\n", testW, cw);
+		}
+		if (testH != ch)
+		{
+			LOG("(env->irradianceMap): ERROR LEVEL HEIGHT DOES NOT EQUAL REAL HEIGHT: %d != %d\n", testH, ch);
+		}
+
+		for (int j = 0; j < 6; j++)
+		{
+			glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, GL_UNSIGNED_BYTE, curData);
+			curData += 4 * cw * ch;
+		}
+		
+		
+		glBindTexture(GL_TEXTURE_CUBE_MAP, env->prefilteredMap);
+
+		glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, i, GL_TEXTURE_WIDTH, &testW);
+		glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, i, GL_TEXTURE_HEIGHT, &testH);
+		if (testW != cw)
+		{
+			LOG("(env->prefilteredMap): ERROR LEVEL WIDTH DOES NOT EQUAL REAL WIDTH: %d != %d\n", testW, cw);
+		}
+		if (testH != ch)
+		{
+			LOG("(env->prefilteredMap): ERROR LEVEL HEIGHT DOES NOT EQUAL REAL HEIGHT: %d != %d\n", testH, ch);
+		}
+
+
+		for (int j = 0; j < 6; j++)
+		{
+			glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, GL_UNSIGNED_BYTE, curData);
+			curData += 4 * cw * ch;
+		}
+	}
+
+	uLongf dataLen = dataSize;
+	uint8_t* compressData = new uint8_t[dataSize];
+	if (compress(compressData, &dataLen, fullData, dataSize) != Z_OK)
+	{
+		delete[] compressData;
+		delete[] fullData;
+		return;
+	}
+
+	FILE* f = NULL;
+	fopen_s(&f, fileName, "wb");
+	if (!f)
+	{
+		delete[] compressData;
+		delete[] fullData;
+		return;
+	}
+	fwrite(&dataSize, sizeof(uint32_t), 1, f);
+	fwrite(compressData, dataLen, 1, f);
+	fclose(f);
+
+
+	delete[] compressData;
+	delete[] fullData;
+}
+bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName)
+{
+	FILE* f = NULL;
+	fopen_s(&f, fileName, "rb");
+	if (!f)
+	{
+		return false;
+	}
+	fseek(f, 0, SEEK_END);
+	int sz = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	uint8_t* fileData = new uint8_t[sz];
+	fread(fileData, sz, 1, f);
+	fclose(f);
+
+	const uint32_t uncompressedSize = *(uint32_t*)fileData;
+	uint8_t* curFileData = fileData + sizeof(uint32_t);
+
+	uint8_t* uncompressedData = new uint8_t[uncompressedSize];
+
+	uLongf outSize = uncompressedSize;
+	int res = uncompress(uncompressedData, &outSize, curFileData, sz - sizeof(uint32_t));
+	delete[] fileData;
+	if (res != Z_OK)
+	{
+		LOG("ERROR FAILED TO LOAD ENVIRONMENT: %s %d\n", fileName, res);
+		delete[] uncompressedData;
+		return false;
+	}
+
+	EnvironmentFileHeader* header = (EnvironmentFileHeader*)uncompressedData;
+	uint8_t* curData = uncompressedData + sizeof(EnvironmentFileHeader);
+
+	env->mipLevels = header->numMipMaps;
+
+	glGenTextures(1, &env->irradianceMap);
+	glGenTextures(1, &env->prefilteredMap);
+	for (int i = 0; i < env->mipLevels; i++)
+	{
+		uint32_t cw = glm::max(header->width >> i, 1);
+		uint32_t ch = glm::max(header->height >> i, 1);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
+		for (unsigned int j = 0; j < 6; j++)
+		{
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, cw, ch, 0, GL_RGBA, GL_UNSIGNED_BYTE, curData);
+			curData += 4 * cw * ch;
+		}
+		glBindTexture(GL_TEXTURE_CUBE_MAP, env->prefilteredMap);
+		for (unsigned int j = 0; j < 6; j++)
+		{
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, cw, ch, 0, GL_RGBA, GL_UNSIGNED_BYTE, curData);
+			curData += 4 * cw * ch;
+		}
+	}
+	
+	delete[] uncompressedData;
+	return true;
 }

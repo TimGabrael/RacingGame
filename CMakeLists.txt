@@ -39,10 +39,11 @@ set(CMAKEMODULES_PATH ${PHYSX_ROOT_DIR}/../externals/cmakemodules)
 set(PX_OUTPUT_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR}/externals/physx)
 set(PX_OUTPUT_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/externals/physx)
 
-target_include_directories(RacingGame PRIVATE D:/SDKs/PhysX-4.0.0/physx/include)
+target_include_directories(RacingGame PRIVATE D:/SDKs/PhysX-4.0.0/physx/include ${ZLIB_INCLUDE_DIR})
 add_subdirectory(${PHYSX_ROOT_DIR}/compiler/public extern/physx)
 
 target_include_directories(RacingGame PRIVATE 3rd-party/assimp/include 3rd-party/glfw/include 3rd-party/glm 3rd-party/NFDriver/include 3rd-party/rectpack2D/src)
-target_link_libraries(RacingGame PRIVATE glfw assimp::assimp ${GLAD_LIBRARIES} NFDriver ${PHYSX_LIBRARIES})
+target_link_libraries(RacingGame PRIVATE glfw assimp::assimp ${GLAD_LIBRARIES} NFDriver ${PHYSX_LIBRARIES} zlibstatic)
+
 
 set_target_properties(RacingGame PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
