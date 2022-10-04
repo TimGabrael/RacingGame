@@ -33,16 +33,20 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	l->direction = { 0.0f, -1.0f, 0.0f };
 	l->color = { 1.0f, 1.0f, 1.0f };
 
-	//DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 2048, 2048, false);
-	//sl->pos = { 0.0f, 20.0f, 0.0f };
-	//sl->light.direction = { 0.0f, -1.0f, 0.0f };
-	//sl->light.color = { 1.0f, 1.0f, 1.0f };
+	DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 2048, 2048, false);
+	sl->pos = { 0.0f, 30.0f, 0.0f };
+	sl->light.direction = { 0.0f, -1.0f, -1.0f };
+	sl->light.color = { 2.0f, 2.0f, 2.0f };
 	
-	SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
-	spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };
-	spot->direction = { 0.0f, -1.0f, 0.0f };
-	spot->cutOff = M_PI_4;
-	spot->pos = { 0.0f, 15.0f, 0.0f };
+	//SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
+	//spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };
+	//spot->direction = { 0.0f, -1.0f, 0.0f };
+	//spot->cutOff = M_PI_4;
+	//spot->pos = { 0.0f, 15.0f, 0.0f };
+
+	//PointLight* point = RELI_AddPointLight(out->defaultLightGroup);
+	//point->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	//point->pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
 	RELI_Update(out->defaultLightGroup);
 

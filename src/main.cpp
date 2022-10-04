@@ -25,7 +25,8 @@ int main()
 
 	Model* model = AM_AddModel(game->assets, "Assets/ScriptFactory.glb");
 	//Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF/BoomBox.gltf");
-	//Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF-Binary/BoomBox.glb"); model->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1000.0f, 1000.0f));
+	Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF-Binary/BoomBox.glb"); 
+	boomBox->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(500.0f, 500.0f, 500.0f));
 	
 	SceneObject base;
 	base.boneData = 0;
@@ -35,6 +36,11 @@ int main()
 	base.rigidBody = nullptr;
 	base.transform = glm::mat4(1.0f);// glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1000.0f, 1000.0f));
 	SC_AddStaticObject(game->scene, &base);
+
+	base.model = boomBox;
+	base.transform = glm::translate(glm::mat4(1.0f), glm::vec3(-3.0f, 15.0f, 0.0f));
+	SC_AddStaticObject(game->scene, &base);
+
 
 	while (true)
 	{
@@ -67,6 +73,10 @@ int main()
 			RE_SetCameraBase(game->renderer, &localPlayer->camera.base);
 			RE_SetEnvironmentData(game->renderer, &game->manager->env);
 			RE_SetLightData(game->renderer, game->manager->defaultLightGroup);
+
+			RE_RenderShadows(game->renderer);
+			glBindFramebuffer(GL_FRAMEBUFFER, game->manager->AAbuffer.fbo);
+			glViewport(0, 0, game->manager->AAbuffer.width, game->manager->AAbuffer.height);
 		
 			RE_RenderGeometry(game->renderer);
 		

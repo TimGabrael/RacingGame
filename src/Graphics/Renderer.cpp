@@ -98,11 +98,17 @@ struct SpotLight\n\
 	vec3 pos;\n\
 	float cutOff;\n\
 };\n\
+struct ProjectionData\n\
+{\n\
+	mat4 proj;\n\
+	vec2 start;\n\
+	vec2 end;\n\
+};\n\
 layout (std140) uniform LightData {\n\
 	PointLight pointLights[MAX_NUM_LIGHTS];\n\
 	DirectionalLight dirLights[MAX_NUM_LIGHTS];\n\
 	SpotLight spotLights[MAX_NUM_LIGHTS];\n\
-	mat4 projections[MAX_NUM_LIGHTS];\n\
+	ProjectionData projections[MAX_NUM_LIGHTS];\n\
 	vec4 ambientColor;\n\
 	int numPointLights;\n\
 	int numDirLights;\n\
@@ -118,6 +124,7 @@ uniform sampler2D normalMap;\n\
 uniform sampler2D aoMap;\n\
 uniform sampler2D emissiveMap;\n\
 uniform sampler2D metallicRoughnessMap;\n\
+uniform sampler2DShadow shadowMap;\n\
 \n\
 uniform mat4 model; \n\
 uniform mat4 view; \n\
@@ -317,6 +324,22 @@ void main()\n\
 	vec3 color = lights.ambientColor.rgb * diffuseColor;\n\
 	for(int i = 0; i < lights.numDirLights; i++)\n\
 	{\n\
+		float shadowVal = 1.0f;\n\
+		if(lights.dirLights[i].projIdx > -1)\n\
+		{\n\
+			vec2 ts = vec2(1.0f) / vec2(textureSize(shadowMap, 0));\n\
+			vec4 shadowUV = lights.projections[lights.dirLights[i].projIdx].proj * vec4(worldPos, 1.0f);\n\
+			shadowUV /= shadowUV.w; shadowUV.xyz += 1.0f; shadowUV.xyz *= 0.5f;\n\
+			for(int x = -1; x <= 1; ++x)\n\
+			{\n\
+				for(int y = -1; y <= 1; ++y)\n\
+				{\n\
+					vec3 testPos = shadowUV.xyz + vec3(ts.x * float(x), ts.y * float(y), 0.0f);\n\
+					shadowVal += texture(shadowMap, testPos);\n\
+				}\n\
+			}\n\
+			shadowVal /= 9.0f;\n\
+		}\n\
 		vec3 l = normalize(-lights.dirLights[i].direction.xyz); // Vector from surface point to light\n\
 		vec3 h = normalize(l+v);\n\
 		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
@@ -328,7 +351,7 @@ void main()\n\
 		float D = microfacetDistribution(pbrInputs);\n\
 		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
 		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
-		color += pbrInputs.NdotL * lights.dirLights[i].color.rgb * (diffuseContrib + specContrib);\n\
+		color += shadowVal * pbrInputs.NdotL * lights.dirLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 	}\n\
 	for(int i = 0; i < lights.numPointLights; i++)\n\
 	{\n\
@@ -944,6 +967,7 @@ enum BASE_SHADER_TEXTURE
 	BASE_SHADER_TEXTURE_AOMAP,
 	BASE_SHADER_TEXTURE_EMISSIVEMAP,
 	BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS,
+	BASE_SHADER_TEXTURE_SHADOW_MAP,
 	NUM_BASE_SHADER_TEXTURES,
 };
 
@@ -1014,13 +1038,18 @@ struct PostProcessingRenderInfo
 	}upsampling;
 };
 
-
+struct ProjectionData
+{
+	glm::mat4 proj;
+	glm::vec2 start;
+	glm::vec2 end;
+};
 struct LightData
 {
 	PointLight pointLights[MAX_NUM_LIGHTS];
 	DirectionalLight dirLights[MAX_NUM_LIGHTS];
 	SpotLight spotLights[MAX_NUM_LIGHTS];
-	glm::mat4 projections[MAX_NUM_LIGHTS];
+	ProjectionData projections[MAX_NUM_LIGHTS];
 	glm::vec4 ambientColor;
 	int numPointLights;
 	int numDirLights;
@@ -1065,19 +1094,12 @@ struct ShadowLightGroup
 	GLuint fbo;
 	GLuint texture;
 	uint32_t numUsedProjections;
+	ProjectionData projections[MAX_NUM_LIGHTS];
 };
 
 struct LightGroup
 {
-	enum LIGHT_ACTIVE_TYPE
-	{
-		LIGHT_INACTIVE,
-		LIGHT_ACTIVE_NORMAL,
-		LIGHT_ACTIVE_SHADOW,
-	};
-
 	ShadowLightGroup shadowGroup;
-	//LightData data;
 	glm::vec4 ambient;
 	InternalDirLight dirLights[MAX_NUM_LIGHTS];
 	InternalPointLight pointLights[MAX_NUM_LIGHTS];
@@ -1093,7 +1115,6 @@ struct LightGroup
 
 	GLuint uniform;
 };
-static constexpr size_t sz = sizeof(LightGroup);
 
 
 struct Renderer
@@ -1133,8 +1154,15 @@ static ShadowLightGroup* AddShadowLightGroup(LightGroup* data)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		GLfloat borderColor = 1.0f;
+		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &borderColor);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);	// THIS HERE IS WIERD TAKE A LOOK AT IT LATER MAYBE
+
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->shadowGroup.texture, 0);
 
+		glDrawBuffer(GL_NONE);
+		glReadBuffer(GL_NONE);
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 			LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
 		}
@@ -1358,6 +1386,9 @@ static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint pr
 	curTexture = glGetUniformLocation(program, "metallicRoughnessMap");
 	if (curTexture == -1) { LOG("failed to Get metallicRoughnessMap Texture Loaction of GLTF shader program\n"); }
 	glUniform1i(curTexture, BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
+	curTexture = glGetUniformLocation(program, "shadowMap");
+	if (curTexture == -1) { LOG("failed to Get shadowMap Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_SHADOW_MAP);
 
 	return un;
 }
@@ -1938,13 +1969,22 @@ void RELI_RemoveLightGroup(struct Renderer* renderer, struct LightGroup* group)
 void RELI_Update(struct LightGroup* group)
 {
 	LightData data; memset(&data, 0, sizeof(LightData));
-	
+	uint32_t curProjIdx = 0;
 	for (int i = 0; i < group->numDirLights; i++)
 	{
 		InternalDirLight& l = *group->dirs[i];
 		data.dirLights[i] = l.light.light;
 		if (l.hasShadow)
 		{
+			float scaleX = (float)l.map[0].w / (float)ShadowLightGroup::shadowTextureSize;
+			float scaleY = (float)l.map[0].h / (float)ShadowLightGroup::shadowTextureSize;
+			glm::mat4 mat = CA_CreateOrthoView(l.light.pos, l.light.light.direction, 30.0f, 30.0f, 0.1f, 1000.0f);
+
+			mat = glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, -1.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f * scaleX, 0.5f * scaleY, 1.0f)) * glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, 0.0f)) * mat;
+			data.projections[curProjIdx].proj = mat;
+			group->shadowGroup.projections[curProjIdx].proj = mat;
+			l.light.light.projIdx = curProjIdx;
+			curProjIdx++;
 		}
 		else
 		{
@@ -2144,6 +2184,14 @@ DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_
 				group->dirLights[i].map[j] = { 0, 0, (uint16_t)shadowWidth, (uint16_t)shadowHeight };
 			}
 			group->numDirLights++;
+			if (useCascade)
+			{
+				group->shadowGroup.numUsedProjections += 4;
+			}
+			else
+			{
+				group->shadowGroup.numUsedProjections++;
+			}
 			break;
 		}
 	}
@@ -2201,13 +2249,23 @@ void RE_RenderShadows(struct Renderer* renderer)
 	LightGroup* g = renderer->currentLightData;
 	if (!g->shadowGroup.fbo) return;
 
+	glEnable(GL_SCISSOR_TEST);
+	glEnable(GL_POLYGON_OFFSET_FILL);
+	glPolygonOffset(2.0f, 4.0f);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, g->shadowGroup.fbo);
 	for (int i = 0; i < g->numDirLights; i++)
 	{
 		if (g->dirs[i]->hasShadow)
 		{
 			const InternalDirLight& l = *g->dirs[i];
-			glViewport(l.map->x, l.map->y, l.map->w, l.map->h);
+			if (l.light.light.projIdx < 0) continue;
+
+			glViewport(0, 0, ShadowLightGroup::shadowTextureSize, ShadowLightGroup::shadowTextureSize);
+			glScissor(l.map[0].x, l.map[0].y, l.map[0].w, l.map[0].h);
+			glClearDepthf(1.0f);
+			glClear(GL_DEPTH_BUFFER_BIT);
+
 
 			glUseProgram(renderer->pbrData.geomProgram);
 			glEnable(GL_DEPTH_TEST);
@@ -2215,13 +2273,10 @@ void RE_RenderShadows(struct Renderer* renderer)
 			glDepthFunc(GL_LEQUAL);
 
 			
-			CameraBase cam{};
-			// cam.pos = l.light.cam.pos;
-			// cam.view = glm::lookAtRH(l.light.cam.pos, l.light.cam.pos + l.light.light->direction, glm::vec3(0.0f, 1.0f, 0.0f));
-			// cam.proj = glm::orthoRH(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 1000.0f);
-			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&cam.pos);
-			glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&cam.view);
-			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&cam.proj);
+			glm::mat4 mat(1.0f);
+			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.pos);
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
 
 			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 
@@ -2245,6 +2300,10 @@ void RE_RenderShadows(struct Renderer* renderer)
 			}
 		}
 	}
+
+	
+	glDisable(GL_POLYGON_OFFSET_FILL);
+	glDisable(GL_SCISSOR_TEST);
 }
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side)
@@ -2394,6 +2453,9 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
 	glBindTexture(GL_TEXTURE_2D, renderer->pbrData.brdfLut);
 
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SHADOW_MAP);
+	if (renderer->currentLightData->shadowGroup.texture) glBindTexture(GL_TEXTURE_2D, renderer->currentLightData->shadowGroup.texture);
+	else glBindTexture(GL_TEXTURE_2D, renderer->whiteTexture);
 
 	glUniform3fv(renderer->pbrData.baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
 	glUniformMatrix4fv(renderer->pbrData.baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
