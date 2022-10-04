@@ -40,10 +40,19 @@ glm::mat4 CA_CreateOrthoView(const glm::vec3& pos, const glm::vec3& dir, float w
 	{
 		view = glm::lookAtRH(pos, pos + ndir, up);
 	}
-	//glm::vec3 right = view * glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
-	//glm::vec3 up = view * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-	//glm::vec3 min = pos + glm::min(-right * widthHalf, glm::min(-up * heightHalf, dir * nearDepth));
-	//glm::vec3 max = pos + glm::max(right * widthHalf, glm::max(up * heightHalf, dir * farDepth));
-	//return glm::orthoRH(min.x, max.x, min.y, max.y, min.z, max.z) * view;
 	return glm::orthoRH(-widthHalf, widthHalf, -heightHalf, heightHalf, nearDepth, farDepth) * view;
+}
+glm::mat4 CA_CreatePerspectiveView(const glm::vec3& pos, const glm::vec3& dir, float fov, float width, float height, float near, float far)
+{
+	glm::vec3 ndir = glm::normalize(dir);
+	glm::mat4 view;
+	if (ndir.x == 0.0f && ndir.z == 0.0f)
+	{
+		view = glm::lookAtRH(pos, pos + ndir, glm::vec3(0.0f, 0.0f, 1.0f));
+	}
+	else
+	{
+		view = glm::lookAtRH(pos, pos + ndir, up);
+	}
+	return glm::perspectiveRH(fov, width / height, near, far) * view;
 }

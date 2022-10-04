@@ -50,18 +50,12 @@ int main()
 		SC_Update(game->scene, 0.0f);
 
 
-		glBindFramebuffer(GL_FRAMEBUFFER, game->manager->AAbuffer.fbo);
-
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
 		glCullFace(GL_BACK);
 		glFrontFace(GL_CCW);
 		glDepthMask(GL_TRUE);
 
-		glClearColor(0.2f, 0.2f, 0.6f, 1.0f);
-		glClearDepthf(1.0f);
-		glViewport(0, 0, game->manager->AAbuffer.width, game->manager->AAbuffer.height);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		Player* localPlayer = game->manager->localPlayer;
 		if (localPlayer)
@@ -75,7 +69,11 @@ int main()
 			RE_SetLightData(game->renderer, game->manager->defaultLightGroup);
 
 			RE_RenderShadows(game->renderer);
+
 			glBindFramebuffer(GL_FRAMEBUFFER, game->manager->AAbuffer.fbo);
+			glClearColor(0.2f, 0.2f, 0.6f, 1.0f);
+			glClearDepthf(1.0f);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glViewport(0, 0, game->manager->AAbuffer.width, game->manager->AAbuffer.height);
 		
 			RE_RenderGeometry(game->renderer);

@@ -55,9 +55,14 @@ static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 }
 static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-	if (g_gameState)
+	if (g_gameState && g_gameState->manager)
 	{
-
+		Player* p = g_gameState->manager->localPlayer;
+		if (button == GLFW_MOUSE_BUTTON_LEFT)
+		{
+			if (action == GLFW_PRESS) p->input.mouseDown = true;
+			else if (action == GLFW_RELEASE) p->input.mouseDown = false;
+		}
 	}
 }
 static void MousePositionCallback(GLFWwindow* window, double x, double y)
@@ -69,7 +74,7 @@ static void MousePositionCallback(GLFWwindow* window, double x, double y)
 		double dx = x - oldX;
 		double dy = oldY - y;
 		Player* p = g_gameState->manager->localPlayer;
-		if (p)
+		if (p && p->input.mouseDown)
 		{
 			p->camera.yaw += dx;
 			p->camera.pitch += dy;

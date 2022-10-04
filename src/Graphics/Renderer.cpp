@@ -223,6 +223,24 @@ float convertMetallic(vec3 diffuse, vec3 specular, float maxSpecular) {\n\
 	float D = max(b * b - 4.0 * a * c, 0.0f);\n\
 	return clamp((-b + sqrt(D)) / (2.0f * a), 0.0f, 1.0f);\n\
 }\n\
+float calculateShadowValue(ProjectionData p, vec2 textureStep)\n\
+{\n\
+	float shadowVal = 0.0f;\n\
+	vec4 shadowUV = p.proj * vec4(worldPos, 1.0f);\n\
+	shadowUV /= shadowUV.w; shadowUV.xyz += 1.0f; shadowUV.xyz *= 0.5f;\n\
+	shadowUV.xy *= p.end; shadowUV.xy += p.start;\n\
+	for(int x = -1; x <= 1; ++x)\n\
+	{\n\
+		for(int y = -1; y <= 1; ++y)\n\
+		{\n\
+			vec3 testPos = shadowUV.xyz + vec3(textureStep.x * float(x), textureStep.y * float(y), 0.0f);\n\
+			if(testPos.x < p.start.x || testPos.y < p.start.y || testPos.x > p.end.x || testPos.y > p.end.y) shadowVal += 1.0f;\n\
+			else shadowVal += texture(shadowMap, testPos);\n\
+		}\n\
+	}\n\
+	shadowVal /= 9.0f;\n\
+	return shadowVal;\n\
+}\n\
 \n\
 out vec4 outColor;\n\
 void main()\n\
@@ -322,23 +340,13 @@ void main()\n\
 		specularColor\n\
 	);\n\
 	vec3 color = lights.ambientColor.rgb * diffuseColor;\n\
+	vec2 ts = vec2(1.0f) / vec2(textureSize(shadowMap, 0));\n\
 	for(int i = 0; i < lights.numDirLights; i++)\n\
 	{\n\
 		float shadowVal = 1.0f;\n\
 		if(lights.dirLights[i].projIdx > -1)\n\
 		{\n\
-			vec2 ts = vec2(1.0f) / vec2(textureSize(shadowMap, 0));\n\
-			vec4 shadowUV = lights.projections[lights.dirLights[i].projIdx].proj * vec4(worldPos, 1.0f);\n\
-			shadowUV /= shadowUV.w; shadowUV.xyz += 1.0f; shadowUV.xyz *= 0.5f;\n\
-			for(int x = -1; x <= 1; ++x)\n\
-			{\n\
-				for(int y = -1; y <= 1; ++y)\n\
-				{\n\
-					vec3 testPos = shadowUV.xyz + vec3(ts.x * float(x), ts.y * float(y), 0.0f);\n\
-					shadowVal += texture(shadowMap, testPos);\n\
-				}\n\
-			}\n\
-			shadowVal /= 9.0f;\n\
+			shadowVal = calculateShadowValue(lights.projections[lights.dirLights[i].projIdx], ts);\n\
 		}\n\
 		vec3 l = normalize(-lights.dirLights[i].direction.xyz); // Vector from surface point to light\n\
 		vec3 h = normalize(l+v);\n\
@@ -374,6 +382,11 @@ void main()\n\
 		float theta = dot(-l, normalize(lights.spotLights[i].direction.xyz));\n\
 		if(theta > lights.spotLights[i].cutOff)\n\
 		{\n\
+			float shadowVal = 1.0f;\n\
+			if(lights.spotLights[i].projIdx > -1)\n\
+			{\n\
+				shadowVal = calculateShadowValue(lights.projections[lights.spotLights[i].projIdx], ts);\n\
+			}\n\
 			vec3 h = normalize(l+v);\n\
 			pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
 			pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
@@ -384,7 +397,7 @@ void main()\n\
 			float D = microfacetDistribution(pbrInputs);\n\
 			vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
 			vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
-			color += pbrInputs.NdotL * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
+			color += pbrInputs.NdotL * shadowVal * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 		}\n\
 	}\n\
 \n\
@@ -1270,7 +1283,7 @@ static void PackShadowLights(LightGroup* g)
 	for (int i = 0; i < g->numSpotLights; i++)
 	{
 		InternalSpotLight& l = *g->spots[i];
-		if (l.hasShadow && l.isActive)
+		if (l.hasShadow)
 		{
 			const auto& r = rectangles.at(curRecIdx);
 			l.mapped.x = r.x; l.mapped.y = r.y; l.mapped.w = r.w; l.mapped.h = r.h;
@@ -1278,7 +1291,7 @@ static void PackShadowLights(LightGroup* g)
 		}
 	}
 }
-static void CheckShadowGroupAndDeleteIfEmpty(Renderer* r, LightGroup* g)
+static void CheckShadowGroupAndDeleteIfEmpty(LightGroup* g)
 {
 	if (g->shadowGroup.numUsedProjections > 0) return;
 
@@ -1976,14 +1989,17 @@ void RELI_Update(struct LightGroup* group)
 		data.dirLights[i] = l.light.light;
 		if (l.hasShadow)
 		{
-			float scaleX = (float)l.map[0].w / (float)ShadowLightGroup::shadowTextureSize;
-			float scaleY = (float)l.map[0].h / (float)ShadowLightGroup::shadowTextureSize;
+			float xStart = (float)l.map[0].x / (float)ShadowLightGroup::shadowTextureSize;
+			float yStart = (float)l.map[0].y / (float)ShadowLightGroup::shadowTextureSize;
+			float xEnd = (float)l.map[0].w / (float)ShadowLightGroup::shadowTextureSize + xStart;
+			float yEnd = (float)l.map[0].h / (float)ShadowLightGroup::shadowTextureSize + yStart;
 			glm::mat4 mat = CA_CreateOrthoView(l.light.pos, l.light.light.direction, 30.0f, 30.0f, 0.1f, 1000.0f);
-
-			mat = glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, -1.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f * scaleX, 0.5f * scaleY, 1.0f)) * glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, 0.0f)) * mat;
 			data.projections[curProjIdx].proj = mat;
-			group->shadowGroup.projections[curProjIdx].proj = mat;
+			data.projections[curProjIdx].start = { xStart, yStart };
+			data.projections[curProjIdx].end = { xEnd, yEnd };
+			group->shadowGroup.projections[curProjIdx] = data.projections[curProjIdx];
 			l.light.light.projIdx = curProjIdx;
+			data.dirLights[i].projIdx = curProjIdx;
 			curProjIdx++;
 		}
 		else
@@ -2007,13 +2023,25 @@ void RELI_Update(struct LightGroup* group)
 	for (int i = 0; i < group->numSpotLights; i++)
 	{
 		InternalSpotLight& l = *group->spots[i];
+		data.spotLights[i] = l.light.light;
 		if (l.hasShadow)
 		{
-
+			float xStart = (float)l.mapped.x / (float)ShadowLightGroup::shadowTextureSize;
+			float yStart = (float)l.mapped.y / (float)ShadowLightGroup::shadowTextureSize;
+			float xEnd = (float)l.mapped.w / (float)ShadowLightGroup::shadowTextureSize + xStart;
+			float yEnd = (float)l.mapped.h / (float)ShadowLightGroup::shadowTextureSize + yStart;
+			glm::mat4 mat = CA_CreatePerspectiveView(l.light.light.pos, l.light.light.direction, M_PI - l.light.light.cutOff, l.mapped.w, l.mapped.h, 0.1f, 1000.0f);
+			data.projections[curProjIdx].proj = mat;
+			data.projections[curProjIdx].start = { xStart, yStart };
+			data.projections[curProjIdx].end = { xEnd, yEnd };
+			group->shadowGroup.projections[curProjIdx] = data.projections[curProjIdx];
+			l.light.light.projIdx = curProjIdx;
+			data.spotLights[i].projIdx = curProjIdx;
+			curProjIdx++;
 		}
 		else
 		{
-			data.spotLights[i] = l.light.light;
+			data.spotLights[i].projIdx = -1;
 		}
 	}
 
@@ -2201,10 +2229,94 @@ DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_
 }
 void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight* light)
 {
-	
-	
+	const uintptr_t idx = ((uintptr_t)light - (uintptr_t)&group->dirLights[0]) / sizeof(InternalDirLight);
+	if (idx < MAX_NUM_LIGHTS && group->dirLights[idx].isActive)
+	{
+		InternalDirLight* l = &group->dirLights[idx];
+		if (l->useCascades)
+		{
+			group->shadowGroup.numUsedProjections -= 4;
+		}
+		else
+		{
+			group->shadowGroup.numUsedProjections -= 1;
+		}
+		memset(l, 0, sizeof(InternalDirLight));
+		InternalDirLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		int curListIdx = 0;
+		for (int i = 0; i < group->numDirLights; i++)
+		{
+			if (group->dirs[i] == l)
+			{
+				group->dirs[i] = nullptr;
+			}
+			else
+			{
+				remainingList[curListIdx] = group->dirs[i];
+				curListIdx++;
+			}
+		}
+		memcpy(group->dirs, remainingList, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		group->numDirLights--;
+	}
+	CheckShadowGroupAndDeleteIfEmpty(group);
 }
+SpotShadowLight* RELI_AddSpotShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight)
+{
+	if (shadowWidth > 0x1000 || shadowHeight > 0x1000 || group->numDirLights >= MAX_NUM_LIGHTS) return nullptr;
+	if (!group->shadowGroup.fbo)
+	{
+		AddShadowLightGroup(group);
+	}
 
+	SpotShadowLight* light = nullptr;
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++)
+	{
+		if (!group->spotLights[i].isActive)
+		{
+			light = &group->spotLights[i].light;
+			group->spotLights[i].hasShadow = true;
+			group->spotLights[i].isActive = true;
+			group->spots[group->numSpotLights] = &group->spotLights[i];
+			group->spotLights[i].mapped = { 0, 0, (uint16_t)shadowWidth, (uint16_t)shadowHeight };
+
+			group->numSpotLights++;
+			group->shadowGroup.numUsedProjections++;
+			break;
+		}
+	}
+
+	PackShadowLights(group);
+	return light;
+}
+void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light)
+{
+	const uintptr_t idx = ((uintptr_t)light - (uintptr_t)&group->spotLights[0]) / sizeof(InternalSpotLight);
+	if (idx < MAX_NUM_LIGHTS && group->spotLights[idx].isActive)
+	{
+		InternalSpotLight* l = &group->spotLights[idx];
+		group->shadowGroup.numUsedProjections -= 1;
+		memset(l, 0, sizeof(InternalSpotLight));
+
+		InternalSpotLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		int curListIdx = 0;
+		for (int i = 0; i < group->numSpotLights; i++)
+		{
+			if (group->spots[i] == l)
+			{
+				group->spots[i] = nullptr;
+			}
+			else
+			{
+				remainingList[curListIdx] = group->spots[i];
+				curListIdx++;
+			}
+		}
+		memcpy(group->spots, remainingList, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		group->numSpotLights--;
+	}
+	CheckShadowGroupAndDeleteIfEmpty(group);
+}
 
 
 
@@ -2249,11 +2361,21 @@ void RE_RenderShadows(struct Renderer* renderer)
 	LightGroup* g = renderer->currentLightData;
 	if (!g->shadowGroup.fbo) return;
 
-	glEnable(GL_SCISSOR_TEST);
 	glEnable(GL_POLYGON_OFFSET_FILL);
 	glPolygonOffset(2.0f, 4.0f);
 
+	glUseProgram(renderer->pbrData.geomProgram);
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glDepthFunc(GL_LEQUAL);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, g->shadowGroup.fbo);
+	glClearDepthf(1.0f);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	{
+		glm::mat4 mat(1.0f);
+		glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+	}
 	for (int i = 0; i < g->numDirLights; i++)
 	{
 		if (g->dirs[i]->hasShadow)
@@ -2261,21 +2383,10 @@ void RE_RenderShadows(struct Renderer* renderer)
 			const InternalDirLight& l = *g->dirs[i];
 			if (l.light.light.projIdx < 0) continue;
 
-			glViewport(0, 0, ShadowLightGroup::shadowTextureSize, ShadowLightGroup::shadowTextureSize);
-			glScissor(l.map[0].x, l.map[0].y, l.map[0].w, l.map[0].h);
-			glClearDepthf(1.0f);
-			glClear(GL_DEPTH_BUFFER_BIT);
-
-
-			glUseProgram(renderer->pbrData.geomProgram);
-			glEnable(GL_DEPTH_TEST);
-			glDisable(GL_BLEND);
-			glDepthFunc(GL_LEQUAL);
+			glViewport(l.map[0].x, l.map[0].y, l.map[0].w, l.map[0].h);
 
 			
-			glm::mat4 mat(1.0f);
 			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.pos);
-			glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
 
 			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
@@ -2300,10 +2411,43 @@ void RE_RenderShadows(struct Renderer* renderer)
 			}
 		}
 	}
+	for (int i = 0; i < g->numSpotLights; i++)
+	{
+		if (g->spots[i]->hasShadow)
+		{
+			const InternalSpotLight& l = *g->spots[i];
+			if (l.light.light.projIdx < 0) continue;
 
-	
+			glViewport(l.mapped.x, l.mapped.y, l.mapped.w, l.mapped.h);
+			
+			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.light.pos);
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
+
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+
+			for (uint32_t i = 0; i < renderer->numObjs; i++)
+			{
+				SceneObject* obj = renderer->objList[i];
+				if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+				{
+					glm::mat4 mat = obj->transform * obj->model->baseTransform;
+					glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+
+					glBindVertexArray(obj->model->vao);
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+					for (uint32_t j = 0; j < obj->model->numMeshes; j++)
+					{
+						Mesh* m = &obj->model->meshes[j];
+						BindMaterialGeometry(renderer, m->material);
+						glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+					}
+				}
+			}
+
+		}
+	}
+
 	glDisable(GL_POLYGON_OFFSET_FILL);
-	glDisable(GL_SCISSOR_TEST);
 }
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side)

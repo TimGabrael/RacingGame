@@ -82,7 +82,6 @@ struct SpotLight
 struct SpotShadowLight
 {
 	SpotLight light;
-	glm::vec3 pos;
 };
 
 enum CUBE_MAP_SIDE
@@ -164,7 +163,8 @@ void RELI_RemoveSpotLight(struct LightGroup* group, SpotLight* light);
 
 DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight, bool useCascade);
 void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight* light);
-
+SpotShadowLight* RELI_AddSpotShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight);
+void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light);
 
 
 

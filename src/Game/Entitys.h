@@ -7,6 +7,7 @@ struct PlayerInputData
 	bool back = false;
 	bool right = false;
 	bool left = false;
+	bool mouseDown = false;
 };
 
 
