@@ -34,7 +34,7 @@ int main()
 	base.material = nullptr;
 	base.model = model;
 	base.rigidBody = nullptr;
-	base.transform = glm::mat4(1.0f);// glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1000.0f, 1000.0f));
+	base.transform = glm::mat4(1.0f);
 	SC_AddStaticObject(game->scene, &base);
 
 	base.model = boomBox;

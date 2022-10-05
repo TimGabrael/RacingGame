@@ -366,8 +366,33 @@ void main()\n\
 		float shadowVal = 1.0f;\n\
 		if(lights.pointLights[i].projIdx > -1)\n\
 		{\n\
-			for(int j = 0; j < 6; j++)\n\
-				shadowVal = min(shadowVal, calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 2], ts));\n\
+			vec3 ptw = normalize(worldPos - lights.pointLights[i].pos.xyz);\n\
+			if(abs(ptw.x) > abs(ptw.y))\n\
+			{\n\
+				if(abs(ptw.x) > abs(ptw.z))\n\
+				{\n\
+					if(ptw.x < 0.0f) shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx], ts);\n\
+					else shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 1], ts);\n\
+				}\n\
+				else\n\
+				{\n\
+					if(ptw.z < 0.0f) shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 4], ts);\n\
+					else shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 5], ts);\n\
+				}\n\
+			}\n\
+			else\n\
+			{\n\
+				if(abs(ptw.y) > abs(ptw.z))\n\
+				{\n\
+					if(ptw.y < 0.0f) shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 2], ts);\n\
+					else shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 3], ts);\n\
+				}\n\
+				else\n\
+				{\n\
+					if(ptw.z < 0.0f) shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 4], ts);\n\
+					else shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 5], ts);\n\
+				}\n\
+			}\n\
 		}\n\
 		vec3 l = normalize(lights.pointLights[i].pos.xyz - worldPos);\n\
 		vec3 h = normalize(l+v);\n\
@@ -2017,9 +2042,9 @@ void RELI_Update(struct LightGroup* group)
 	{
 		InternalPointLight& l = *group->points[i];
 		data.pointLights[i] = l.light.light;
-		l.light.light.projIdx = curProjIdx;
 		if (l.hasShadow)
 		{
+			l.light.light.projIdx = curProjIdx;
 			data.pointLights[i].projIdx = curProjIdx;
 			for (int j = 0; j < 6; j++)
 			{
@@ -2346,7 +2371,7 @@ void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light
 }
 PointShadowLight* RELI_AddPointShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight)
 {
-	if (shadowWidth > 0x1000 || shadowHeight > 0x1000 || group->numDirLights >= MAX_NUM_LIGHTS || (group->shadowGroup.numUsedProjections + 6) >= MAX_NUM_LIGHTS) return nullptr;
+	if (shadowWidth > 0x1000 || shadowHeight > 0x1000 || group->numPointLights >= MAX_NUM_LIGHTS || (group->shadowGroup.numUsedProjections + 6) >= MAX_NUM_LIGHTS) return nullptr;
 	if (!group->shadowGroup.fbo)
 	{
 		AddShadowLightGroup(group);
@@ -2360,7 +2385,7 @@ PointShadowLight* RELI_AddPointShadowLight(struct LightGroup* group, uint16_t sh
 			light = &group->pointLights[i].light;
 			group->pointLights[i].hasShadow = true;
 			group->pointLights[i].isActive = true;
-			group->points[group->numSpotLights] = &group->pointLights[i];
+			group->points[group->numPointLights] = &group->pointLights[i];
 			for(int j = 0; j < 6; j++)
 				group->pointLights[i].map[j] = {0, 0, (uint16_t)shadowWidth, (uint16_t)shadowHeight};
 

@@ -49,6 +49,10 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	point->light.pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
+	point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
+	point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	point->light.pos = { 0.0f, 20.0f, 10.0f, 0.0f };
+
 	RELI_Update(out->defaultLightGroup);
 
 
