@@ -106,8 +106,8 @@ struct AntialiasingRenderData
 	GLuint intermediateTexture;
 	GLuint intermediateDepth;
 	
-	GLuint width;
-	GLuint height;
+	uint32_t width;
+	uint32_t height;
 	uint32_t msaaCount;
 };
 struct PostProcessingRenderData
@@ -116,6 +116,8 @@ struct PostProcessingRenderData
 	GLuint* ppFBOs2;
 	GLuint ppTexture1;
 	GLuint ppTexture2;
+
+	GLuint intermediateFbo;
 	GLuint intermediateTexture;
 
 	uint32_t width;
@@ -124,12 +126,27 @@ struct PostProcessingRenderData
 	float bloomIntensity;
 	int numPPFbos; // numPPFbos == min(numMipMaps, MAX_BLOOM_MIPMAPS)
 };
+struct ScreenSpaceReflectionRenderData
+{
+	GLuint fbo;
+	GLuint normalAndDepthTexture;
+	GLuint metallicTexture;
 
+	uint32_t width;
+	uint32_t height;
+};
 
 
 
 struct Renderer* RE_CreateRenderer(struct AssetManager* assets);
 void RE_CleanUpRenderer(struct Renderer* renderer);
+
+
+
+
+
+
+
 
 
 
@@ -140,6 +157,20 @@ void RE_CleanUpAntialiasingData(AntialiasingRenderData* data);
 
 void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t width, uint32_t height);
 void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data);
+
+void RE_CreateScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* data, uint32_t width, uint32_t height);
+void RE_CleanUpScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* data);
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -161,12 +192,23 @@ SpotLight* RELI_AddSpotLight(struct LightGroup* group);
 void RELI_RemoveSpotLight(struct LightGroup* group, SpotLight* light);
 
 
+
+
 DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight, bool useCascade);
 void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight* light);
 SpotShadowLight* RELI_AddSpotShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight);
 void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light);
 PointShadowLight* RELI_AddPointShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight);
 void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* light);
+
+
+
+
+
+
+
+
+
 
 
 
@@ -196,7 +238,17 @@ void RE_RenderTransparent(struct Renderer* renderer);
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap);
 
 
+
+
+
+// THIS LOOKS REALLY BAD AND PERFORMCE HORRIBLY, BUT MAYBE THE UNIFORM DATA NEEDS TO BE CONFIGURED BETTER
+void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
+
+
 void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
+
+
+
 
 
 void RE_EndScene(struct Renderer* renderer);

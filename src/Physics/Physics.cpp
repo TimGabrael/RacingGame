@@ -66,6 +66,15 @@ void PH_CleanUpPhysicsScene(struct PhysicsScene* scene)
 	scene->physicsSDK->release();
 }
 
+void PH_Update(PhysicsScene* scene, float dt)
+{
+	scene->scene->simulate(dt);
+	while (!scene->scene->fetchResults())
+	{
+
+	}
+}
+
 
 RigidBody* PH_AddStaticRigidBody(struct PhysicsScene* scene)
 {

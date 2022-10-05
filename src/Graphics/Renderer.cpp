@@ -491,8 +491,95 @@ void main()\n\
 		discard;\n\
 	}\n\
 }";
-
-
+const char* ssrPbrFragmentShader = "#version 330\n\
+in vec3 worldPos;\n\
+in vec3 fragNormal;\n\
+in vec2 fragUV1;\n\
+in vec2 fragUV2;\n\
+in vec4 fragColor;\n\
+layout (std140) uniform Material {\n\
+	vec4 baseColorFactor;\n\
+	vec4 emissiveFactor;\n\
+	vec4 diffuseFactor;\n\
+	vec4 specularFactor;\n\
+	int baseColorUV;\n\
+	int normalUV;\n\
+	int emissiveUV;\n\
+	int aoUV;\n\
+	int metallicRoughnessUV;\n\
+	float roughnessFactor;\n\
+	float metallicFactor;\n\
+	float alphaMask;\n\
+	float alphaCutoff;\n\
+	float workflow;\n\
+}mat;\n\
+\n\
+const float c_MinRoughness = 0.04;\n\
+const float PBR_WORKFLOW_METALLIC_ROUGHNESS = 0.0;\n\
+const float PBR_WORKFLOW_SPECULAR_GLOSINESS = 1.0f;\n\
+\n\
+uniform sampler2D colorMap;\n\
+uniform sampler2D normalMap;\n\
+uniform sampler2D metallicRoughnessMap;\n\
+\n\
+uniform mat4 model; \n\
+uniform mat4 view; \n\
+uniform mat4 projection; \n\
+uniform vec3 camPos; \n\
+\n\
+vec3 getNormal()\n\
+{\n\
+	vec3 tangentNormal = texture(normalMap, mat.normalUV == 0 ? fragUV1 : fragUV2).xyz * 2.0f - 1.0f;\n\
+\n\
+	vec3 q1 = dFdx(worldPos);\n\
+	vec3 q2 = dFdy(worldPos);\n\
+	vec2 st1 = dFdx(fragUV1);\n\
+	vec2 st2 = dFdy(fragUV1);\n\
+\n\
+	vec3 N = normalize(fragNormal);\n\
+	vec3 T = normalize(q1 * st2.t - q2 * st1.t);\n\
+	vec3 B = -normalize(cross(N, T));\n\
+	mat3 TBN = mat3(T, B, N);\n\
+\n\
+	return normalize(TBN * tangentNormal);\n\
+}\n\
+float convertMetallic(vec3 diffuse, vec3 specular, float maxSpecular) {\n\
+	float perceivedDiffuse = sqrt(0.299f * diffuse.r * diffuse.r + 0.587f * diffuse.g * diffuse.g + 0.114f * diffuse.b * diffuse.b);\n\
+	float perceivedSpecular = sqrt(0.299f * specular.r * specular.r + 0.587f * specular.g * specular.g + 0.114f * specular.b * specular.b);\n\
+	if (perceivedSpecular < c_MinRoughness) {\n\
+		return 0.0;\n\
+	}\n\
+	float a = c_MinRoughness;\n\
+	float b = perceivedDiffuse * (1.0f - maxSpecular) / (1.0f - c_MinRoughness) + perceivedSpecular - 2.0f * c_MinRoughness;\n\
+	float c = c_MinRoughness - perceivedSpecular;\n\
+	float D = max(b * b - 4.0 * a * c, 0.0f);\n\
+	return clamp((-b + sqrt(D)) / (2.0f * a), 0.0f, 1.0f);\n\
+}\n\
+layout(location = 0) out vec4 outNormalDepth;\n\
+layout(location = 1) out vec4 outMetallic;\n\
+void main()\n\
+{\n\
+	float metallic;\n\
+	vec3 n = (mat.normalUV > -1) ? getNormal() : normalize(fragNormal);\n\
+	if (mat.workflow == PBR_WORKFLOW_METALLIC_ROUGHNESS) {\n\
+		metallic = mat.metallicFactor;\n\
+		if (mat.metallicRoughnessUV > -1) {\n\
+			vec4 mrSample = texture(metallicRoughnessMap, mat.metallicRoughnessUV == 0 ? fragUV1 : fragUV2);\n\
+			metallic = mrSample.b * metallic;\n\
+		}\n\
+		else {\n\
+			metallic = clamp(metallic, 0.0, 1.0);\n\
+		}\n\
+	}\n\
+		vec4 diffuse = texture(colorMap, fragUV1);\n\
+		vec3 specular = texture(metallicRoughnessMap, fragUV1).rgb;\n\
+		float maxSpecular = max(max(specular.r, specular.g), specular.b);\n\
+	if (mat.workflow == PBR_WORKFLOW_SPECULAR_GLOSINESS) {\n\
+		metallic = convertMetallic(diffuse.rgb, specular, maxSpecular);\n\
+	}\n\
+	outNormalDepth = vec4(n, gl_FragCoord.z);\n\
+	outMetallic = vec4(metallic);\n\
+}";
 
 
 
@@ -733,8 +820,7 @@ void main()\
     vec3 accum = 1.0f / 16.0f * (c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9);\
     outCol = vec4(accum, 1.0f);\
 }";
-static constexpr char* copyDualFragmentShader = "#version 300 es\n\
-precision highp float;\n\
+static constexpr char* copyDualFragmentShader = "#version 330\n\
 in vec2 UV;\
 in vec2 pos;\
 uniform sampler2D tex1;\
@@ -760,7 +846,128 @@ void main()\
     vec4 c = textureLod(tex1, UV, mipLevel1) + textureLod(tex2, UV, mipLevel2);\n\
     outCol = c;\
 }";
-
+static constexpr char* ssrFragmentShader = "#version 330\n\
+in vec2 UV;\n\
+in vec2 pos;\n\
+out vec4 outColor;\n\
+uniform sampler2D textureFrame;\n\
+uniform sampler2D textureNormDepth;\n\
+uniform sampler2D textureMetallic;\n\
+uniform mat4 proj;\n\
+uniform mat4 invProj;\n\
+uniform mat4 view;\n\
+uniform mat4 invView;\n\
+uniform float rayStep = 0.1f;\n\
+uniform int iterationCount = 100;\n\
+uniform float distanceBias = 0.03f;\n\
+uniform bool enableSSR = true;\n\
+uniform int sampleCount = 4;\n\
+uniform bool isSamplingEnabled = false;\n\
+uniform bool isExponentialStepEnabled = false;\n\
+uniform bool isAdaptiveStepEnabled = true;\n\
+uniform bool isBinarySearchEnabled = false;\n\
+uniform bool debugDraw = false;\n\
+uniform float samplingCoefficient = 0.001f;\n\
+float random(vec2 uv) {\n\
+	return fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453123); //simple random function\n\
+}\n\
+vec3 generatePositionFromDepth(vec2 texturePos, float depth) {\n\
+	vec4 ndc = vec4((texturePos - 0.5) * 2, depth, 1.f);\n\
+	vec4 inversed = invProj * ndc;// going back from projected\n\
+	inversed /= inversed.w;\n\
+	return inversed.xyz;\n\
+}\n\
+vec2 generateProjectedPosition(vec3 pos) {\n\
+	vec4 samplePosition = proj * vec4(pos, 1.f);\n\
+	samplePosition.xy = (samplePosition.xy / samplePosition.w) * 0.5 + 0.5;\n\
+	return samplePosition.xy;\n\
+}\n\
+vec3 SSR(vec3 position, vec3 reflection) {\n\
+	vec3 step = rayStep * reflection;\n\
+	vec3 marchingPosition = position + step;\n\
+	float delta;\n\
+	float depthFromScreen;\n\
+	vec2 screenPosition;\n\
+	int i = 0;\n\
+	for (; i < iterationCount; i++) {\n\
+		screenPosition = generateProjectedPosition(marchingPosition);\n\
+		depthFromScreen = abs(generatePositionFromDepth(screenPosition, texture(textureNormDepth, screenPosition).w).z);\n\
+		delta = abs(marchingPosition.z) - depthFromScreen;\n\
+		if (abs(delta) < distanceBias) {\n\
+			vec3 color = vec3(1);\n\
+			if (debugDraw)\n\
+				color = vec3(0.5 + sign(delta) / 2, 0.3, 0.5 - sign(delta) / 2);\n\
+			return texture(textureFrame, screenPosition).xyz * color;\n\
+		}\n\
+		if (isBinarySearchEnabled && delta > 0) {\n\
+			break;\n\
+		}\n\
+		if (isAdaptiveStepEnabled) {\n\
+			float directionSign = sign(abs(marchingPosition.z) - depthFromScreen);\n\
+			step = step * (1.0 - rayStep * max(directionSign, 0.0));\n\
+			marchingPosition += step * (-directionSign);\n\
+		}\n\
+		else {\n\
+			marchingPosition += step;\n\
+		}\n\
+		if (isExponentialStepEnabled) {\n\
+			step *= 1.05;\n\
+		}\n\
+	}\n\
+	if (isBinarySearchEnabled) {\n\
+		for (; i < iterationCount; i++) {\n\
+			step *= 0.5;\n\
+			marchingPosition = marchingPosition - step * sign(delta);\n\
+			screenPosition = generateProjectedPosition(marchingPosition);\n\
+			depthFromScreen = abs(generatePositionFromDepth(screenPosition, texture(textureNormDepth, screenPosition).w).z);\n\
+			delta = abs(marchingPosition.z) - depthFromScreen;\n\
+			if (abs(delta) < distanceBias) {\n\
+				vec3 color = vec3(1);\n\
+				if (debugDraw)\n\
+					color = vec3(0.5 + sign(delta) / 2, 0.3, 0.5 - sign(delta) / 2);\n\
+				return texture(textureFrame, screenPosition).xyz * color;\n\
+			}\n\
+		}\n\
+	}\n\
+	return vec3(0.0);\n\
+}\n\
+void main() {\n\
+	vec3 position = generatePositionFromDepth(UV, texture(textureNormDepth, UV).w);\n\
+	vec4 normal = view * vec4(texture(textureNormDepth, UV).xyz, 0.0);\n\
+	float metallic = 1.0f;//texture(textureMetallic, UV).r;\n\
+	if (!enableSSR || metallic < 0.01) {\n\
+		outColor = texture(textureFrame, UV);\n\
+	}\n\
+	else {\n\
+		vec3 reflectionDirection = normalize(reflect(position, normalize(normal.xyz)));\n\
+		if (isSamplingEnabled) {\n\
+			vec3 firstBasis = normalize(cross(vec3(0.f, 0.f, 1.f), reflectionDirection));\n\
+			vec3 secondBasis = normalize(cross(reflectionDirection, firstBasis));\n\
+			vec4 resultingColor = vec4(0.f);\n\
+			for (int i = 0; i < sampleCount; i++) {\n\
+				vec2 coeffs = vec2(random(UV + vec2(0, i)) + random(UV + vec2(i, 0))) * samplingCoefficient;\n\
+				vec3 reflectionDirectionRandomized = reflectionDirection + firstBasis * coeffs.x + secondBasis * coeffs.y;\n\
+				vec3 tempColor = SSR(position, normalize(reflectionDirectionRandomized));\n\
+				if (tempColor != vec3(0.f)) {\n\
+					resultingColor += vec4(tempColor, 1.f);\n\
+				}\n\
+			}\n\
+			if (resultingColor.w == 0) {\n\
+				outColor = texture(textureFrame, UV);\n\
+			}\n\
+			else {\n\
+				resultingColor /= resultingColor.w;\n\
+				outColor = vec4(resultingColor.xyz, 1.f);\n\
+			}\n\
+		}\n\
+		else {\n\
+			outColor = vec4(SSR(position, normalize(reflectionDirection)), 1.f);\n\
+			if (outColor.xyz == vec3(0.f)) {\n\
+				outColor = texture(textureFrame, UV);\n\
+			}\n\
+		}\n\
+	}\n\
+}";
 
 
 
@@ -1000,6 +1207,15 @@ struct BaseGeometryProgramUniforms
 	GLuint boneDataLoc;
 	GLuint materialDataLoc;
 };
+struct BaseSSRProgramUniforms
+{
+	GLuint modelLoc;
+	GLuint viewLoc;
+	GLuint projLoc;
+	GLuint camPosLoc;
+	GLuint boneDataLoc;
+	GLuint materialDataLoc;
+};
 
 enum BASE_SHADER_TEXTURE
 {
@@ -1039,6 +1255,8 @@ struct PBRRenderInfo
 	BaseProgramUniforms baseUniforms;
 	GLuint geomProgram;
 	BaseGeometryProgramUniforms geomUniforms;
+	GLuint ssrProgram;
+	BaseSSRProgramUniforms ssrUniforms;
 	GLuint defaultBoneData;
 	GLuint brdfLut;
 };
@@ -1080,6 +1298,25 @@ struct PostProcessingRenderInfo
 		GLuint program;
 		GLuint mipLevelLoc;
 	}upsampling;
+	struct ScreenSpaceReflection
+	{
+		GLuint program;
+		GLuint projLoc;
+		GLuint invProjLoc;
+		GLuint viewLoc;
+		GLuint invViewLoc;
+		GLuint rayStepLoc;
+		GLuint iterationCountLoc;
+		GLuint distanceBiasLoc;
+		GLuint enableSSRLoc;
+		GLuint sampleCountLoc;
+		GLuint isSamplingEnabledLoc;
+		GLuint isExponentialStepEnabledLoc;
+		GLuint isAdaptiveStepEnabledLoc;
+		GLuint isBinarySearchEnabledLoc;
+		GLuint debugDrawLoc;
+		GLuint samplingCoefficientLoc;
+	}ssr;
 };
 
 struct ProjectionData
@@ -1385,6 +1622,31 @@ static void BindMaterialGeometry(Renderer* r, Material* mat)
 		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 	}
 }
+static void BindMaterialSSR(Renderer* r, Material* mat)
+{
+	if (mat)
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.ssrUniforms.materialDataLoc, mat->uniform);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
+		if (mat->tex.baseColor) glBindTexture(GL_TEXTURE_2D, mat->tex.baseColor->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_NORMALMAP);
+		if (mat->tex.normal) glBindTexture(GL_TEXTURE_2D, mat->tex.normal->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
+		if (mat->tex.metallicRoughness) glBindTexture(GL_TEXTURE_2D, mat->tex.metallicRoughness->uniform);
+		else glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+	}
+	else
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_NORMALMAP);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
+		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
+	}
+}
 static BaseProgramUniforms LoadBaseProgramUniformsLocationsFromProgram(GLuint program)
 {
 	BaseProgramUniforms un;
@@ -1455,6 +1717,31 @@ static BaseGeometryProgramUniforms LoadBaseGeometryProgramUniformLocationsFromPr
 	glUniform1i(curTexture, BASE_SHADER_TEXTURE_COLORMAP);
 	return un;
 }
+static BaseSSRProgramUniforms LoadBaseSSRProgramUniformLocationsFromProgram(GLuint program)
+{
+	BaseSSRProgramUniforms un;
+	un.modelLoc = glGetUniformLocation(program, "model");
+	un.viewLoc = glGetUniformLocation(program, "view");
+	un.projLoc = glGetUniformLocation(program, "projection");
+	un.camPosLoc = glGetUniformLocation(program, "camPos");
+
+	un.boneDataLoc = glGetUniformBlockIndex(program, "BoneData");
+	glUniformBlockBinding(program, un.boneDataLoc, un.boneDataLoc);
+	un.materialDataLoc = glGetUniformBlockIndex(program, "Material");
+	glUniformBlockBinding(program, un.materialDataLoc, un.materialDataLoc);
+
+	glUseProgram(program);
+	GLuint curTexture = glGetUniformLocation(program, "colorMap");
+	if (curTexture == -1) { LOG("failed to Get colorMap Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_COLORMAP);
+	curTexture = glGetUniformLocation(program, "normalMap");
+	if (curTexture == -1) { LOG("failed to Get normalMap Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_NORMALMAP);
+	curTexture = glGetUniformLocation(program, "metallicRoughnessMap");
+	if (curTexture == -1) { LOG("failed to Get metallicRoughnessMap Texture Loaction of GLTF shader program\n"); }
+	glUniform1i(curTexture, BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
+	return un;
+}
 static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 {
 	info->blur.program = CreateProgram(quadFilterVertexShader, blurFragmentShader);
@@ -1462,6 +1749,7 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	info->copy.program = CreateProgram(quadFilterVertexShader, copyFragmentShader);
 	info->dualCopy.program = CreateProgram(quadFilterVertexShader, copyDualFragmentShader);
 	info->upsampling.program = CreateProgram(quadFilterVertexShader, upsamplingFragmentShader);
+	info->ssr.program = CreateProgram(quadFilterVertexShader, ssrFragmentShader);
 
 	info->blur.radiusLoc = glGetUniformLocation(info->blur.program, "blurRadius");
 	info->blur.axisLoc = glGetUniformLocation(info->blur.program, "axis");
@@ -1483,8 +1771,33 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	idx = glGetUniformLocation(info->dualCopy.program, "tex2");
 	glUniform1i(idx, 1);
 
-
 	info->upsampling.mipLevelLoc = glGetUniformLocation(info->upsampling.program, "mipLevel");
+
+
+
+	info->ssr.projLoc = glGetUniformLocation(info->ssr.program, "proj");
+	info->ssr.invProjLoc = glGetUniformLocation(info->ssr.program, "invProj");
+	info->ssr.viewLoc = glGetUniformLocation(info->ssr.program, "view");
+	info->ssr.invViewLoc = glGetUniformLocation(info->ssr.program, "invView");
+	info->ssr.rayStepLoc = glGetUniformLocation(info->ssr.program, "rayStep");
+	info->ssr.iterationCountLoc = glGetUniformLocation(info->ssr.program, "iterationCount");
+	info->ssr.distanceBiasLoc = glGetUniformLocation(info->ssr.program, "distanceBias");
+	info->ssr.enableSSRLoc = glGetUniformLocation(info->ssr.program, "enableSSR");
+	info->ssr.sampleCountLoc = glGetUniformLocation(info->ssr.program, "sampleCount");
+	info->ssr.isSamplingEnabledLoc = glGetUniformLocation(info->ssr.program, "isSamplingEnabled");
+	info->ssr.isExponentialStepEnabledLoc = glGetUniformLocation(info->ssr.program, "isExponentialStepEnabled");
+	info->ssr.isAdaptiveStepEnabledLoc = glGetUniformLocation(info->ssr.program, "isAdaptiveStepEnabled");
+	info->ssr.isBinarySearchEnabledLoc = glGetUniformLocation(info->ssr.program, "isBinarySearchEnabled");
+	info->ssr.debugDrawLoc = glGetUniformLocation(info->ssr.program, "debugDraw");
+	info->ssr.samplingCoefficientLoc = glGetUniformLocation(info->ssr.program, "samplingCoefficient");
+
+	glUseProgram(info->ssr.program);
+	idx = glGetUniformLocation(info->ssr.program, "textureFrame");
+	glUniform1i(idx, 0);
+	idx = glGetUniformLocation(info->ssr.program, "textureNormDepth");
+	glUniform1i(idx, 1);
+	idx = glGetUniformLocation(info->ssr.program, "textureMetallic");
+	glUniform1i(idx, 2);
 }
 static void CleanUpPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 {
@@ -1493,6 +1806,7 @@ static void CleanUpPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	glDeleteProgram(info->copy.program);
 	glDeleteProgram(info->dualCopy.program);
 	glDeleteProgram(info->upsampling.program);
+	glDeleteProgram(info->ssr.program);
 }
 
 
@@ -1517,6 +1831,10 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 
 		renderer->pbrData.geomProgram = CreateProgram(baseVertexShader, baseGeometryFragmentShader);
 		renderer->pbrData.geomUniforms = LoadBaseGeometryProgramUniformLocationsFromProgram(renderer->pbrData.geomProgram);
+
+		renderer->pbrData.ssrProgram = CreateProgram(baseVertexShader, ssrPbrFragmentShader);
+		renderer->pbrData.ssrUniforms = LoadBaseSSRProgramUniformLocationsFromProgram(renderer->pbrData.ssrProgram);
+		
 
 	}
 	// CREATE SKYBOX SHADER DATA
@@ -1938,20 +2256,28 @@ void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t 
 			}
 		}
 
-
+		glGenFramebuffers(1, &data->intermediateFbo);
+		glBindFramebuffer(GL_TEXTURE_2D, data->intermediateFbo);
 		glGenTextures(1, &data->intermediateTexture);
 		glBindTexture(GL_TEXTURE_2D, data->intermediateTexture);
-		glTexStorage2D(GL_TEXTURE_2D, data->intermediateTexture, GL_RGBA16F, width, height);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->intermediateTexture, 0);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG("FAILED  TO CREATE FRAMEBUFFER\n");
+		}
+		
 	}
 }
 void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data)
 {
-	
 	if(data->intermediateTexture) glDeleteTextures(1, &data->intermediateTexture);
+	if (data->intermediateFbo) glDeleteFramebuffers(1, &data->intermediateFbo);
 	if(data->ppTexture1) glDeleteTextures(1, &data->ppTexture1);
 	if(data->ppTexture2) glDeleteTextures(1, &data->ppTexture2);
 	if (data->ppFBOs1)
@@ -1971,6 +2297,53 @@ void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data)
 	data->ppTexture2 = 0;
 	data->intermediateTexture = 0;
 }
+
+void RE_CreateScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* data, uint32_t width, uint32_t height)
+{
+	data->width = width;
+	data->height = height;
+	glGenFramebuffers(1, &data->fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, data->fbo);
+	
+	glGenTextures(1, &data->normalAndDepthTexture);
+	glBindTexture(GL_TEXTURE_2D, data->normalAndDepthTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glGenTextures(1, &data->metallicTexture);
+	glBindTexture(GL_TEXTURE_2D, data->metallicTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->normalAndDepthTexture, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, data->metallicTexture, 0);
+
+	GLenum drawBuffers[2] = { GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1 };
+	glDrawBuffers(1, drawBuffers);
+	
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		LOG("FAILED TO CREATE FRAMEBUFFER\n");
+	}
+
+}
+void RE_CleanUpScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* data)
+{
+	if (data->normalAndDepthTexture) glDeleteTextures(1, &data->normalAndDepthTexture);
+	if (data->metallicTexture) glDeleteTextures(1, &data->metallicTexture);
+	if (data->fbo) glDeleteFramebuffers(1, &data->fbo);
+	memset(data, 0, sizeof(ScreenSpaceReflectionRenderData));
+}
+
+
+
+
 
 
 
@@ -2475,7 +2848,7 @@ void RE_RenderShadows(struct Renderer* renderer)
 	glUseProgram(renderer->pbrData.geomProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
-	glDepthFunc(GL_LEQUAL);
+	glDepthFunc(GL_LESS);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, g->shadowGroup.fbo);
 	glClearDepthf(1.0f);
@@ -2853,7 +3226,88 @@ void RE_EndScene(struct Renderer* renderer)
 
 
 
+void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
+{
+	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
 
+	glBindFramebuffer(GL_FRAMEBUFFER, ssrData->fbo);
+	glViewport(0, 0, ssrData->width, ssrData->height);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glUseProgram(renderer->pbrData.ssrProgram);
+
+	glUniform3fv(renderer->pbrData.ssrUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+
+	for (uint32_t i = 0; i < renderer->numObjs; i++)
+	{
+		SceneObject* obj = renderer->objList[i];
+		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+		{
+			glm::mat4 mat = obj->transform * obj->model->baseTransform;
+			glUniformMatrix4fv(renderer->pbrData.ssrUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+
+			glBindVertexArray(obj->model->vao);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
+			{
+				Mesh* m = &obj->model->meshes[j];
+				BindMaterialSSR(renderer, m->material);
+				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+			}
+		}
+	}
+
+	glm::mat4 invView = glm::inverse(renderer->currentCam->view);
+	glm::mat4 invProj = glm::inverse(renderer->currentCam->proj);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ONE, GL_ONE);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
+	glViewport(0, 0, targetWidth, targetHeight);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glUseProgram(renderer->ppInfo.ssr.program);
+
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, srcTexture);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, ssrData->normalAndDepthTexture);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, ssrData->metallicTexture);
+
+	const PostProcessingRenderInfo::ScreenSpaceReflection& ssr = renderer->ppInfo.ssr;
+	// uniform mat4 proj; \n\
+	// uniform mat4 invProj; \n\
+	// uniform mat4 view; \n\
+	// uniform mat4 invView; \n\
+	// uniform float rayStep = 0.2f; \n\
+	// uniform int iterationCount = 100; \n\
+	// uniform float distanceBias = 0.05f; \n\
+	// uniform bool enableSSR = false; \n\
+	// uniform int sampleCount = 4; \n\
+	// uniform bool isSamplingEnabled = false; \n\
+	// uniform bool isExponentialStepEnabled = false; \n\
+	// uniform bool isAdaptiveStepEnabled = true; \n\
+	// uniform bool isBinarySearchEnabled = true; \n\
+	// uniform bool debugDraw = false; \n\
+	// uniform float samplingCoefficient;
+
+	glUniformMatrix4fv(ssr.projLoc, 1, GL_FALSE, (GLfloat*)&renderer->currentCam->proj);
+	glUniformMatrix4fv(ssr.invProjLoc, 1, GL_FALSE, (GLfloat*)&invProj);
+	glUniformMatrix4fv(ssr.viewLoc, 1, GL_FALSE, (GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(ssr.invViewLoc, 1, GL_FALSE, (GLfloat*)&invView);
+
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+}
 void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {
 	glDisable(GL_BLEND);

@@ -45,20 +45,24 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	//point->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
-	PointShadowLight* point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
-	point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
-	point->light.pos = { 0.0f, 30.0f, 0.0f, 0.0f };
+	//PointShadowLight* point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
+	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	//point->light.pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
-	point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
-	point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
-	point->light.pos = { 0.0f, 20.0f, 10.0f, 0.0f };
+	//point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
+	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	//point->light.pos = { 0.0f, 20.0f, 10.0f, 0.0f };
+
+	//point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
+	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	//point->light.pos = { 0.0f, 20.0f, -10.0f, 0.0f };
+
 
 	RELI_Update(out->defaultLightGroup);
 
 
 	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 4);
 	RE_CreatePostProcessingRenderData(&out->PPbuffer, state->winWidth, state->winHeight);
-
 
 	out->localPlayer = nullptr;
 
@@ -68,7 +72,6 @@ void GM_CleanUpGameManager(GameManager* manager)
 {
 	RE_CleanUpAntialiasingData(&manager->AAbuffer);
 	RE_CleanUpPostProcessingRenderData(&manager->PPbuffer);
-
 }
 
 void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, float pitch)
@@ -104,6 +107,7 @@ void GM_OnResizeCallback(GameManager* game, int width, int height)
 	uint32_t prevSamples = game->AAbuffer.msaaCount;
 	RE_CleanUpAntialiasingData(&game->AAbuffer);
 	RE_CleanUpPostProcessingRenderData(&game->PPbuffer);
+	RE_CleanUpScreenSpaceReflectionRenderData(&game->SSRbuffer);
 
 	RE_CreateAntialiasingData(&game->AAbuffer, width, height, prevSamples);
 	RE_CreatePostProcessingRenderData(&game->PPbuffer, width, height);

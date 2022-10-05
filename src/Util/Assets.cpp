@@ -773,6 +773,7 @@ struct Texture* AM_AddTexture(AssetManager* m, const char* file)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		
 		m->textures[file] = resTex;
 		stbi_image_free(c);
 		return resTex;

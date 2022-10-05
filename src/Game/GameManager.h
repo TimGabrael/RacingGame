@@ -6,6 +6,7 @@ struct GameManager
 {
 	AntialiasingRenderData AAbuffer;
 	PostProcessingRenderData PPbuffer;
+	ScreenSpaceReflectionRenderData SSRbuffer;
 	struct LightGroup* defaultLightGroup;
 	EnvironmentData env;
 	Player* localPlayer;
