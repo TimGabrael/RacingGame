@@ -165,7 +165,8 @@ DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_
 void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight* light);
 SpotShadowLight* RELI_AddSpotShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight);
 void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light);
-
+PointShadowLight* RELI_AddPointShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight);
+void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* light);
 
 
 

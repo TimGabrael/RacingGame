@@ -18,16 +18,8 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 		AM_StoreEnvironment(&out->env, "Assets/Environment.menv");
 	}
 
-	// LightData lightData{};
-	// lightData.dirLights[0].direction = { 0.0f, -1.0f, 0.0f };
-	// lightData.dirLights[0].color = { 10.0f, 10.0f, 10.0f };
-	// lightData.dirLights[0].projIdx = -1;
-	// lightData.numDirLights = 1;
-	// lightData.ambientColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-
 	out->defaultLightGroup = RELI_AddLightGroup(renderer);
 
-	
 	DirectionalLight* l = RELI_AddDirectionalLight(out->defaultLightGroup);
 	l->direction = { 0.0f, -1.0f, 0.0f };
 	l->color = { 1.0f, 1.0f, 1.0f };
@@ -36,22 +28,26 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	//sl->pos = { 0.0f, 30.0f, 0.0f };
 	//sl->light.direction = { 0.0f, -1.0f, 0.0f };
 	//sl->light.color = { 2.0f, 2.0f, 2.0f };
-	
+	//
 	//SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
 	//spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };
 	//spot->direction = { 0.0f, -1.0f, 0.0f };
 	//spot->cutOff = M_PI_4;
 	//spot->pos = { 0.0f, 25.0f, 0.0f };
-
-	SpotShadowLight* spot = RELI_AddSpotShadowLight(out->defaultLightGroup, 2048, 2048);
-	spot->light.color = { 2.0f, 2.0f, 2.0f, 1.0f };
-	spot->light.direction = { 0.0f, -1.0f, 0.0f };
-	spot->light.cutOff = M_PI_4;
-	spot->light.pos = { 0.0f, 30.0f, 0.0f };
-
+	//
+	//SpotShadowLight* spot = RELI_AddSpotShadowLight(out->defaultLightGroup, 2048, 2048);
+	//spot->light.color = { 2.0f, 2.0f, 2.0f, 1.0f };
+	//spot->light.direction = { 0.0f, -1.0f, 0.0f };
+	//spot->light.cutOff = M_PI_4;
+	//spot->light.pos = { 0.0f, 30.0f, 0.0f };
+	//
 	//PointLight* point = RELI_AddPointLight(out->defaultLightGroup);
 	//point->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->pos = { 0.0f, 30.0f, 0.0f, 0.0f };
+
+	PointShadowLight* point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
+	point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	point->light.pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
 	RELI_Update(out->defaultLightGroup);
 

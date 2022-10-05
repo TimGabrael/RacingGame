@@ -228,7 +228,7 @@ float calculateShadowValue(ProjectionData p, vec2 textureStep)\n\
 	float shadowVal = 0.0f;\n\
 	vec4 shadowUV = p.proj * vec4(worldPos, 1.0f);\n\
 	shadowUV /= shadowUV.w; shadowUV.xyz += 1.0f; shadowUV.xyz *= 0.5f;\n\
-	shadowUV.xy *= p.end; shadowUV.xy += p.start;\n\
+	shadowUV.xy *= (p.end - p.start); shadowUV.xy += p.start;\n\
 	for(int x = -1; x <= 1; ++x)\n\
 	{\n\
 		for(int y = -1; y <= 1; ++y)\n\
@@ -363,6 +363,12 @@ void main()\n\
 	}\n\
 	for(int i = 0; i < lights.numPointLights; i++)\n\
 	{\n\
+		float shadowVal = 1.0f;\n\
+		if(lights.pointLights[i].projIdx > -1)\n\
+		{\n\
+			for(int j = 0; j < 6; j++)\n\
+				shadowVal = min(shadowVal, calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 2], ts));\n\
+		}\n\
 		vec3 l = normalize(lights.pointLights[i].pos.xyz - worldPos);\n\
 		vec3 h = normalize(l+v);\n\
 		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
@@ -374,7 +380,7 @@ void main()\n\
 		float D = microfacetDistribution(pbrInputs);\n\
 		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
 		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
-		color += pbrInputs.NdotL * lights.pointLights[i].color.rgb * (diffuseContrib + specContrib);\n\
+		color += pbrInputs.NdotL * shadowVal * lights.pointLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 	}\n\
 	for(int i = 0; i < lights.numSpotLights; i++)\n\
 	{\n\
@@ -1989,11 +1995,11 @@ void RELI_Update(struct LightGroup* group)
 		data.dirLights[i] = l.light.light;
 		if (l.hasShadow)
 		{
-			float xStart = (float)l.map[0].x / (float)ShadowLightGroup::shadowTextureSize;
-			float yStart = (float)l.map[0].y / (float)ShadowLightGroup::shadowTextureSize;
-			float xEnd = (float)l.map[0].w / (float)ShadowLightGroup::shadowTextureSize + xStart;
-			float yEnd = (float)l.map[0].h / (float)ShadowLightGroup::shadowTextureSize + yStart;
-			glm::mat4 mat = CA_CreateOrthoView(l.light.pos, l.light.light.direction, 30.0f, 30.0f, 0.1f, 1000.0f);
+			const float xStart = (float)l.map[0].x / (float)ShadowLightGroup::shadowTextureSize;
+			const float yStart = (float)l.map[0].y / (float)ShadowLightGroup::shadowTextureSize;
+			const float xEnd = (float)l.map[0].w / (float)ShadowLightGroup::shadowTextureSize + xStart;
+			const float yEnd = (float)l.map[0].h / (float)ShadowLightGroup::shadowTextureSize + yStart;
+			const glm::mat4 mat = CA_CreateOrthoView(l.light.pos, l.light.light.direction, 30.0f, 30.0f, 0.1f, 1000.0f);
 			data.projections[curProjIdx].proj = mat;
 			data.projections[curProjIdx].start = { xStart, yStart };
 			data.projections[curProjIdx].end = { xEnd, yEnd };
@@ -2011,9 +2017,28 @@ void RELI_Update(struct LightGroup* group)
 	{
 		InternalPointLight& l = *group->points[i];
 		data.pointLights[i] = l.light.light;
+		l.light.light.projIdx = curProjIdx;
 		if (l.hasShadow)
 		{
-
+			data.pointLights[i].projIdx = curProjIdx;
+			for (int j = 0; j < 6; j++)
+			{
+				static constexpr glm::vec3 pDirs[6] = { 
+					{-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+					{0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+					{0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f}
+				};
+				const float xStart = (float)l.map[j].x / (float)ShadowLightGroup::shadowTextureSize;
+				const float yStart = (float)l.map[j].y / (float)ShadowLightGroup::shadowTextureSize;
+				const float xEnd = (float)l.map[j].w / (float)ShadowLightGroup::shadowTextureSize + xStart;
+				const float yEnd = (float)l.map[j].h / (float)ShadowLightGroup::shadowTextureSize + yStart;
+				const glm::mat4 mat = CA_CreatePerspectiveView(l.light.light.pos, pDirs[j], M_PI_2, l.map[j].w, l.map[j].h, 0.1f, 1000.0f);
+				data.projections[curProjIdx].proj = mat;
+				data.projections[curProjIdx].start = { xStart, yStart };
+				data.projections[curProjIdx].end = { xEnd, yEnd };
+				group->shadowGroup.projections[curProjIdx] = data.projections[curProjIdx];
+				curProjIdx++;
+			}
 		}
 		else
 		{
@@ -2026,11 +2051,11 @@ void RELI_Update(struct LightGroup* group)
 		data.spotLights[i] = l.light.light;
 		if (l.hasShadow)
 		{
-			float xStart = (float)l.mapped.x / (float)ShadowLightGroup::shadowTextureSize;
-			float yStart = (float)l.mapped.y / (float)ShadowLightGroup::shadowTextureSize;
-			float xEnd = (float)l.mapped.w / (float)ShadowLightGroup::shadowTextureSize + xStart;
-			float yEnd = (float)l.mapped.h / (float)ShadowLightGroup::shadowTextureSize + yStart;
-			glm::mat4 mat = CA_CreatePerspectiveView(l.light.light.pos, l.light.light.direction, M_PI - l.light.light.cutOff, l.mapped.w, l.mapped.h, 0.1f, 1000.0f);
+			const float xStart = (float)l.mapped.x / (float)ShadowLightGroup::shadowTextureSize;
+			const float yStart = (float)l.mapped.y / (float)ShadowLightGroup::shadowTextureSize;
+			const float xEnd = (float)l.mapped.w / (float)ShadowLightGroup::shadowTextureSize + xStart;
+			const float yEnd = (float)l.mapped.h / (float)ShadowLightGroup::shadowTextureSize + yStart;
+			const glm::mat4 mat = CA_CreatePerspectiveView(l.light.light.pos, l.light.light.direction, M_PI - l.light.light.cutOff, l.mapped.w, l.mapped.h, 0.1f, 1000.0f);
 			data.projections[curProjIdx].proj = mat;
 			data.projections[curProjIdx].start = { xStart, yStart };
 			data.projections[curProjIdx].end = { xEnd, yEnd };
@@ -2196,7 +2221,9 @@ DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_
 	{
 		AddShadowLightGroup(group);
 	}
-
+	if (useCascade) if ((group->shadowGroup.numUsedProjections + 4) >= MAX_NUM_LIGHTS) return nullptr;
+	else if ((group->shadowGroup.numUsedProjections + 1) >= MAX_NUM_LIGHTS) return nullptr;
+	
 	
 	DirShadowLight* light = nullptr;
 	for (int i = 0; i < MAX_NUM_LIGHTS; i++)
@@ -2263,7 +2290,7 @@ void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight*
 }
 SpotShadowLight* RELI_AddSpotShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight)
 {
-	if (shadowWidth > 0x1000 || shadowHeight > 0x1000 || group->numDirLights >= MAX_NUM_LIGHTS) return nullptr;
+	if (shadowWidth > 0x1000 || shadowHeight > 0x1000 || group->numDirLights >= MAX_NUM_LIGHTS || (group->shadowGroup.numUsedProjections + 1) >= MAX_NUM_LIGHTS) return nullptr;
 	if (!group->shadowGroup.fbo)
 	{
 		AddShadowLightGroup(group);
@@ -2317,7 +2344,63 @@ void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light
 	}
 	CheckShadowGroupAndDeleteIfEmpty(group);
 }
+PointShadowLight* RELI_AddPointShadowLight(struct LightGroup* group, uint16_t shadowWidth, uint16_t shadowHeight)
+{
+	if (shadowWidth > 0x1000 || shadowHeight > 0x1000 || group->numDirLights >= MAX_NUM_LIGHTS || (group->shadowGroup.numUsedProjections + 6) >= MAX_NUM_LIGHTS) return nullptr;
+	if (!group->shadowGroup.fbo)
+	{
+		AddShadowLightGroup(group);
+	}
 
+	PointShadowLight* light = nullptr;
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++)
+	{
+		if (!group->pointLights[i].isActive)
+		{
+			light = &group->pointLights[i].light;
+			group->pointLights[i].hasShadow = true;
+			group->pointLights[i].isActive = true;
+			group->points[group->numSpotLights] = &group->pointLights[i];
+			for(int j = 0; j < 6; j++)
+				group->pointLights[i].map[j] = {0, 0, (uint16_t)shadowWidth, (uint16_t)shadowHeight};
+
+			group->numPointLights++;
+			group->shadowGroup.numUsedProjections += 6;
+			break;
+		}
+	}
+
+	PackShadowLights(group);
+	return light;
+}
+void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* light)
+{
+	const uintptr_t idx = ((uintptr_t)light - (uintptr_t)&group->pointLights[0]) / sizeof(InternalPointLight);
+	if (idx < MAX_NUM_LIGHTS && group->pointLights[idx].isActive)
+	{
+		InternalPointLight* l = &group->pointLights[idx];
+		group->shadowGroup.numUsedProjections -= 6;
+		memset(l, 0, sizeof(InternalPointLight));
+
+		InternalPointLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		int curListIdx = 0;
+		for (int i = 0; i < group->numSpotLights; i++)
+		{
+			if (group->points[i] == l)
+			{
+				group->points[i] = nullptr;
+			}
+			else
+			{
+				remainingList[curListIdx] = group->points[i];
+				curListIdx++;
+			}
+		}
+		memcpy(group->points, remainingList, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		group->numPointLights--;
+	}
+	CheckShadowGroupAndDeleteIfEmpty(group);
+}
 
 
 
@@ -2376,6 +2459,28 @@ void RE_RenderShadows(struct Renderer* renderer)
 		glm::mat4 mat(1.0f);
 		glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 	}
+	static const auto stdRender = [&]()
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+		for (uint32_t i = 0; i < renderer->numObjs; i++)
+		{
+			SceneObject* obj = renderer->objList[i];
+			if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+			{
+				glm::mat4 mat = obj->transform * obj->model->baseTransform;
+				glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+
+				glBindVertexArray(obj->model->vao);
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+				for (uint32_t j = 0; j < obj->model->numMeshes; j++)
+				{
+					Mesh* m = &obj->model->meshes[j];
+					BindMaterialGeometry(renderer, m->material);
+					glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				}
+			}
+		}
+	};
 	for (int i = 0; i < g->numDirLights; i++)
 	{
 		if (g->dirs[i]->hasShadow)
@@ -2384,31 +2489,29 @@ void RE_RenderShadows(struct Renderer* renderer)
 			if (l.light.light.projIdx < 0) continue;
 
 			glViewport(l.map[0].x, l.map[0].y, l.map[0].w, l.map[0].h);
-
-			
 			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.pos);
 			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
 
-			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+			stdRender();
+		}
+	}
+	for (int i = 0; i < g->numPointLights; i++)
+	{
+		if (g->points[i]->hasShadow)
+		{
+			const InternalPointLight& l = *g->points[i];
+			if (l.light.light.projIdx < 0) continue;
+			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.light.pos);
 
-			for (uint32_t i = 0; i < renderer->numObjs; i++)
+			for (int j = 0; j < 6; j++)
 			{
-				SceneObject* obj = renderer->objList[i];
-				if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
-				{
-					glm::mat4 mat = obj->transform * obj->model->baseTransform;
-					glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
+				glViewport(l.map[j].x, l.map[j].y, l.map[j].w, l.map[j].h);
+				
+				glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx + j].proj);
 
-					glBindVertexArray(obj->model->vao);
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-					for (uint32_t j = 0; j < obj->model->numMeshes; j++)
-					{
-						Mesh* m = &obj->model->meshes[j];
-						BindMaterialGeometry(renderer, m->material);
-						glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-					}
-				}
+				stdRender();
 			}
+
 		}
 	}
 	for (int i = 0; i < g->numSpotLights; i++)
@@ -2423,27 +2526,7 @@ void RE_RenderShadows(struct Renderer* renderer)
 			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.light.pos);
 			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
 
-			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-
-			for (uint32_t i = 0; i < renderer->numObjs; i++)
-			{
-				SceneObject* obj = renderer->objList[i];
-				if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
-				{
-					glm::mat4 mat = obj->transform * obj->model->baseTransform;
-					glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
-
-					glBindVertexArray(obj->model->vao);
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-					for (uint32_t j = 0; j < obj->model->numMeshes; j++)
-					{
-						Mesh* m = &obj->model->meshes[j];
-						BindMaterialGeometry(renderer, m->material);
-						glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-					}
-				}
-			}
-
+			stdRender();
 		}
 	}
 
