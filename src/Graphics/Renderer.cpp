@@ -2118,41 +2118,41 @@ void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uin
 	data->width = width;
 	data->height = height;
 	data->msaaCount = numSamples;
+	if (numSamples > 0)
+	{
 
-	// only initialize depth if it is asked to finish the antialiased data (thats what i call it now)
-	data->intermediateDepth = 0;
-	data->intermediateFbo = 0;
-	data->intermediateTexture = 0;
+		// only initialize depth if it is asked to finish the antialiased data (thats what i call it now)
+		data->intermediateDepth = 0;
+		data->intermediateFbo = 0;
+		data->intermediateTexture = 0;
 
-	glGenFramebuffers(1, &data->fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, data->fbo);
+		glGenFramebuffers(1, &data->fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, data->fbo);
 
-	glGenTextures(1, &data->texture);
-	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->texture);
-	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_RGBA16F, width, height, GL_TRUE);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glGenTextures(1, &data->texture);
+		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->texture);
+		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_RGBA16F, width, height, GL_TRUE);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, data->texture, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, data->texture, 0);
 
-	glGenTextures(1, &data->depth);
-	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->depth);
-	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_DEPTH_COMPONENT32F, width, height, GL_TRUE);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, data->depth, 0);
+		glGenTextures(1, &data->depth);
+		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->depth);
+		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_DEPTH_COMPONENT32F, width, height, GL_TRUE);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, data->depth, 0);
 
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		LOG("FAILED TO CREATE ANTIALIASING FRAMEBUFFER\n");
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			LOG("FAILED TO CREATE ANTIALIASING FRAMEBUFFER\n");
+		}
 	}
-}
-void RE_FinishAntialiasingData(AntialiasingRenderData* data)
-{
-	if (!data->intermediateFbo)
+	else
 	{
 		glGenFramebuffers(1, &data->intermediateFbo);
 		glBindFramebuffer(GL_FRAMEBUFFER, data->intermediateFbo);
@@ -2174,15 +2174,51 @@ void RE_FinishAntialiasingData(AntialiasingRenderData* data)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
-		
+
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 			LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
 		}
+		data->fbo = data->intermediateFbo;
+		data->texture = data->intermediateTexture;
+		data->depth = data->intermediateDepth;
 	}
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, data->intermediateFbo);
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, data->fbo);
-	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-	glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+}
+void RE_FinishAntialiasingData(AntialiasingRenderData* data)
+{
+	if (data->msaaCount > 0)
+	{
+		if (!data->intermediateFbo)
+		{
+			glGenFramebuffers(1, &data->intermediateFbo);
+			glBindFramebuffer(GL_FRAMEBUFFER, data->intermediateFbo);
+
+			glGenTextures(1, &data->intermediateTexture);
+			glBindTexture(GL_TEXTURE_2D, data->intermediateTexture);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, data->width, data->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->intermediateTexture, 0);
+
+			glGenTextures(1, &data->intermediateDepth);
+			glBindTexture(GL_TEXTURE_2D, data->intermediateDepth);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
+
+			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+				LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
+			}
+		}
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, data->intermediateFbo);
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, data->fbo);
+		glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		glBlitFramebuffer(0, 0, data->width, data->height, 0, 0, data->width, data->height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+	}
 }
 void RE_CopyAntialiasingDataToFBO(AntialiasingRenderData* data, GLuint dstFbo, uint32_t dstWidth, uint32_t dstHeight)
 {
@@ -2195,18 +2231,21 @@ void RE_CopyAntialiasingDataToFBO(AntialiasingRenderData* data, GLuint dstFbo, u
 }
 void RE_CleanUpAntialiasingData(AntialiasingRenderData* data)
 {
-	if(data->fbo) glDeleteFramebuffers(1, &data->fbo);
-	if(data->texture) glDeleteTextures(1, &data->texture);
-	if(data->depth) glDeleteTextures(1, &data->depth);
+	if (data->msaaCount > 0)
+	{
+		if (data->fbo) glDeleteFramebuffers(1, &data->fbo);
+		if (data->texture) glDeleteTextures(1, &data->texture);
+		if (data->depth) glDeleteTextures(1, &data->depth);
+	}
 	if (data->intermediateFbo && data->intermediateTexture && data->intermediateDepth)
 	{
 		glDeleteFramebuffers(1, &data->intermediateFbo);
 		glDeleteTextures(1, &data->intermediateTexture);
 		glDeleteTextures(1, &data->depth);
-		data->intermediateFbo = 0;
-		data->intermediateDepth = 0;
-		data->intermediateTexture = 0;
 	}
+	data->intermediateFbo = 0;
+	data->intermediateDepth = 0;
+	data->intermediateTexture = 0;
 	data->fbo = 0;
 	data->texture = 0;
 	data->depth = 0;
@@ -2422,7 +2461,7 @@ void RELI_Update(struct LightGroup* group, const CameraBase* relativeCam)
 			{
 				CameraBase output;
 				float splitDepth = 0.0f;
-				CA_CreateOrthoTightFit(relativeCam, &output, l.light.light.direction, 0.0f, 0.5f, &splitDepth);
+				CA_CreateOrthoTightFit(relativeCam, &output, l.light.light.direction, 0.0f, 0.125f, &splitDepth);
 				mat = output.proj * output.view;
 				l.light.pos = output.pos;
 			}

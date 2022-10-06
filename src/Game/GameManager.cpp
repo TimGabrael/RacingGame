@@ -24,10 +24,10 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	l->direction = { 0.0f, -1.0f, 0.0f };
 	l->color = { 1.0f, 1.0f, 1.0f };
 
-	//DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 0x1000, 0x1000, false);
-	//sl->pos = { 0.0f, 30.0f, 0.0f };
-	//sl->light.direction = { 0.0f, -1.0f, 0.0f };
-	//sl->light.color = { 2.0f, 2.0f, 2.0f };
+	DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 0x1000, 0x1000, false);
+	sl->pos = { 0.0f, 30.0f, 0.0f };
+	sl->light.direction = { 0.0f, -1.0f, 0.0f };
+	sl->light.color = { 2.0f, 2.0f, 2.0f };
 	//
 	//SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
 	//spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };
@@ -61,7 +61,7 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	RELI_Update(out->defaultLightGroup, nullptr);
 
 
-	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 4);
+	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 0);
 	RE_CreatePostProcessingRenderData(&out->PPbuffer, state->winWidth, state->winHeight);
 
 	out->localPlayer = nullptr;

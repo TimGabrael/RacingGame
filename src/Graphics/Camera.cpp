@@ -85,7 +85,7 @@ void CA_CreateOrthoTightFit(const CameraBase* relativeCam, CameraBase* output, c
 	frustumCenter /= 8.0f;
 	float radius = 0.0f;
 	for (uint32_t i = 0; i < 8; i++) {
-		float distance = glm::length(frustumCorners[i] - frustumCenter);
+		float distance = glm::round(glm::length(frustumCorners[i] - frustumCenter));
 		radius = glm::max(radius, distance);
 	}
 
@@ -105,11 +105,13 @@ void CA_CreateOrthoTightFit(const CameraBase* relativeCam, CameraBase* output, c
 	}
 	glm::mat4 outOrthoMatrix = glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, 0.0f, maxExtents.z - minExtents.z);
 
+	LOG("outOrtho: %f %f %f %f %f\n", minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z);
+
 	const float vSSplitDepth = nearClipping + splitEnd * (farClipping - nearClipping) * -1.0f;
 	glm::vec4 splitDepthWorldSpace = relativeCam->proj * glm::vec4(vSSplitDepth, vSSplitDepth, vSSplitDepth, 1.0f);
 	*splitDepth = splitDepthWorldSpace.z / splitDepthWorldSpace.w;
 
-	output->pos = frustumCenter - outDir * -minExtents.z;
+	output->pos = glm::round(frustumCenter - outDir * -minExtents.z);
 	output->view = outViewMatrix;
 	output->proj = outOrthoMatrix;
 }
