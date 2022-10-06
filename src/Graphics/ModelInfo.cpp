@@ -31,6 +31,63 @@ void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx,
 
 	glBindVertexArray(0);
 }
+Model CreateModelFromVertices(Vertex3D* verts, uint32_t numVerts)
+{
+	Model m; memset(&m, 0, sizeof(Model));
+	GenerateModelVertexBuffer(&m.vao, &m.vertexBuffer, verts, numVerts);
+	m.bound = { glm::vec3(-FLT_MAX), glm::vec3(FLT_MAX) };
+	
+	m.meshes = new Mesh;
+	memset(m.meshes, 0, sizeof(Mesh));
+	m.numMeshes = 1;
+
+	m.meshes->bound = { glm::vec3(-FLT_MAX), glm::vec3(FLT_MAX) };
+	m.meshes->material = nullptr;
+	m.meshes->numInd = numVerts;
+	m.meshes->startIdx = 0;
+	m.baseTransform = glm::mat4(1.0f);
+
+	m.numIndices = numVerts;
+	m.numVertices = numVerts;
+	uint32_t* indices = new uint32_t[numVerts];
+	for (uint32_t i = 0; i < numVerts; i++)
+	{
+		indices[i] = i;
+	}
+	glGenBuffers(1, &m.indexBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.indexBuffer);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * numVerts, indices, GL_DYNAMIC_DRAW);
+	delete[] indices;
+	return m;
+}
+void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts)
+{
+	if (numVerts == 0) return;
+	glBindVertexArray(model->vao);
+	glBindBuffer(GL_ARRAY_BUFFER, model->vertexBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->indexBuffer);
+
+	model->numVertices = numVerts;
+	model->numIndices = numVerts;
+
+	model->meshes->bound = { glm::vec3(-FLT_MAX), glm::vec3(FLT_MAX) };
+	model->meshes->material = nullptr;
+	model->meshes->numInd = numVerts;
+	model->meshes->startIdx = 0;
+	model->baseTransform = glm::mat4(1.0f);
+	model->meshes->flags = MESH_FLAG_LINE;
+
+	uint32_t* indices = new uint32_t[numVerts];
+	for (uint32_t i = 0; i < numVerts; i++)
+	{
+		indices[i] = i;
+	}
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * numVerts, verts, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * numVerts, indices, GL_DYNAMIC_DRAW);
+
+
+	delete[] indices;
+}
 
 void CreateBoneDataFromAnimation(const Animation* anim, GLuint* uniform)
 {

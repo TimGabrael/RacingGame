@@ -1,6 +1,10 @@
 #pragma once
 #include "GLIncludes.h"
 
+enum MESH_FLAG
+{
+	MESH_FLAG_LINE = 1,
+};
 
 struct AABB
 {
@@ -80,6 +84,9 @@ struct Mesh
 };
 struct Model
 {
+	struct PhysicsConvexMesh* convexMesh;
+	struct PhysicsConcaveMesh* concaveMesh;
+
 	Material* materials;
 	Animation* animations;
 	Mesh* meshes;
@@ -104,7 +111,8 @@ struct Model
 
 
 void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx, uint32_t num);
-
+Model CreateModelFromVertices(Vertex3D* verts, uint32_t numVerts);
+void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts);
 
 void CreateBoneDataFromAnimation(const Animation* anim, GLuint* uniform);
 void UpdateBoneDataFromAnimation(const Animation* anim, GLuint uniform, float oldTime, float newTime);

@@ -20,7 +20,8 @@
 #include "stb_truetype.h"
 
 
-
+#include "../GameState.h"
+#include "../Physics/Physics.h"
 
 
 
@@ -80,7 +81,7 @@ void AM_CleanUpAssetManager(AssetManager* assets)
 
 }
 
-struct Model* AM_AddModel(AssetManager* m, const char* file)
+struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 {
 	bool isGlb = false;
 	bool isGltf = false;
@@ -326,6 +327,18 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 			glGenBuffers(1, &model->indexBuffer);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->indexBuffer);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * curIndPos, inds, GL_STATIC_DRAW);
+
+
+			GameState* game = GetGameState();
+			if (flags & MODEL_LOAD_CONVEX)
+			{
+				model->convexMesh = PH_AddPhysicsConvexMesh(game->physics, verts, curVertPos, sizeof(Vertex3D));
+			}
+			if (flags & MODEL_LOAD_CONCAVE)
+			{
+				model->concaveMesh = PH_AddPhysicsConcaveMesh(game->physics, verts, curVertPos, sizeof(Vertex3D), inds, curIndPos);
+			}
+
 
 			delete[] verts;
 			delete[] inds;
@@ -649,6 +662,16 @@ struct Model* AM_AddModel(AssetManager* m, const char* file)
 			glGenBuffers(1, &model->indexBuffer);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->indexBuffer);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * numInds, inds, GL_STATIC_DRAW);
+
+			GameState* game = GetGameState();
+			if (flags & MODEL_LOAD_CONVEX)
+			{
+				model->convexMesh = PH_AddPhysicsConvexMesh(game->physics, verts, numVerts, sizeof(Vertex3D));
+			}
+			if (flags & MODEL_LOAD_CONCAVE)
+			{
+				model->concaveMesh = PH_AddPhysicsConcaveMesh(game->physics, verts, numVerts, sizeof(Vertex3D), inds, numInds);
+			}
 
 			delete[] verts;
 			delete[] inds;

@@ -23,26 +23,42 @@ int main()
 	GameState* game = CreateGameState(window, 1600, 900);
 	GM_AddPlayerToScene(game->manager, { 0.0f, 0.0f, 0.0f }, 90.0f, 0.0f);
 
-	//Model* model = AM_AddModel(game->assets, "Assets/ScriptFactory.glb");
+	//Model* model = AM_AddModel(game->assets, "Assets/ScriptFactory.glb", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE);
 	//Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF/BoomBox.gltf");
-	Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf"); 
+	Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE); 
 	model->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.25f, 0.25f, 0.25f));
-	Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF-Binary/BoomBox.glb"); 
+	Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF-Binary/BoomBox.glb", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE);
 	boomBox->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(500.0f, 500.0f, 500.0f));
+
+	PhysicsMaterial* material = PH_AddMaterial(game->physics, 0.5f, 0.5f, 0.5f);
+
+	PhysicsShape* otherShape = PH_AddConcaveShape(game->physics, model->concaveMesh, material, glm::vec3(0.25f, 0.25f, 0.25f));
+	PhysicsShape* boomBoxShape = PH_AddConvexShape(game->physics, boomBox->convexMesh, material, glm::vec3(500.0f, 500.0f, 500.0f));
+	PhysicsShape* ground = PH_AddBoxShape(game->physics, material, glm::vec3(60.0f, 1.0f, 60.0f));
+
+	Vertex3D verts[3]{ };
+	Model debugModel = CreateModelFromVertices(verts, 3);
 	
+	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 	SceneObject base;
 	base.boneData = 0;
 	base.entity = nullptr;
 	base.material = nullptr;
 	base.model = model;
-	base.rigidBody = nullptr;
+	base.rigidBody = PH_AddStaticRigidBody(game->physics, otherShape, glm::vec3(0.0f), def);
 	base.transform = glm::mat4(1.0f);
 	SC_AddStaticObject(game->scene, &base);
 
 	base.model = boomBox;
-	base.transform = glm::translate(glm::mat4(1.0f), glm::vec3(-3.0f, 15.0f, 0.0f));
-	SC_AddStaticObject(game->scene, &base);
+	for (int i = 0; i < 10; i++)
+	{
+		base.rigidBody = PH_AddDynamicRigidBody(game->physics, boomBoxShape, glm::vec3(-3.0f, 30.0f + i * 50.0f, 0.0f), def);
+		SC_AddDynamicObject(game->scene, &base);// ->flags = SCENE_OBJECT_FLAG_DYNAMIC;
+	}
 
+	base.model = &debugModel;
+	base.rigidBody = nullptr;
+	SC_AddDynamicObject(game->scene, &base);
 
 	while (true)
 	{
@@ -52,9 +68,25 @@ int main()
 		static double timer = glfwGetTime();
 		double curTime = glfwGetTime();
 		float dt = timer - curTime;
+		timer = curTime;
+
 		SC_Update(game->scene, dt);
 		PH_Update(game->physics, dt);
-		
+		uint32_t num = 0;
+		SceneObject** obj = SC_GetAllSceneObjects(game->scene, &num);
+		for (int i = 0; i < num; i++)
+		{
+			if (obj[i]->rigidBody)
+			{
+				PH_SetTransformation(obj[i]->rigidBody, obj[i]->transform);
+				//glm::vec3 pos = obj[i]->transform * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+				//LOG("POS: %f %f %f\n", pos.x, pos.y, pos.z);
+			}
+		}
+		std::vector<Vertex3D> debugVertices;
+		PH_GetPhysicsVertices(game->physics, debugVertices);
+		UpdateModelFromVertices(&debugModel, debugVertices.data(), debugVertices.size());
+
 
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);

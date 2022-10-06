@@ -1259,6 +1259,7 @@ struct PBRRenderInfo
 	BaseSSRProgramUniforms ssrUniforms;
 	GLuint defaultBoneData;
 	GLuint brdfLut;
+	GLuint defMaterial;
 };
 struct PostProcessingRenderInfo
 {
@@ -1595,6 +1596,7 @@ static void BindMaterial(Renderer* r, Material* mat)
 	}
 	else
 	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.baseUniforms.materialDataLoc, r->pbrData.defMaterial);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
 		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_NORMALMAP);
@@ -1618,6 +1620,7 @@ static void BindMaterialGeometry(Renderer* r, Material* mat)
 	}
 	else
 	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.geomUniforms.materialDataLoc, r->pbrData.defMaterial);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
 		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 	}
@@ -1639,6 +1642,7 @@ static void BindMaterialSSR(Renderer* r, Material* mat)
 	}
 	else
 	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.ssrUniforms.materialDataLoc, r->pbrData.defMaterial);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_COLORMAP);
 		glBindTexture(GL_TEXTURE_2D, r->whiteTexture);
 		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_NORMALMAP);
@@ -1818,11 +1822,27 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 	renderer->currentCam = nullptr;
 	renderer->currentEnvironmentData = nullptr;
 	renderer->currentLightData = 0;
+
 	// Create Material Defaults
 	{
 		CreateBoneDataFromAnimation(nullptr, &renderer->pbrData.defaultBoneData);
 		renderer->whiteTexture = assets->textures[DEFAULT_WHITE_TEXTURE]->uniform;
 		renderer->blackTexture = assets->textures[DEFAULT_BLACK_TEXTURE]->uniform;
+
+		MaterialData defaultMaterial; memset(&defaultMaterial, 0, sizeof(defaultMaterial));
+		defaultMaterial.emissiveFactor = glm::vec4(1.0f);
+		defaultMaterial.specularFactor = glm::vec4(0.0f);
+		defaultMaterial.diffuseFactor = glm::vec4(0.0f);
+		defaultMaterial.emissiveUV = 0;
+		defaultMaterial.normalUV = -1;
+		defaultMaterial.baseColorUV = -1;
+		defaultMaterial.aoUV = -1;
+		defaultMaterial.metallicRoughnessUV = -1;
+
+		glGenBuffers(1, &renderer->pbrData.defMaterial);
+		glBindBuffer(GL_UNIFORM_BUFFER, renderer->pbrData.defMaterial);
+		glBufferData(GL_UNIFORM_BUFFER, sizeof(defaultMaterial), &defaultMaterial, GL_STATIC_DRAW);
+
 	}
 	// Create Main 3d shader
 	{
@@ -2874,7 +2894,8 @@ void RE_RenderShadows(struct Renderer* renderer)
 				{
 					Mesh* m = &obj->model->meshes[j];
 					BindMaterialGeometry(renderer, m->material);
-					glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+					if (m->flags & MESH_FLAG_LINE) glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+					else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 				}
 			}
 		}
@@ -3052,7 +3073,8 @@ void RE_RenderGeometry(struct Renderer* renderer)
 			{
 				Mesh* m = &obj->model->meshes[j];
 				BindMaterialGeometry(renderer, m->material);
-				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 			}
 		}
 	}
@@ -3106,7 +3128,8 @@ void RE_RenderOpaque(struct Renderer* renderer)
 			{
 				Mesh* m = &obj->model->meshes[j];
 				BindMaterial(renderer, m->material);
-				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				if(m->flags & MESH_FLAG_LINE) glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 			}
 		}
 	}
@@ -3161,7 +3184,8 @@ void RE_RenderTransparent(struct Renderer* renderer)
 			{
 				Mesh* m = &obj->model->meshes[j];
 				BindMaterial(renderer, m->material);
-				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 			}
 		}
 	}
@@ -3259,7 +3283,8 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 			{
 				Mesh* m = &obj->model->meshes[j];
 				BindMaterialSSR(renderer, m->material);
-				glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 			}
 		}
 	}
