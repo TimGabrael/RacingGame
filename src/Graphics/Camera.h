@@ -23,5 +23,8 @@ void CA_InitPerspectiveCamera(PerspectiveCamera* cam, const glm::vec3& pos, floa
 void CA_UpdatePerspectiveCamera(PerspectiveCamera* cam);
 glm::vec3 CA_GetPerspectiveRightDir(const PerspectiveCamera* cam);
 
+
 glm::mat4 CA_CreateOrthoView(const glm::vec3& pos, const glm::vec3& dir, float widthHalf, float heightHalf, float nearDepth, float farDepth);
 glm::mat4 CA_CreatePerspectiveView(const glm::vec3& pos, const glm::vec3& dir, float fov, float width, float height, float near, float far);
+
+void CA_CreateOrthoTightFit(const CameraBase* relativeCam, CameraBase* output, const glm::vec3& dir, float splitStart, float splitEnd, float* splitDepth);

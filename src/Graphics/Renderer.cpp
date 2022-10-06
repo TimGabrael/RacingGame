@@ -2403,7 +2403,7 @@ void RELI_RemoveLightGroup(struct Renderer* renderer, struct LightGroup* group)
 		}
 	}
 }
-void RELI_Update(struct LightGroup* group)
+void RELI_Update(struct LightGroup* group, const CameraBase* relativeCam)
 {
 	LightData data; memset(&data, 0, sizeof(LightData));
 	uint32_t curProjIdx = 0;
@@ -2417,7 +2417,19 @@ void RELI_Update(struct LightGroup* group)
 			const float yStart = (float)l.map[0].y / (float)ShadowLightGroup::shadowTextureSize;
 			const float xEnd = (float)l.map[0].w / (float)ShadowLightGroup::shadowTextureSize + xStart;
 			const float yEnd = (float)l.map[0].h / (float)ShadowLightGroup::shadowTextureSize + yStart;
-			const glm::mat4 mat = CA_CreateOrthoView(l.light.pos, l.light.light.direction, 30.0f, 30.0f, 0.1f, 1000.0f);
+			glm::mat4 mat;
+			if (relativeCam)
+			{
+				CameraBase output;
+				float splitDepth = 0.0f;
+				CA_CreateOrthoTightFit(relativeCam, &output, l.light.light.direction, 0.0f, 0.5f, &splitDepth);
+				mat = output.proj * output.view;
+				l.light.pos = output.pos;
+			}
+			else
+			{
+				mat = CA_CreateOrthoView(l.light.pos, l.light.light.direction, 30.0f, 30.0f, 0.1f, 1000.0f);
+			}
 			data.projections[curProjIdx].proj = mat;
 			data.projections[curProjIdx].start = { xStart, yStart };
 			data.projections[curProjIdx].end = { xEnd, yEnd };

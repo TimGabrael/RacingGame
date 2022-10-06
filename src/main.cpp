@@ -34,10 +34,8 @@ int main()
 
 	PhysicsShape* otherShape = PH_AddConcaveShape(game->physics, model->concaveMesh, material, glm::vec3(0.25f, 0.25f, 0.25f));
 	PhysicsShape* boomBoxShape = PH_AddConvexShape(game->physics, boomBox->convexMesh, material, glm::vec3(500.0f, 500.0f, 500.0f));
-	PhysicsShape* ground = PH_AddBoxShape(game->physics, material, glm::vec3(60.0f, 1.0f, 60.0f));
+	PhysicsShape* ground = PH_AddBoxShape(game->physics, material, glm::vec3(4.0f, 4.0f, 4.0f));
 
-	Vertex3D verts[3]{ };
-	Model debugModel = CreateModelFromVertices(verts, 3);
 	
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 	SceneObject base;
@@ -53,12 +51,9 @@ int main()
 	for (int i = 0; i < 10; i++)
 	{
 		base.rigidBody = PH_AddDynamicRigidBody(game->physics, boomBoxShape, glm::vec3(-3.0f, 30.0f + i * 50.0f, 0.0f), def);
-		SC_AddDynamicObject(game->scene, &base);// ->flags = SCENE_OBJECT_FLAG_DYNAMIC;
+		SC_AddDynamicObject(game->scene, &base);
 	}
 
-	base.model = &debugModel;
-	base.rigidBody = nullptr;
-	SC_AddDynamicObject(game->scene, &base);
 
 	while (true)
 	{
@@ -67,10 +62,11 @@ int main()
 
 		static double timer = glfwGetTime();
 		double curTime = glfwGetTime();
-		float dt = timer - curTime;
+		float dt = curTime - timer;
 		timer = curTime;
-
+		
 		SC_Update(game->scene, dt);
+		GM_Update(game->manager, dt);
 		PH_Update(game->physics, dt);
 		uint32_t num = 0;
 		SceneObject** obj = SC_GetAllSceneObjects(game->scene, &num);
@@ -79,13 +75,8 @@ int main()
 			if (obj[i]->rigidBody)
 			{
 				PH_SetTransformation(obj[i]->rigidBody, obj[i]->transform);
-				//glm::vec3 pos = obj[i]->transform * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-				//LOG("POS: %f %f %f\n", pos.x, pos.y, pos.z);
 			}
 		}
-		std::vector<Vertex3D> debugVertices;
-		PH_GetPhysicsVertices(game->physics, debugVertices);
-		UpdateModelFromVertices(&debugModel, debugVertices.data(), debugVertices.size());
 
 
 		glEnable(GL_DEPTH_TEST);

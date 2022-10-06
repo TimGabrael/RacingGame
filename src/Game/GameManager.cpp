@@ -24,7 +24,7 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	l->direction = { 0.0f, -1.0f, 0.0f };
 	l->color = { 1.0f, 1.0f, 1.0f };
 
-	//DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 2048, 2048, false);
+	//DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 0x1000, 0x1000, false);
 	//sl->pos = { 0.0f, 30.0f, 0.0f };
 	//sl->light.direction = { 0.0f, -1.0f, 0.0f };
 	//sl->light.color = { 2.0f, 2.0f, 2.0f };
@@ -58,7 +58,7 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	//point->light.pos = { 0.0f, 20.0f, -10.0f, 0.0f };
 
 
-	RELI_Update(out->defaultLightGroup);
+	RELI_Update(out->defaultLightGroup, nullptr);
 
 
 	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 4);
@@ -102,6 +102,14 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 	}
 }
 
+
+void GM_Update(GameManager* game, float dt)
+{
+	RELI_Update(game->defaultLightGroup, &game->localPlayer->camera.base);
+
+
+
+}
 void GM_OnResizeCallback(GameManager* game, int width, int height)
 {
 	uint32_t prevSamples = game->AAbuffer.msaaCount;

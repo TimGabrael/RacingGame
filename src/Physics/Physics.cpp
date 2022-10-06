@@ -11,6 +11,7 @@
 #include <extensions\PxSimpleFactory.h>
 #include <extensions/PxTriangleMeshExt.h>
 #include <extensions/PxConvexMeshExt.h>
+#include <foundation/PxQuat.h>
 
 #include "../Util/Utility.h"
 
@@ -37,7 +38,7 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 	out->foundation = PxCreateFoundation(PX_PHYSICS_VERSION, out->defaultAllocatorCallback, out->defaultErrorCallback);
 
 	// Creating instance of PhysX SDK
-	out->physicsSDK = PxCreatePhysics(PX_PHYSICS_VERSION, *out->foundation, PxTolerancesScale());
+	out->physicsSDK = PxCreatePhysics(PX_PHYSICS_VERSION, *out->foundation, PxTolerancesScale(), true);
 
 	if (out->physicsSDK == NULL) {
 		LOG("Error creating PhysX3 device.\n");
@@ -49,24 +50,16 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 
 	PxSceneDesc sceneDesc(out->physicsSDK->getTolerancesScale());
 	sceneDesc.gravity = PxVec3(0.0f, -9.8f, 0.0f);
-	if (!sceneDesc.cpuDispatcher) {
-		PxDefaultCpuDispatcher* mCpuDispatcher = PxDefaultCpuDispatcherCreate(1);
-		if (!mCpuDispatcher)
-			LOG("PxDefaultCpuDispatcherCreate failed!\n");
-		sceneDesc.cpuDispatcher = mCpuDispatcher;
-	}
-	if (!sceneDesc.filterShader)
-		sceneDesc.filterShader = out->defaultFilterShader;
+	PxDefaultCpuDispatcher* dispatcher = PxDefaultCpuDispatcherCreate(2);
+	sceneDesc.cpuDispatcher = dispatcher;
+	sceneDesc.filterShader = PxDefaultSimulationFilterShader;
 
 
-	PxCookingParams cookingParams({});
+	PxCookingParams cookingParams = PxCookingParams::PxCookingParams(out->physicsSDK->getTolerancesScale());
 	out->cooking = PxCreateCooking(PX_PHYSICS_VERSION, *out->foundation, cookingParams);
 
 	out->scene = out->physicsSDK->createScene(sceneDesc);
 
-	out->scene->setVisualizationParameter(PxVisualizationParameter::eSCALE, 1.0f);
-	out->scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, 1.0f);
-	
 	return out;
 }
 
@@ -78,18 +71,8 @@ void PH_CleanUpPhysicsScene(struct PhysicsScene* scene)
 
 void PH_Update(PhysicsScene* scene, float dt)
 {
-	uint32_t num = 0;
-	PxActor** acts = scene->scene->getActiveActors(num);
-	for (uint32_t i = 0; i < num; i++)
-	{
-		acts[i]->setActorFlag(PxActorFlag::eVISUALIZATION, true);
-	}
 	scene->scene->simulate(dt);
-	while (!scene->scene->fetchResults())
-	{
-
-	}
-
+	scene->scene->fetchResults(true);
 }
 
 
@@ -105,7 +88,7 @@ struct PhysicsConvexMesh* PH_AddPhysicsConvexMesh(PhysicsScene* scene, const voi
 	desc.points.count = numVerts;
 	desc.points.stride = vertStride;
 	desc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
-
+	
 	PxDefaultMemoryOutputStream buf;
 	if (!scene->cooking->cookConvexMesh(desc, buf))
 	{
@@ -125,7 +108,7 @@ struct PhysicsConcaveMesh* PH_AddPhysicsConcaveMesh(PhysicsScene* scene, const v
 	desc.triangles.count = numInds / 3;
 	desc.triangles.stride = 3 * sizeof(uint32_t);
 	desc.triangles.data = inds;
-	desc.flags = PxMeshFlag::eFLIPNORMALS;
+
 	PxDefaultMemoryOutputStream buf;
 	if (!scene->cooking->cookTriangleMesh(desc, buf))
 	{

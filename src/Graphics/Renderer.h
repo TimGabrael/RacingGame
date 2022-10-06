@@ -177,7 +177,7 @@ void RE_CleanUpScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* 
 
 struct LightGroup* RELI_AddLightGroup(struct Renderer* renderer);
 void RELI_RemoveLightGroup(struct Renderer* renderer, struct LightGroup* group);
-void RELI_Update(struct LightGroup* group);
+void RELI_Update(struct LightGroup* group, const CameraBase* relativeCam);
 
 void RELI_SetAmbientLightColor(struct LightGroup* group, const glm::vec3& col);
 
