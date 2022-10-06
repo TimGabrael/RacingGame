@@ -410,6 +410,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			myMat.diffuseFactor = glm::vec4(1.0f);
 			myMat.specularFactor = glm::vec4(0.0f);
 
+			myMat.roughnessFactor = 1.0f;
+			myMat.metallicFactor = 1.0f;
 
 			myMat.tex.aoUV = -1;
 			myMat.tex.emissiveUV = -1;
@@ -434,6 +436,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			}
 			if (mat.values.find("metallicFactor") != mat.values.end()) {
 				myMat.metallicFactor = static_cast<float>(mat.values["metallicFactor"].Factor());
+				LOG("FOUND METALLIC %s %f\n", file, myMat.metallicFactor);
 			}
 			if (mat.values.find("baseColorFactor") != mat.values.end()) {
 				myMat.baseColorFactor = glm::make_vec4(mat.values["baseColorFactor"].ColorFactor().data());
@@ -453,6 +456,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				const int texCoord = mat.additionalValues["occlusionTexture"].TextureTexCoord();
 				myMat.tex.aoUV = texCoord;
 			}
+
+			myMat.alphaCutoff = 1.0f;
 			if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end()) {
 				tinygltf::Parameter param = mat.additionalValues["alphaMode"];
 				if (param.string_value == "BLEND") {
@@ -467,40 +472,40 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			if (mat.additionalValues.find("alphaCutoff") != mat.additionalValues.end()) {
 				myMat.alphaCutoff = static_cast<float>(mat.additionalValues["alphaCutoff"].Factor());
 			}
+
 			if (mat.additionalValues.find("emissiveFactor") != mat.additionalValues.end()) {
 				myMat.emissiveFactor = glm::vec4(glm::make_vec3(mat.additionalValues["emissiveFactor"].ColorFactor().data()), 1.0);
 				myMat.tex.emissiveUV = 0;
 			}
-			//if (mat.extensions.find("KHR_materials_pbrSpecularGlossiness") != mat.extensions.end()) {
-			//	auto ext = mat.extensions.find("KHR_materials_pbrSpecularGlossiness");
-			//	// if (ext->second.Has("specularGlossinessTexture")) {
-			//	// 	auto index = ext->second.Get("specularGlossinessTexture").Get("index");
-			//	// 	material.specularGlossinessTexture = pbr.textures[index.Get<int>()];
-			//	// 	int texCoord = ext->second.Get("specularGlossinessTexture").Get("texCoord").Get<int>();
-			//	// 	material.uniform.physicalDescriptorTextureSet = texCoord ? texCoord : -1;
-			//	// 	material.uniform.workflow = 1.0f;
-			//	// 	material.specularGlossinessWorkflow = true;
-			//	// }
-			//	// if (ext->second.Has("diffuseTexture")) {
-			//	// 	int index = ext->second.Get("diffuseTexture").Get("index").Get<int>();
-			//	// 	material.diffuseTexture = pbr.textures[index];
-			//	// }
-			//	if (ext->second.Has("diffuseFactor")) {
-			//		auto factor = ext->second.Get("diffuseFactor");
-			//		for (uint32_t i = 0; i < factor.ArrayLen(); i++) {
-			//			auto val = factor.Get(i);
-			//			myMat.diffuseFactor[i] = val.IsNumber() ? (float)val.Get<double>() : (float)val.Get<int>();
-			//		}
-			//	}
-			//	if (ext->second.Has("specularFactor")) {
-			//		auto factor = ext->second.Get("specularFactor");
-			//		for (uint32_t i = 0; i < factor.ArrayLen(); i++) {
-			//			auto val = factor.Get(i);
-			//			myMat.specularFactor[i] = val.IsNumber() ? (float)val.Get<double>() : (float)val.Get<int>();
-			//		}
-			//		// if (material.specularGlossinessWorkflow) material.uniform.specularFactor.w = 1.0f;
-			//	}
-			//}
+			if (mat.extensions.find("KHR_materials_pbrSpecularGlossiness") != mat.extensions.end()) {
+				auto ext = mat.extensions.find("KHR_materials_pbrSpecularGlossiness");
+				if (ext->second.Has("specularGlossinessTexture")) {
+					auto index = ext->second.Get("specularGlossinessTexture").Get("index");
+					myMat.tex.metallicRoughness = model->textures[index.Get<int>()];
+					int texCoord = ext->second.Get("specularGlossinessTexture").Get("texCoord").Get<int>();
+					myMat.tex.metallicRoughnessUV = texCoord ? texCoord : -1;
+					myMat.workflow = 1.0f;
+				}
+				if (ext->second.Has("diffuseTexture")) {
+					int index = ext->second.Get("diffuseTexture").Get("index").Get<int>();
+					myMat.tex.baseColor = model->textures[index];
+				}
+				if (ext->second.Has("diffuseFactor")) {
+					auto factor = ext->second.Get("diffuseFactor");
+					for (uint32_t i = 0; i < factor.ArrayLen(); i++) {
+						auto val = factor.Get(i);
+						myMat.diffuseFactor[i] = val.IsNumber() ? (float)val.Get<double>() : (float)val.Get<int>();
+					}
+				}
+				if (ext->second.Has("specularFactor")) {
+					auto factor = ext->second.Get("specularFactor");
+					for (uint32_t i = 0; i < factor.ArrayLen(); i++) {
+						auto val = factor.Get(i);
+						myMat.specularFactor[i] = val.IsNumber() ? (float)val.Get<double>() : (float)val.Get<int>();
+					}
+					if (myMat.workflow == 1.0f) myMat.specularFactor.w = 1.0f;
+				}
+			}
 			CreateMaterialUniform(&myMat);
 		}
 
@@ -713,6 +718,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
+					glGenerateMipmap(GL_TEXTURE_2D);
+
 					delete[] data;
 
 					std::string fullstr = std::string(":") + file + std::string(texture->mFilename.C_Str());
@@ -792,10 +799,12 @@ struct Texture* AM_AddTexture(AssetManager* m, const char* file)
 		glGenTextures(1, &resTex->uniform);
 		glBindTexture(resTex->type, resTex->uniform);
 		glTexImage2D(resTex->type, 0, GL_RGBA, resTex->width, resTex->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, c);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+		glGenerateMipmap(GL_TEXTURE_2D);
 		
 		m->textures[file] = resTex;
 		stbi_image_free(c);

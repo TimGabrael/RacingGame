@@ -358,7 +358,7 @@ void main()\n\
 		float G = geometricOcclusion(pbrInputs);\n\
 		float D = microfacetDistribution(pbrInputs);\n\
 		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
+		vec3 specContrib = min(F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV), vec3(1.0f));\n\
 		color += shadowVal * pbrInputs.NdotL * lights.dirLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 	}\n\
 	for(int i = 0; i < lights.numPointLights; i++)\n\
@@ -404,7 +404,7 @@ void main()\n\
 		float G = geometricOcclusion(pbrInputs);\n\
 		float D = microfacetDistribution(pbrInputs);\n\
 		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
+		vec3 specContrib = min(F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV), vec3(1.0f));\n\
 		color += pbrInputs.NdotL * shadowVal * lights.pointLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 	}\n\
 	for(int i = 0; i < lights.numSpotLights; i++)\n\
@@ -427,7 +427,7 @@ void main()\n\
 			float G = geometricOcclusion(pbrInputs);\n\
 			float D = microfacetDistribution(pbrInputs);\n\
 			vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-			vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
+			vec3 specContrib = min(F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV), vec3(1.0f));\n\
 			color += pbrInputs.NdotL * shadowVal * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 		}\n\
 	}\n\

@@ -63,6 +63,7 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 
 	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 0);
 	RE_CreatePostProcessingRenderData(&out->PPbuffer, state->winWidth, state->winHeight);
+	
 
 	out->localPlayer = nullptr;
 

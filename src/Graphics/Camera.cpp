@@ -105,8 +105,6 @@ void CA_CreateOrthoTightFit(const CameraBase* relativeCam, CameraBase* output, c
 	}
 	glm::mat4 outOrthoMatrix = glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, 0.0f, maxExtents.z - minExtents.z);
 
-	LOG("outOrtho: %f %f %f %f %f\n", minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z);
-
 	const float vSSplitDepth = nearClipping + splitEnd * (farClipping - nearClipping) * -1.0f;
 	glm::vec4 splitDepthWorldSpace = relativeCam->proj * glm::vec4(vSSplitDepth, vSSplitDepth, vSSplitDepth, 1.0f);
 	*splitDepth = splitDepthWorldSpace.z / splitDepthWorldSpace.w;
