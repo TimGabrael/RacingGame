@@ -113,7 +113,15 @@ void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim)
 				for (uint32_t k = 0; k < numJoints; k++)
 				{
 					Joint* childJoint = skin.joints[k];
-					glm::mat4 jointMat = inverse * childJoint->defMatrix * skin.inverseBindMatrices[i];
+					glm::mat4 m = glm::translate(glm::mat4(1.0f), childJoint->translation) * glm::mat4(childJoint->rotation) * glm::scale(glm::mat4(1.0f), childJoint->scale) * childJoint->matrix;
+					Joint* parent = childJoint->parent;
+					while (parent)
+					{
+						m = glm::translate(glm::mat4(1.0f), parent->translation) * glm::mat4(parent->rotation) * glm::scale(glm::mat4(1.0f), parent->scale) * parent->matrix * m;
+						parent = parent->parent;
+					}
+
+					glm::mat4 jointMat = inverse * m * skin.inverseBindMatrices[k];
 					boneData.jointMatrix[k] = jointMat;
 				}
 				break;
@@ -131,6 +139,7 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 	if (animInstance->numSkins <= skinIdx) { LOG("WARNING TRYING TO UPDATE ANIMATION INSTANCE WITH MISMATCHING ANIMATION INFO\n"); return; }
 	
 	Animation& anim = model->animations[animIdx];
+	Skin& skin = model->skins[skinIdx];
 	bool updated = false;
 	for (uint32_t i = 0; i < anim.numChannels; i++) 
 	{
@@ -149,7 +158,7 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 					{
 					case AnimationChannel::TRANSLATION: {
 						glm::vec4 trans = glm::mix(sampler.outputs[j], sampler.outputs[j + 1], u);
-						channel.joint->translation = glm::vec3(trans);	// 
+						channel.joint->translation = glm::vec3(trans);
 						break;
 					}
 					case AnimationChannel::SCALE: {
@@ -164,10 +173,10 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 						q1.z = sampler.outputs[j].z;
 						q1.w = sampler.outputs[j].w;
 						glm::quat q2;
-						q2.x = sampler.outputs[j].x;
-						q2.y = sampler.outputs[j].y;
-						q2.z = sampler.outputs[j].z;
-						q2.w = sampler.outputs[j].w;
+						q2.x = sampler.outputs[j + 1].x;
+						q2.y = sampler.outputs[j + 1].y;
+						q2.z = sampler.outputs[j + 1].z;
+						q2.w = sampler.outputs[j + 1].w;
 						channel.joint->rotation = glm::normalize(glm::slerp(q1, q2, u));
 						break;
 					}
@@ -176,6 +185,38 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 				}
 			}
 		}
+	}
+	if (updated)
+	{
+		BoneData boneData{};
+		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
+		boneData.numJoints = numJoints;
+
+		for (uint32_t j = 0; j < numJoints; j++)
+		{
+			Joint* joint = skin.joints[j];
+			if (joint->mesh)
+			{
+				glm::mat4 inverse = glm::inverse(joint->defMatrix);
+				for (uint32_t k = 0; k < numJoints; k++)
+				{
+					Joint* childJoint = skin.joints[k];
+					glm::mat4 m = glm::translate(glm::mat4(1.0f), childJoint->translation) * glm::mat4(childJoint->rotation) * glm::scale(glm::mat4(1.0f), childJoint->scale) * childJoint->matrix;
+					Joint* parent = childJoint->parent;
+					while (parent)
+					{
+						m = glm::translate(glm::mat4(1.0f), parent->translation) * glm::mat4(parent->rotation) * glm::scale(glm::mat4(1.0f), parent->scale) * parent->matrix * m;
+						parent = parent->parent;
+					}
+
+					glm::mat4 jointMat = inverse * m * skin.inverseBindMatrices[k];
+					boneData.jointMatrix[k] = jointMat;
+				}
+				break;
+			}
+		}
+		glBindBuffer(GL_UNIFORM_BUFFER, animInstance->data[skinIdx].skinUniform);
+		glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &boneData, GL_DYNAMIC_DRAW);
 	}
 }
 

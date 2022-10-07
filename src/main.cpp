@@ -60,7 +60,11 @@ int main()
 	AnimationInstanceData animInstance;
 	animInstance.data = &skinData;
 	animInstance.numSkins = 1;
-	
+
+
+	AnimationInstanceData realAnimData; memset(&realAnimData, 0, sizeof(AnimationInstanceData));
+	CreateBoneDataFromModel(boomBox, &realAnimData);
+
 	{
 		BoneData testBoneData{};
 		testBoneData.numJoints = 3;
@@ -75,7 +79,7 @@ int main()
 	base.model = boomBox;
 	for (int i = 0; i < 1; i++)
 	{
-		base.anim = &animInstance;
+		base.anim = &realAnimData;
 		base.rigidBody = nullptr;// PH_AddDynamicRigidBody(game->physics, boomBoxShape, glm::vec3(-3.0f, 30.0f + i * 50.0f, 0.0f), def);
 		SC_AddDynamicObject(game->scene, &base);
 	}
@@ -86,11 +90,27 @@ int main()
 		glfwPollEvents();
 		if (glfwWindowShouldClose(window)) break;
 
+
 		static double timer = glfwGetTime();
 		double curTime = glfwGetTime();
 		float dt = curTime - timer;
 		timer = curTime;
-		
+
+		{
+			BoneData testBoneData{};
+			testBoneData.numJoints = 2;
+			testBoneData.jointMatrix[0] = glm::mat4(1.0f);
+			testBoneData.jointMatrix[1] = glm::rotate(glm::mat4(1.0f), (float)curTime, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::translate(glm::mat4(1.0f), glm::vec3(sin(curTime), sin(curTime), sin(curTime)));
+
+			glBindBuffer(GL_UNIFORM_BUFFER, skinData.skinUniform);
+			glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &testBoneData, GL_STATIC_DRAW);
+		}
+		static float animIdx = 0.0f;
+		animIdx += dt;
+		UpdateBoneDataFromModel(boomBox, 0, 0, &realAnimData, animIdx);
+		if (animIdx > 40.0f) animIdx = 0.0f;
+
+
 		SC_Update(game->scene, dt);
 		GM_Update(game->manager, dt);
 		PH_Update(game->physics, dt);
