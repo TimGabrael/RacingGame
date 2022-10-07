@@ -229,6 +229,7 @@ float calculateShadowValue(ProjectionData p, vec2 textureStep)\n\
 	vec4 shadowUV = p.proj * vec4(worldPos, 1.0f);\n\
 	shadowUV /= shadowUV.w; shadowUV.xyz += 1.0f; shadowUV.xyz *= 0.5f;\n\
 	shadowUV.xy *= (p.end - p.start); shadowUV.xy += p.start;\n\
+	if(shadowUV.z >= 1.0f || shadowUV.z <= 0.0f) return 1.0f;\n\
 	for(int x = -1; x <= 1; ++x)\n\
 	{\n\
 		for(int y = -1; y <= 1; ++y)\n\
@@ -343,17 +344,17 @@ void main()\n\
 	vec2 ts = vec2(1.0f) / vec2(textureSize(shadowMap, 0));\n\
 	for(int i = 0; i < lights.numDirLights; i++)\n\
 	{\n\
-		float shadowVal = 1.0f;\n\
-		if(lights.dirLights[i].projIdx > -1)\n\
-		{\n\
-			shadowVal = calculateShadowValue(lights.projections[lights.dirLights[i].projIdx], ts);\n\
-		}\n\
 		vec3 l = normalize(-lights.dirLights[i].direction.xyz); // Vector from surface point to light\n\
 		vec3 h = normalize(l+v);\n\
 		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
 		pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
 		pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
 		pbrInputs.VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
+		float shadowVal = 1.0f;\n\
+		if(lights.dirLights[i].projIdx > -1)\n\
+		{\n\
+			shadowVal = pbrInputs.NdotL * calculateShadowValue(lights.projections[lights.dirLights[i].projIdx], ts);\n\
+		}\n\
 		vec3 F = specularReflection(pbrInputs);\n\
 		float G = geometricOcclusion(pbrInputs);\n\
 		float D = microfacetDistribution(pbrInputs);\n\
@@ -363,6 +364,9 @@ void main()\n\
 	}\n\
 	for(int i = 0; i < lights.numPointLights; i++)\n\
 	{\n\
+		vec3 l = normalize(lights.pointLights[i].pos.xyz - worldPos);\n\
+		vec3 h = normalize(l+v);\n\
+		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
 		float shadowVal = 1.0f;\n\
 		if(lights.pointLights[i].projIdx > -1)\n\
 		{\n\
@@ -393,10 +397,8 @@ void main()\n\
 					else shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 5], ts);\n\
 				}\n\
 			}\n\
+			shadowVal *= pbrInputs.NdotL;\n\
 		}\n\
-		vec3 l = normalize(lights.pointLights[i].pos.xyz - worldPos);\n\
-		vec3 h = normalize(l+v);\n\
-		pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
 		pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
 		pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
 		pbrInputs.VdotH = clamp(dot(v, h), 0.0, 1.0);\n\
@@ -413,11 +415,6 @@ void main()\n\
 		float theta = dot(-l, normalize(lights.spotLights[i].direction.xyz));\n\
 		if(theta > lights.spotLights[i].cutOff)\n\
 		{\n\
-			float shadowVal = 1.0f;\n\
-			if(lights.spotLights[i].projIdx > -1)\n\
-			{\n\
-				shadowVal = calculateShadowValue(lights.projections[lights.spotLights[i].projIdx], ts);\n\
-			}\n\
 			vec3 h = normalize(l+v);\n\
 			pbrInputs.NdotL = clamp(dot(n, l), 0.001, 1.0);\n\
 			pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
@@ -428,6 +425,11 @@ void main()\n\
 			float D = microfacetDistribution(pbrInputs);\n\
 			vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
 			vec3 specContrib = min(F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV), vec3(1.0f));\n\
+			float shadowVal = 1.0f;\n\
+			if(lights.spotLights[i].projIdx > -1)\n\
+			{\n\
+				shadowVal = pbrInputs.NdotL * calculateShadowValue(lights.projections[lights.spotLights[i].projIdx], ts);\n\
+			}\n\
 			color += pbrInputs.NdotL * shadowVal * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 		}\n\
 	}\n\
@@ -1456,13 +1458,17 @@ static ShadowLightGroup* AddShadowLightGroup(LightGroup* data)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, ShadowLightGroup::shadowTextureSize, ShadowLightGroup::shadowTextureSize, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		GLfloat borderColor = 1.0f;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+		
+		GLfloat borderColor = 10.0f;
 		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &borderColor);
 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);	// THIS HERE IS WIERD TAKE A LOOK AT IT LATER MAYBE
 
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);	// THIS HERE IS WIERD TAKE A LOOK AT IT LATER MAYBE
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);	// THIS HERE IS WIERD TAKE A LOOK AT IT LATER MAYBE
+		
+	
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->shadowGroup.texture, 0);
 
 		glDrawBuffer(GL_NONE);
