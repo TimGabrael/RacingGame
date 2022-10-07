@@ -57,7 +57,6 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->light.pos = { 0.0f, 20.0f, -10.0f, 0.0f };
 
-	RELI_SetAmbientLightColor(out->defaultLightGroup, { 0.6f, 0.6f, 0.6f });
 	RELI_Update(out->defaultLightGroup, nullptr);
 
 

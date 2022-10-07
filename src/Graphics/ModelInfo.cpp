@@ -167,7 +167,6 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 				float u = glm::max(0.0f, time - sampler.inputs[j]) / (sampler.inputs[j + 1] - sampler.inputs[j]);
 				if (u <= 1.0f) 
 				{
-					// TODO: CHECK IF THIS ALSO APPLYS SKELETEL ANIMATION
 					switch(channel.path)
 					{
 					case AnimationChannel::TRANSLATION: {
@@ -202,6 +201,7 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 	}
 	if (updated)
 	{
+
 		BoneData boneData{};
 		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
 		boneData.numJoints = numJoints;
@@ -218,8 +218,7 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 				for (uint32_t k = 0; k < numJoints; k++)
 				{
 					Joint* childJoint = skin.joints[k];
-					glm::mat4 m = childJoint->GetMatrix();
-					glm::mat4 jointMat = m * skin.inverseBindMatrices[k];
+					glm::mat4 jointMat = childJoint->GetMatrix() * skin.inverseBindMatrices[k];
 					jointMat = inverse * jointMat;
 					boneData.jointMatrix[k] = jointMat;
 

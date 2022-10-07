@@ -577,7 +577,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					j.skin = &m->skins[node.skin];
 				}
 				
-				j.parent = parent;
+				if(parent) j.parent = parent;
+				
 				j.children = new Joint*[gm->nodes[curNode].children.size()];
 				memset(j.children, 0, sizeof(Joint*) * gm->nodes[curNode].children.size());
 				j.numChildren = gm->nodes[curNode].children.size();
@@ -605,7 +606,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					int cur = gm->nodes[curNode].children.at(k);
 					if (cur > -1 && cur < m->numJoints)
 					{
-						m->joints[curNode].children[k] = &m->joints[cur];
+						j.children[k] = &m->joints[cur];
 						setJointNodeHirarchy(m, gm, &m->joints[curNode], cur);
 					}
 					else
@@ -794,7 +795,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		model->numMeshes = scene->mNumMeshes;
 		model->numTextures = scene->mNumTextures;
 		model->numMaterials = scene->mNumMaterials;
-
 		model->baseTransform = glm::mat4(1.0f);
 
 		uint32_t numVerts = 0;
