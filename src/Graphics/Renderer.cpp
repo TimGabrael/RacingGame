@@ -1825,7 +1825,11 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 
 	// Create Material Defaults
 	{
-		CreateBoneDataFromAnimation(nullptr, &renderer->pbrData.defaultBoneData);
+		BoneData boneData = {};
+		glGenBuffers(1, &renderer->pbrData.defaultBoneData);
+		glBindBuffer(GL_UNIFORM_BUFFER, renderer->pbrData.defaultBoneData);
+		glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &boneData, GL_STATIC_DRAW);
+
 		renderer->whiteTexture = assets->textures[DEFAULT_WHITE_TEXTURE]->uniform;
 		renderer->blackTexture = assets->textures[DEFAULT_BLACK_TEXTURE]->uniform;
 
@@ -2944,6 +2948,7 @@ void RE_RenderShadows(struct Renderer* renderer)
 				for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 				{
 					Mesh* m = &obj->model->meshes[j];
+					if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
 					BindMaterialGeometry(renderer, m->material);
 					if (m->flags & MESH_FLAG_LINE) glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 					else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
@@ -3107,8 +3112,6 @@ void RE_RenderGeometry(struct Renderer* renderer)
 	glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
 
 
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-
 
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
@@ -3123,6 +3126,24 @@ void RE_RenderGeometry(struct Renderer* renderer)
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
+				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
+
+				if (obj->anim)
+				{
+					if (m->skinIdx < obj->anim->numSkins)
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					}
+					else
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+					}
+				}
+				else
+				{
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+				}
+
 				BindMaterialGeometry(renderer, m->material);
 				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
@@ -3165,19 +3186,37 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 	
+
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
 		SceneObject* obj = renderer->objList[i];
 		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
 		{
-			glm::mat4 mat = obj->transform * obj->model->baseTransform;
+			const glm::mat4 mat = obj->transform * obj->model->baseTransform;
+
 			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
-			
 			glBindVertexArray(obj->model->vao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
+				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
+
+				if (obj->anim)
+				{
+					if (m->skinIdx < obj->anim->numSkins)
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					}
+					else
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+					}
+				}
+				else
+				{
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+				}
 				BindMaterial(renderer, m->material);
 				if(m->flags & MESH_FLAG_LINE) glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
@@ -3217,7 +3256,6 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 
 
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
@@ -3234,6 +3272,22 @@ void RE_RenderTransparent(struct Renderer* renderer)
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
+				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
+				if (obj->anim)
+				{
+					if (m->skinIdx < obj->anim->numSkins)
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					}
+					else
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+					}
+				}
+				else
+				{
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+				}
 				BindMaterial(renderer, m->material);
 				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
@@ -3318,7 +3372,6 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
 	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
 
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
@@ -3333,6 +3386,22 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
+				if (obj->anim)
+				{
+					if (m->skinIdx < obj->anim->numSkins)
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					}
+					else
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+					}
+				}
+				else
+				{
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+				}
+				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
 				BindMaterialSSR(renderer, m->material);
 				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));

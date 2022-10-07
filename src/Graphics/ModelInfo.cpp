@@ -89,23 +89,94 @@ void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts)
 	delete[] indices;
 }
 
-void CreateBoneDataFromAnimation(const Animation* anim, GLuint* uniform)
+void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim)
 {
-	if (anim)
+	anim->data = new AnimationInstanceData::SkinData[model->numSkins];
+	anim->numSkins = model->numSkins;
+	for (uint32_t i = 0; i < model->numSkins; i++)
 	{
+		Skin& skin = model->skins[i];
+		AnimationInstanceData::SkinData& cur = anim->data[i];
+		cur.numTransforms = skin.numJoints;
+		cur.current = new AnimationTransformation[skin.numJoints];
+		
+		BoneData boneData{};
+		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
+		boneData.numJoints = numJoints;
 
-	}
-	else
-	{
-		BoneData boneData = {};
-		glGenBuffers(1, uniform);
-		glBindBuffer(GL_UNIFORM_BUFFER, *uniform);
-		glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &boneData, GL_STATIC_DRAW);
+		for (uint32_t j = 0; j < numJoints; j++)
+		{
+			Joint* joint = skin.joints[j];
+			if (joint->mesh)
+			{
+				glm::mat4 inverse = glm::inverse(joint->defMatrix);
+				for (uint32_t k = 0; k < numJoints; k++)
+				{
+					Joint* childJoint = skin.joints[k];
+					glm::mat4 jointMat = inverse * childJoint->defMatrix * skin.inverseBindMatrices[i];
+					boneData.jointMatrix[k] = jointMat;
+				}
+				break;
+			}
+		}
+		glGenBuffers(1, &cur.skinUniform);
+		glBindBuffer(GL_UNIFORM_BUFFER, cur.skinUniform);
+		glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &boneData, GL_DYNAMIC_DRAW);
 	}
 }
-void UpdateBoneDataFromAnimation(const Animation* anim, GLuint uniform, float oldTime, float newTime)
+void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skinIdx, AnimationInstanceData* animInstance, float time)
 {
+	if (model->numAnimations <= animIdx) { LOG("WARNING TRYING TO UPDATE INVALID ANIMATION\n"); return; }
+	if (model->numSkins <= skinIdx) { LOG("WARNING TRYING TO UPDATE ANIMATION OF INVALID SKIN\n"); return; }
+	if (animInstance->numSkins <= skinIdx) { LOG("WARNING TRYING TO UPDATE ANIMATION INSTANCE WITH MISMATCHING ANIMATION INFO\n"); return; }
+	
+	Animation& anim = model->animations[animIdx];
+	bool updated = false;
+	for (uint32_t i = 0; i < anim.numChannels; i++) 
+	{
+		AnimationChannel& channel = anim.channels[i];
+		AnimationSampler& sampler = anim.samplers[channel.samplerIdx];
 
+		for (uint32_t j = 0; j < sampler.numInOut - 1; j++) 
+		{
+			if ((time >= sampler.inputs[j]) && (time <= sampler.inputs[j + 1]))
+			{
+				float u = glm::max(0.0f, time - sampler.inputs[j]) / (sampler.inputs[j + 1] - sampler.inputs[j]);
+				if (u <= 1.0f) 
+				{
+					// TODO: CHECK IF THIS ALSO APPLYS SKELETEL ANIMATION
+					switch(channel.path)
+					{
+					case AnimationChannel::TRANSLATION: {
+						glm::vec4 trans = glm::mix(sampler.outputs[j], sampler.outputs[j + 1], u);
+						channel.joint->translation = glm::vec3(trans);	// 
+						break;
+					}
+					case AnimationChannel::SCALE: {
+						glm::vec4 scale = glm::mix(sampler.outputs[j], sampler.outputs[j + 1], u);
+						channel.joint->scale = glm::vec3(scale);
+						break;
+					}
+					case AnimationChannel::ROTATION: {
+						glm::quat q1;
+						q1.x = sampler.outputs[j].x;
+						q1.y = sampler.outputs[j].y;
+						q1.z = sampler.outputs[j].z;
+						q1.w = sampler.outputs[j].w;
+						glm::quat q2;
+						q2.x = sampler.outputs[j].x;
+						q2.y = sampler.outputs[j].y;
+						q2.z = sampler.outputs[j].z;
+						q2.w = sampler.outputs[j].w;
+						channel.joint->rotation = glm::normalize(glm::slerp(q1, q2, u));
+						break;
+					}
+					}
+					updated = true;
+				}
+			}
+		}
+	}
 }
 
 void CreateMaterialUniform(Material* mat)
@@ -127,10 +198,6 @@ void CreateMaterialUniform(Material* mat)
 	data.workflow = mat->workflow;
 	data._align1 = 0;
 	data._align2 = 0;
-
-	data.baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
-	data.emissiveFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
-	data.baseColorUV = 0;
 
 #ifdef DEBUG_PRINT_MATERIAL
 	LOG("BASECOLORFACTOR: (%f, %f, %f, %f)\n", data.baseColorFactor.r, data.baseColorFactor.g, data.baseColorFactor.b, data.baseColorFactor.a);

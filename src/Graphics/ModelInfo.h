@@ -4,8 +4,15 @@
 enum MESH_FLAG
 {
 	MESH_FLAG_LINE = 1,
+	MESH_FLAG_UNSUPPORTED = (1<<1),
 };
 
+struct AnimationTransformation
+{
+	glm::vec3 translation{};
+	glm::vec3 scale{ 1.0f };
+	glm::quat rotation{};
+};
 struct AABB
 {
 	glm::vec3 min;
@@ -23,10 +30,52 @@ struct Vertex3D
 	uint32_t col;
 };
 
+struct AnimationChannel
+{
+	enum PathType {TRANSLATION, ROTATION, SCALE};
+	struct Joint* joint;
+	uint32_t samplerIdx;
+	PathType path;
+};
+struct AnimationSampler
+{
+	enum InterpolationType {LINEAR, STEP, CUBICSPLINE};
+	float* inputs;
+	glm::vec4* outputs;
+	uint32_t numInOut;
+	InterpolationType interpolation;
+};
 struct Animation
 {
-	float duration;
-	int numEffectedBones;
+	AnimationSampler* samplers;
+	AnimationChannel* channels;
+	uint32_t numSamplers;
+	uint32_t numChannels;
+	float start;
+	float end;
+};
+
+struct Joint
+{
+	Joint* parent;
+	Joint** children;
+	struct Mesh* mesh;
+	struct Skin* skin;
+	int32_t skinIndex = -1;
+	uint32_t numChildren;
+	glm::vec3 translation{};
+	glm::vec3 scale{ 1.0f };
+	glm::quat rotation{};
+	glm::mat4 matrix;
+	glm::mat4 defMatrix;
+};
+
+struct Skin
+{
+	Joint* skeletonRoot = nullptr;
+	glm::mat4* inverseBindMatrices;
+	Joint** joints;
+	uint32_t numJoints;
 };
 
 struct Texture
@@ -80,6 +129,7 @@ struct Mesh
 	uint32_t numInd;
 	Material* material;
 	uint32_t flags;
+	uint32_t skinIdx;
 	AABB bound;
 };
 struct Model
@@ -91,12 +141,15 @@ struct Model
 	Animation* animations;
 	Mesh* meshes;
 	Texture** textures;
+	Joint* joints;
+	Skin* skins;
 	
 	uint32_t numMaterials;
 	uint32_t numAnimations;
 	uint32_t numTextures;
 	uint32_t numMeshes;
-
+	uint32_t numJoints;
+	uint32_t numSkins;
 
 	GLuint vao;
 	GLuint vertexBuffer;
@@ -110,12 +163,26 @@ struct Model
 };
 
 
+struct AnimationInstanceData
+{
+	struct SkinData
+	{
+		GLuint skinUniform;
+		AnimationTransformation* current;
+		uint32_t numTransforms;
+	};
+	SkinData* data;
+	uint32_t numSkins;
+};
+
+
+
 void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx, uint32_t num);
 Model CreateModelFromVertices(Vertex3D* verts, uint32_t numVerts);
 void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts);
 
-void CreateBoneDataFromAnimation(const Animation* anim, GLuint* uniform);
-void UpdateBoneDataFromAnimation(const Animation* anim, GLuint uniform, float oldTime, float newTime);
+void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim);
+void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skinIdx, AnimationInstanceData* anim, float time);
 
 void CreateMaterialUniform(Material* mat);
 void UpdateMaterialUniform(Material* mat);

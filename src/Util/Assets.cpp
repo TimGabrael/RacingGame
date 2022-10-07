@@ -143,13 +143,20 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				if (p.mode == TINYGLTF_MODE_TRIANGLES && p.indices > -1)
 				{
 					model->numVertices += gltfModel.accessors[p.attributes.find("POSITION")->second].count;
-					model->numMeshes++;
 					model->numIndices += gltfModel.accessors[p.indices].count;
 				}
+				else
+				{
+					LOG("WARNING MODEL HAS UNSUPPORTED MESH\n");
+				}
+				model->numMeshes++;
 			}
 		}
+		model->numAnimations = gltfModel.animations.size();
 		model->numTextures = gltfModel.textures.size(); 
 		model->numMaterials = gltfModel.materials.size();
+		model->numJoints = gltfModel.nodes.size();
+		model->numSkins = gltfModel.skins.size();
 
 		model->meshes = new Mesh[model->numMeshes];
 		memset(model->meshes, 0, sizeof(Mesh) * model->numMeshes);
@@ -157,6 +164,13 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		memset(model->textures, 0, sizeof(Texture*) * model->numTextures);
 		model->materials = new Material[model->numMaterials];
 		memset(model->materials, 0, sizeof(Material) * model->numMaterials);
+		model->joints = new Joint[model->numJoints];
+		memset(model->joints, 0, sizeof(Joint));
+		model->skins = new Skin[model->numSkins];
+		memset(model->skins, 0, sizeof(Skin) * model->numSkins);
+		model->animations = new Animation[model->numAnimations];
+		memset(model->animations, 0, sizeof(Animation) * model->numAnimations);
+
 
 		model->baseTransform = glm::mat4(1.0f);
 
@@ -281,7 +295,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 
 						{
 							model->meshes[curMeshIdx].startIdx = curIndPos;
-
 							const tinygltf::Accessor& accessor = gltfModel.accessors[primitive.indices];
 							const tinygltf::BufferView& bufferView = gltfModel.bufferViews[accessor.bufferView];
 							const tinygltf::Buffer& buffer = gltfModel.buffers[bufferView.buffer];
@@ -315,9 +328,13 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 								break;
 							}
 							}
-							curMeshIdx++;
 						}
 					}
+					else
+					{
+						model->meshes[curMeshIdx].flags = MESH_FLAG_UNSUPPORTED;
+					}
+					curMeshIdx++;
 				}
 
 			}
@@ -436,7 +453,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			}
 			if (mat.values.find("metallicFactor") != mat.values.end()) {
 				myMat.metallicFactor = static_cast<float>(mat.values["metallicFactor"].Factor());
-				LOG("FOUND METALLIC %s %f\n", file, myMat.metallicFactor);
 			}
 			if (mat.values.find("baseColorFactor") != mat.values.end()) {
 				myMat.baseColorFactor = glm::make_vec4(mat.values["baseColorFactor"].ColorFactor().data());
@@ -507,6 +523,213 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				}
 			}
 			CreateMaterialUniform(&myMat);
+		}
+
+
+		// CALCULATE MAIN BOUNDING BOX
+		model->bound = { glm::vec3(FLT_MAX), glm::vec3(-FLT_MAX) };
+		for (uint32_t i = 0; i < model->numMeshes; i++)
+		{
+			model->bound.min = glm::min(model->bound.min, model->meshes[i].bound.min);
+			model->bound.max = glm::max(model->bound.max, model->meshes[i].bound.max);
+		}
+
+		// LOAD NODES(JOINTS)
+		{
+			std::function<void(Model* m, tinygltf::Model* gm, Joint* parent, int curNode)> setJointNodeHirarchy = [&](Model* m, tinygltf::Model* gm, Joint* parent, int curNode)
+			{
+				tinygltf::Node& node = gm->nodes[curNode];
+				Joint& j = m->joints[curNode];
+				j.matrix = glm::mat4(1.0f);
+				j.skinIndex = node.skin;
+
+				if (node.mesh > -1) {
+					m->meshes[node.mesh].skinIdx = node.skin;
+					j.mesh = &m->meshes[node.mesh];
+				}
+				if (node.skin > -1)
+				{
+					j.skin = &m->skins[node.skin];
+				}
+				
+				j.parent = parent;
+				j.children = new Joint*[gm->nodes[curNode].children.size()];
+				j.numChildren = gm->nodes[curNode].children.size();
+				glm::vec3 translation = glm::vec3(0.0f);
+				if (node.translation.size() == 3) {
+					translation = glm::make_vec3(node.translation.data());
+				}
+				glm::quat rotation = glm::mat4(1.0f);
+				if (node.rotation.size() == 4) {
+					rotation = glm::make_quat(node.rotation.data());
+				}
+				glm::vec3 scale = glm::vec3(1.0f);
+				if (node.scale.size() == 3) {
+					scale = glm::make_vec3(node.scale.data());
+				}
+				if (node.matrix.size() == 16) {
+					j.matrix = glm::make_mat4x4(node.matrix.data());
+				}
+				j.translation = translation;
+				j.rotation = rotation;
+				j.scale = scale;
+
+				for (size_t k = 0; k < gm->nodes[curNode].children.size(); k++)
+				{
+					int cur = gm->nodes[curNode].children.at(k);
+					m->joints[curNode].children[k] = &m->joints[cur];
+					setJointNodeHirarchy(m, gm, &m->joints[curNode], cur);
+				}
+			};
+			for (size_t i = 0; i < gltfModel.nodes.size(); i++)
+			{
+				setJointNodeHirarchy(model, &gltfModel, nullptr, i);
+			}
+		}
+
+		// LOAD SKINS
+		{
+			for (size_t i = 0; i < gltfModel.skins.size(); i++)
+			{
+				tinygltf::Skin& source = gltfModel.skins.at(i);
+				Skin* curSkin = &model->skins[i];
+				curSkin->numJoints = source.joints.size();
+				curSkin->joints = new Joint*[curSkin->numJoints];
+
+				if (source.skeleton > -1)
+				{
+					curSkin->skeletonRoot = &model->joints[source.skeleton];
+				}
+				if (source.inverseBindMatrices > -1)
+				{
+					const tinygltf::Accessor& accessor = gltfModel.accessors[source.inverseBindMatrices];
+					const tinygltf::BufferView& bufferView = gltfModel.bufferViews[accessor.bufferView];
+					const tinygltf::Buffer& buffer = gltfModel.buffers[bufferView.buffer];
+					curSkin->inverseBindMatrices = new glm::mat4[curSkin->numJoints];
+					if (curSkin->numJoints != accessor.count) LOG("ERROR JOINTS AND BIND MATRICES MISMATCH\n");
+					memcpy(curSkin->inverseBindMatrices, &buffer.data[accessor.byteOffset + bufferView.byteOffset], sizeof(glm::mat4) * glm::min((uint32_t)accessor.count, curSkin->numJoints));
+				}
+				for (size_t j = 0; j < source.joints.size(); j++)
+				{
+					curSkin->joints[j] = &model->joints[source.joints.at(j)];
+				}
+			}
+		}
+
+		// LOAD ANIMATIONS
+		{
+			for (size_t i = 0; i < gltfModel.animations.size(); i++)
+			{
+				tinygltf::Animation& anim = gltfModel.animations.at(i);
+				Animation& myAnim = model->animations[i];
+				myAnim.start = FLT_MAX;
+				myAnim.end = -FLT_MAX;
+				myAnim.numSamplers = anim.samplers.size();
+				myAnim.numChannels = anim.channels.size();
+				myAnim.samplers = new AnimationSampler[myAnim.numSamplers];
+				memset(myAnim.samplers, 0, sizeof(AnimationSampler)* myAnim.numSamplers);
+				myAnim.channels = new  AnimationChannel[myAnim.numChannels];
+				memset(myAnim.channels, 0, sizeof(AnimationChannel)* myAnim.numChannels);
+				for (size_t j = 0; j < anim.samplers.size(); j++)
+				{
+					tinygltf::AnimationSampler& samp = anim.samplers.at(j);
+					AnimationSampler& mySamp = myAnim.samplers[j];
+					if (samp.interpolation == "LINEAR") {
+						mySamp.interpolation = AnimationSampler::InterpolationType::LINEAR;
+					}
+					if (samp.interpolation == "STEP") {
+						mySamp.interpolation = AnimationSampler::InterpolationType::STEP;
+					}
+					if (samp.interpolation == "CUBICSPLINE") {
+						mySamp.interpolation = AnimationSampler::InterpolationType::CUBICSPLINE;
+					}
+					// Read sampler input time values
+					{
+						const tinygltf::Accessor& accessor = gltfModel.accessors[samp.input];
+						const tinygltf::BufferView& bufferView = gltfModel.bufferViews[accessor.bufferView];
+						const tinygltf::Buffer& buffer = gltfModel.buffers[bufferView.buffer];
+
+						assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
+						mySamp.inputs = new float[accessor.count];
+						memset(mySamp.inputs, 0, sizeof(float)* accessor.count);
+						mySamp.numInOut = accessor.count;
+
+						const void* dataPtr = &buffer.data[accessor.byteOffset + bufferView.byteOffset];
+						const float* buf = static_cast<const float*>(dataPtr);
+						for (size_t index = 0; index < accessor.count; index++) {
+							mySamp.inputs[index] = buf[index];
+							if (mySamp.inputs[index] < myAnim.start) {
+								myAnim.start = mySamp.inputs[index];
+							}
+							if (mySamp.inputs[index] > myAnim.end) {
+								myAnim.end = mySamp.inputs[index];
+							}
+						}
+					}
+
+					// Read sampler output T/R/S values 
+					{
+						const tinygltf::Accessor& accessor = gltfModel.accessors[samp.output];
+						const tinygltf::BufferView& bufferView = gltfModel.bufferViews[accessor.bufferView];
+						const tinygltf::Buffer& buffer = gltfModel.buffers[bufferView.buffer];
+
+						assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
+						assert(accessor.count == mySamp.numInOut);
+						if (accessor.count != mySamp.numInOut) LOG("WARNING ANIMATION INOUT MISMATCH\n");
+
+						const void* dataPtr = &buffer.data[accessor.byteOffset + bufferView.byteOffset];
+
+						mySamp.outputs = new glm::vec4[accessor.count];
+						memset(mySamp.outputs, 0, sizeof(glm::vec4)* accessor.count);
+
+						switch (accessor.type) {
+						case TINYGLTF_TYPE_VEC3: {
+							const glm::vec3* buf = static_cast<const glm::vec3*>(dataPtr);
+							for (size_t index = 0; index < accessor.count; index++) {
+								mySamp.outputs[index] = glm::vec4(buf[index], 0.0f);
+							}
+							break;
+						}
+						case TINYGLTF_TYPE_VEC4: {
+							const glm::vec4* buf = static_cast<const glm::vec4*>(dataPtr);
+							for (size_t index = 0; index < accessor.count; index++) {
+								mySamp.outputs[index] = buf[index];
+							}
+							break;
+						}
+						default: {
+							LOG("WARNING UNKOWN ANIMATION TYPE\n");
+							break;
+						}
+						}
+					}
+				}
+
+				for (size_t j = 0; j < anim.channels.size(); j++)
+				{
+					tinygltf::AnimationChannel& channel = anim.channels.at(j);
+					AnimationChannel& myChannel = myAnim.channels[j];
+					if (channel.target_path == "rotation") {
+						myChannel.path = AnimationChannel::PathType::ROTATION;
+					}
+					if (channel.target_path == "translation") {
+						myChannel.path = AnimationChannel::PathType::TRANSLATION;
+					}
+					if (channel.target_path == "scale") {
+						myChannel.path = AnimationChannel::PathType::SCALE;
+					}
+					if (channel.target_path == "weights") {
+						LOG("NOT SUPPORTED\n");
+						continue;
+					}
+					myChannel.samplerIdx = channel.sampler;
+					myChannel.joint = &model->joints[channel.target_node];
+					if (!myChannel.joint) {
+						LOG("WARNING NO SKIN ATTACHED TO ANIMATION\n");
+					}
+				}
+			}
+
 		}
 
 	}
@@ -782,6 +1005,17 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		}
 		importer.FreeScene();
 	}
+
+	// INITIALIZE THE DEFAULT POSE OF ALL JOINTS
+	{
+		for (uint32_t i = 0; i < model->numJoints; i++)
+		{
+			Joint& j = model->joints[i];
+			j.defMatrix = glm::translate(glm::mat4(1.0f), j.translation)* glm::mat4(j.rotation)* glm::scale(glm::mat4(1.0f), j.scale) * j.matrix;
+		}
+	}
+
+
 	m->models.push_back(model);
 	return model;
 }

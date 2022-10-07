@@ -86,7 +86,6 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 	else
 	{
 		SceneObject obj;
-		obj.boneData = 0;	// default bone
 		obj.flags = 0;	// for now
 		obj.material = nullptr;
 		obj.model = nullptr;

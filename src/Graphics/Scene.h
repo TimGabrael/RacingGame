@@ -15,8 +15,8 @@ struct SceneObject
 	struct Material* material;
 	struct Entity* entity;
 	struct RigidBody* rigidBody;
+	struct AnimationInstanceData* anim;
 	glm::mat4 transform;
-	GLuint boneData;
 	uint32_t flags;
 };
 
