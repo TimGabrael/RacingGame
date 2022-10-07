@@ -339,7 +339,7 @@ void main()\n\
 		diffuseColor,\n\
 		specularColor\n\
 	);\n\
-	vec3 color = lights.ambientColor.rgb * diffuseColor;\n\
+	vec3 color = lights.ambientColor.rgb * baseColor.rgb;\n\
 	vec2 ts = vec2(1.0f) / vec2(textureSize(shadowMap, 0));\n\
 	for(int i = 0; i < lights.numDirLights; i++)\n\
 	{\n\
@@ -870,21 +870,22 @@ in vec2 UV;\n\
 in vec2 pos;\n\
 out vec4 outColor;\n\
 uniform sampler2D textureFrame;\n\
-uniform sampler2D textureNormDepth;\n\
+uniform sampler2D textureNormal;\n\
 uniform sampler2D textureMetallic;\n\
+uniform sampler2D textureDepth;\n\
 uniform mat4 proj;\n\
 uniform mat4 invProj;\n\
 uniform mat4 view;\n\
 uniform mat4 invView;\n\
-uniform float rayStep = 0.1f;\n\
+uniform float rayStep = 2.0f;\n\
 uniform int iterationCount = 100;\n\
 uniform float distanceBias = 0.03f;\n\
 uniform bool enableSSR = true;\n\
 uniform int sampleCount = 4;\n\
 uniform bool isSamplingEnabled = false;\n\
 uniform bool isExponentialStepEnabled = false;\n\
-uniform bool isAdaptiveStepEnabled = true;\n\
-uniform bool isBinarySearchEnabled = false;\n\
+uniform bool isAdaptiveStepEnabled = false;\n\
+uniform bool isBinarySearchEnabled = true;\n\
 uniform bool debugDraw = false;\n\
 uniform float samplingCoefficient = 0.001f;\n\
 float random(vec2 uv) {\n\
@@ -910,7 +911,7 @@ vec3 SSR(vec3 position, vec3 reflection) {\n\
 	int i = 0;\n\
 	for (; i < iterationCount; i++) {\n\
 		screenPosition = generateProjectedPosition(marchingPosition);\n\
-		depthFromScreen = abs(generatePositionFromDepth(screenPosition, texture(textureNormDepth, screenPosition).w).z);\n\
+		depthFromScreen = abs(generatePositionFromDepth(screenPosition, texture(textureDepth, screenPosition).x).z);\n\
 		delta = abs(marchingPosition.z) - depthFromScreen;\n\
 		if (abs(delta) < distanceBias) {\n\
 			vec3 color = vec3(1);\n\
@@ -938,7 +939,7 @@ vec3 SSR(vec3 position, vec3 reflection) {\n\
 			step *= 0.5;\n\
 			marchingPosition = marchingPosition - step * sign(delta);\n\
 			screenPosition = generateProjectedPosition(marchingPosition);\n\
-			depthFromScreen = abs(generatePositionFromDepth(screenPosition, texture(textureNormDepth, screenPosition).w).z);\n\
+			depthFromScreen = abs(generatePositionFromDepth(screenPosition, texture(textureDepth, screenPosition).x).z);\n\
 			delta = abs(marchingPosition.z) - depthFromScreen;\n\
 			if (abs(delta) < distanceBias) {\n\
 				vec3 color = vec3(1);\n\
@@ -951,9 +952,9 @@ vec3 SSR(vec3 position, vec3 reflection) {\n\
 	return vec3(0.0);\n\
 }\n\
 void main() {\n\
-	vec3 position = generatePositionFromDepth(UV, texture(textureNormDepth, UV).w);\n\
-	vec4 normal = view * vec4(texture(textureNormDepth, UV).xyz, 0.0);\n\
-	float metallic = 1.0f;//texture(textureMetallic, UV).r;\n\
+	vec3 position = generatePositionFromDepth(UV, texture(textureDepth, UV).x);\n\
+	vec4 normal = view * vec4(normalize(texture(textureNormal, UV).xyz), 0.0);\n\
+	float metallic = texture(textureMetallic, UV).r;\n\
 	if (!enableSSR || metallic < 0.01) {\n\
 		outColor = texture(textureFrame, UV);\n\
 	}\n\
@@ -1821,10 +1822,12 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	glUseProgram(info->ssr.program);
 	idx = glGetUniformLocation(info->ssr.program, "textureFrame");
 	glUniform1i(idx, 0);
-	idx = glGetUniformLocation(info->ssr.program, "textureNormDepth");
+	idx = glGetUniformLocation(info->ssr.program, "textureNormal");
 	glUniform1i(idx, 1);
 	idx = glGetUniformLocation(info->ssr.program, "textureMetallic");
 	glUniform1i(idx, 2);
+	idx = glGetUniformLocation(info->ssr.program, "textureDepth");
+	glUniform1i(idx, 3);
 }
 static void CleanUpPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 {
@@ -2393,8 +2396,8 @@ void RE_CreateScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* d
 	glGenFramebuffers(1, &data->fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, data->fbo);
 	
-	glGenTextures(1, &data->normalAndDepthTexture);
-	glBindTexture(GL_TEXTURE_2D, data->normalAndDepthTexture);
+	glGenTextures(1, &data->normalTexture);
+	glBindTexture(GL_TEXTURE_2D, data->normalTexture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -2410,7 +2413,21 @@ void RE_CreateScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* d
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->normalAndDepthTexture, 0);
+	glGenTextures(1, &data->depthTexture);
+	glBindTexture(GL_TEXTURE_2D, data->depthTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->depthTexture, 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
+	}
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->depthTexture, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->normalTexture, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, data->metallicTexture, 0);
 
 	GLenum drawBuffers[2] = { GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1 };
@@ -2423,9 +2440,11 @@ void RE_CreateScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* d
 }
 void RE_CleanUpScreenSpaceReflectionRenderData(ScreenSpaceReflectionRenderData* data)
 {
-	if (data->normalAndDepthTexture) glDeleteTextures(1, &data->normalAndDepthTexture);
+	if (data->normalTexture) glDeleteTextures(1, &data->normalTexture);
 	if (data->metallicTexture) glDeleteTextures(1, &data->metallicTexture);
+	if (data->depthTexture) glDeleteTextures(1, &data->depthTexture);
 	if (data->fbo) glDeleteFramebuffers(1, &data->fbo);
+
 	memset(data, 0, sizeof(ScreenSpaceReflectionRenderData));
 }
 
@@ -2974,20 +2993,15 @@ void RE_RenderShadows(struct Renderer* renderer)
 				{
 					Mesh* m = &obj->model->meshes[j];
 					if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
-					if (obj->anim)
+					if (obj->anim && m->skinIdx < obj->anim->numSkins)
 					{
-						if (m->skinIdx < obj->anim->numSkins)
-						{
-							glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-						}
-						else
-						{
-							glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-						}
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+						glm::mat4 animMat = mat * obj->anim->data[m->skinIdx].baseTransform;
+						glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&animMat);
 					}
 					else
 					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 					}
 					BindMaterialGeometry(renderer, m->material);
 					GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
@@ -3175,20 +3189,15 @@ void RE_RenderGeometry(struct Renderer* renderer)
 				Mesh* m = &obj->model->meshes[j];
 				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
 
-				if (obj->anim)
+				if (obj->anim && m->skinIdx < obj->anim->numSkins)
 				{
-					if (m->skinIdx < obj->anim->numSkins)
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					glm::mat4 animMat = mat * obj->anim->data[m->skinIdx].baseTransform;
+					glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&animMat);
 				}
 				else
 				{
-					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 				}
 
 				BindMaterialGeometry(renderer, m->material);
@@ -3255,16 +3264,11 @@ void RE_RenderOpaque(struct Renderer* renderer)
 				Mesh* m = &obj->model->meshes[j];
 				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
 
-				if (obj->anim)
+				if (obj->anim && m->skinIdx < obj->anim->numSkins)
 				{
-					if (m->skinIdx < obj->anim->numSkins)
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					glm::mat4 animMat = mat * obj->anim->data[m->skinIdx].baseTransform;
+					glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&animMat);
 				}
 				else
 				{
@@ -3333,16 +3337,11 @@ void RE_RenderTransparent(struct Renderer* renderer)
 			{
 				Mesh* m = &obj->model->meshes[j];
 				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
-				if (obj->anim)
+				if (obj->anim && m->skinIdx < obj->anim->numSkins)
 				{
-					if (m->skinIdx < obj->anim->numSkins)
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					glm::mat4 animMat = mat * obj->anim->data[m->skinIdx].baseTransform;
+					glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&animMat);
 				}
 				else
 				{
@@ -3427,12 +3426,14 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	glDisable(GL_BLEND);
-	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, ssrData->fbo);
 	glViewport(0, 0, ssrData->width, ssrData->height);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClearDepthf(1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(renderer->pbrData.ssrProgram);
 
 	glUniform3fv(renderer->pbrData.ssrUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
@@ -3454,20 +3455,15 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 			{
 				Mesh* m = &obj->model->meshes[j];
 				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
-				if (obj->anim)
+				if (obj->anim && m->skinIdx < obj->anim->numSkins)
 				{
-					if (m->skinIdx < obj->anim->numSkins)
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+					glm::mat4 animMat = mat * obj->anim->data[m->skinIdx].baseTransform;
+					glUniformMatrix4fv(renderer->pbrData.ssrUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&animMat);
 				}
 				else
 				{
-					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 				}
 
 				BindMaterialSSR(renderer, m->material);
@@ -3489,6 +3485,7 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
+	glDisable(GL_DEPTH_TEST);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
 	glViewport(0, 0, targetWidth, targetHeight);
@@ -3500,9 +3497,11 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, srcTexture);
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, ssrData->normalAndDepthTexture);
+	glBindTexture(GL_TEXTURE_2D, ssrData->normalTexture);
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, ssrData->metallicTexture);
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, ssrData->depthTexture);
 
 	const PostProcessingRenderInfo::ScreenSpaceReflection& ssr = renderer->ppInfo.ssr;
 	// uniform mat4 proj; \n\

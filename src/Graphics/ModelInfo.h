@@ -69,6 +69,7 @@ struct Joint
 	glm::quat rotation{};
 	glm::mat4 matrix;
 	glm::mat4 defMatrix;
+	glm::mat4 GetMatrix();
 };
 
 struct Skin
@@ -168,8 +169,9 @@ struct AnimationInstanceData
 {
 	struct SkinData
 	{
-		GLuint skinUniform;
 		AnimationTransformation* current;
+		glm::mat4 baseTransform;
+		GLuint skinUniform;
 		uint32_t numTransforms;
 	};
 	SkinData* data;

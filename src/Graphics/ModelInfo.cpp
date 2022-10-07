@@ -1,6 +1,19 @@
 #include "ModelInfo.h"
 #include "Renderer.h"
 
+
+glm::mat4 Joint::GetMatrix()
+{
+	glm::mat4 m = glm::translate(glm::mat4(1.0f), translation) * glm::mat4(rotation) * glm::scale(glm::mat4(1.0f), scale) * matrix;
+	Joint* p = parent;
+	while (p) {
+		m = glm::translate(glm::mat4(1.0f), p->translation) * glm::mat4(p->rotation) * glm::scale(glm::mat4(1.0f), p->scale) * p->matrix * m;
+		p = p->parent;
+	}
+	return m;
+}
+
+
 void GenerateModelVertexBuffer(GLuint* vaoOut, GLuint* vtxBufOut, Vertex3D* vtx, uint32_t num)
 {
 	glGenVertexArrays(1, vaoOut);
@@ -99,6 +112,7 @@ void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim)
 		AnimationInstanceData::SkinData& cur = anim->data[i];
 		cur.numTransforms = skin.numJoints;
 		cur.current = new AnimationTransformation[skin.numJoints];
+		cur.baseTransform = glm::mat4(1.0f);
 		
 		BoneData boneData{};
 		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
@@ -195,22 +209,20 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 		for (uint32_t j = 0; j < model->numJoints; j++)
 		{
 			Joint* joint = &model->joints[j];
-			if (joint->skinIndex == skinIdx)
+			if (joint->skinIndex == skinIdx && joint->mesh && joint->skin)
 			{
-				glm::mat4 inverse = glm::inverse(glm::translate(glm::mat4(1.0f), joint->translation) * glm::mat4(joint->rotation) * glm::scale(glm::mat4(1.0f), joint->scale) * joint->matrix);
+				glm::mat4 mainMat = joint->GetMatrix();
+				animInstance->data[skinIdx].baseTransform = mainMat;
+				glm::mat4 inverse = glm::inverse(mainMat);
+
 				for (uint32_t k = 0; k < numJoints; k++)
 				{
 					Joint* childJoint = skin.joints[k];
-					glm::mat4 m = glm::translate(glm::mat4(1.0f), childJoint->translation) * glm::mat4(childJoint->rotation) * glm::scale(glm::mat4(1.0f), childJoint->scale) * childJoint->matrix;
-					Joint* parent = childJoint->parent;
-					while (parent)
-					{
-						m = glm::translate(glm::mat4(1.0f), parent->translation) * glm::mat4(parent->rotation) * glm::scale(glm::mat4(1.0f), parent->scale) * parent->matrix * m;
-						parent = parent->parent;
-					}
-
-					glm::mat4 jointMat = inverse * m * skin.inverseBindMatrices[k];
+					glm::mat4 m = childJoint->GetMatrix();
+					glm::mat4 jointMat = m * skin.inverseBindMatrices[k];
+					jointMat = inverse * jointMat;
 					boneData.jointMatrix[k] = jointMat;
+
 				}
 				break;
 			}

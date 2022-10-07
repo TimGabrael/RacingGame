@@ -57,13 +57,14 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->light.pos = { 0.0f, 20.0f, -10.0f, 0.0f };
 
-
+	RELI_SetAmbientLightColor(out->defaultLightGroup, { 0.6f, 0.6f, 0.6f });
 	RELI_Update(out->defaultLightGroup, nullptr);
 
 
 	RE_CreateAntialiasingData(&out->AAbuffer, state->winWidth, state->winHeight, 0);
 	RE_CreatePostProcessingRenderData(&out->PPbuffer, state->winWidth, state->winHeight);
 	
+	RE_CreateScreenSpaceReflectionRenderData(&out->SSRbuffer, state->winWidth, state->winHeight);
 
 	out->localPlayer = nullptr;
 

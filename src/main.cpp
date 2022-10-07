@@ -135,9 +135,10 @@ int main()
 
 
 		RE_FinishAntialiasingData(&game->manager->AAbuffer);
-		RE_RenderPostProcessingBloom(game->renderer, &game->manager->PPbuffer, 
-			game->manager->AAbuffer.intermediateTexture, game->manager->AAbuffer.width, game->manager->AAbuffer.height,
-			0, game->winWidth, game->winHeight);
+		RE_RenderScreenSpaceReflection_Experimental(game->renderer, &game->manager->SSRbuffer, game->manager->AAbuffer.intermediateTexture, 0, game->winWidth, game->winHeight);
+		//RE_RenderPostProcessingBloom(game->renderer, &game->manager->PPbuffer, 
+		//	game->manager->AAbuffer.intermediateTexture, game->manager->AAbuffer.width, game->manager->AAbuffer.height,
+		//	0, game->winWidth, game->winHeight);
 		
 		glfwSwapBuffers(window);
 

@@ -131,9 +131,9 @@ struct PostProcessingRenderData
 struct ScreenSpaceReflectionRenderData
 {
 	GLuint fbo;
-	GLuint normalAndDepthTexture;
+	GLuint normalTexture;
 	GLuint metallicTexture;
-
+	GLuint depthTexture;
 	uint32_t width;
 	uint32_t height;
 };
