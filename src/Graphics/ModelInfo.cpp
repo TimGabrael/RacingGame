@@ -104,12 +104,12 @@ void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim)
 		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
 		boneData.numJoints = numJoints;
 
-		for (uint32_t j = 0; j < numJoints; j++)
+		for (uint32_t j = 0; j < model->numJoints; j++)
 		{
-			Joint* joint = skin.joints[j];
-			if (joint->mesh)
+			Joint* joint = &model->joints[j];
+			if (joint->skinIndex == i)
 			{
-				glm::mat4 inverse = glm::inverse(joint->defMatrix);
+				glm::mat4 inverse = glm::inverse(glm::translate(glm::mat4(1.0f), joint->translation) * glm::mat4(joint->rotation) * glm::scale(glm::mat4(1.0f), joint->scale) * joint->matrix);
 				for (uint32_t k = 0; k < numJoints; k++)
 				{
 					Joint* childJoint = skin.joints[k];
@@ -192,12 +192,12 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
 		boneData.numJoints = numJoints;
 
-		for (uint32_t j = 0; j < numJoints; j++)
+		for (uint32_t j = 0; j < model->numJoints; j++)
 		{
-			Joint* joint = skin.joints[j];
-			if (joint->mesh)
+			Joint* joint = &model->joints[j];
+			if (joint->skinIndex == skinIdx)
 			{
-				glm::mat4 inverse = glm::inverse(joint->defMatrix);
+				glm::mat4 inverse = glm::inverse(glm::translate(glm::mat4(1.0f), joint->translation) * glm::mat4(joint->rotation) * glm::scale(glm::mat4(1.0f), joint->scale) * joint->matrix);
 				for (uint32_t k = 0; k < numJoints; k++)
 				{
 					Joint* childJoint = skin.joints[k];

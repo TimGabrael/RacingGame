@@ -4,7 +4,8 @@
 enum MESH_FLAG
 {
 	MESH_FLAG_LINE = 1,
-	MESH_FLAG_UNSUPPORTED = (1<<1),
+	MESH_FLAG_NO_INDEX_BUFFER = (1 << 1),
+	MESH_FLAG_UNSUPPORTED = (1 << 2),
 };
 
 struct AnimationTransformation

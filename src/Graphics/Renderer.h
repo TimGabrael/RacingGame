@@ -124,6 +124,8 @@ struct PostProcessingRenderData
 	uint32_t height;
 	float blurRadius;
 	float bloomIntensity;
+	float exposure;
+	float gamma;
 	int numPPFbos; // numPPFbos == min(numMipMaps, MAX_BLOOM_MIPMAPS)
 };
 struct ScreenSpaceReflectionRenderData

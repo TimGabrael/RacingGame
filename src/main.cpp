@@ -25,18 +25,18 @@ int main()
 
 	//Model* model = AM_AddModel(game->assets, "Assets/ScriptFactory.glb", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE);
 	//Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF/BoomBox.gltf");
-	Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE); 
+	Model* model = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONCAVE); 
 	model->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.25f, 0.25f, 0.25f));
 	//Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF-Binary/BoomBox.glb", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE);
 	//boomBox->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(500.0f, 500.0f, 500.0f));
-	Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/SimpleSkin/glTF-Embedded/SimpleSkin.gltf", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE);
-	boomBox->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f, 5.0f, 5.0f));
+	Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Fox/glTF-Binary/Fox.glb", 0);
+	boomBox->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, 1.0f));
 
 	PhysicsMaterial* material = PH_AddMaterial(game->physics, 0.5f, 0.5f, 0.5f);
 
 	PhysicsShape* otherShape = PH_AddConcaveShape(game->physics, model->concaveMesh, material, glm::vec3(0.25f, 0.25f, 0.25f));
-	PhysicsShape* boomBoxShape = PH_AddConvexShape(game->physics, boomBox->convexMesh, material, glm::vec3(500.0f, 500.0f, 500.0f));
-	PhysicsShape* ground = PH_AddBoxShape(game->physics, material, glm::vec3(4.0f, 4.0f, 4.0f));
+	//PhysicsShape* boomBoxShape = PH_AddConvexShape(game->physics, boomBox->convexMesh, material, glm::vec3(500.0f, 500.0f, 500.0f));
+	//PhysicsShape* ground = PH_AddBoxShape(game->physics, material, glm::vec3(4.0f, 4.0f, 4.0f));
 
 
 	
@@ -53,27 +53,8 @@ int main()
 
 
 	// TEST ANIM INSTANCE DATA
-	AnimationInstanceData::SkinData skinData;
-	skinData.numTransforms = 2;
-	glGenBuffers(1, &skinData.skinUniform);
-	
-	AnimationInstanceData animInstance;
-	animInstance.data = &skinData;
-	animInstance.numSkins = 1;
-
-
 	AnimationInstanceData realAnimData; memset(&realAnimData, 0, sizeof(AnimationInstanceData));
 	CreateBoneDataFromModel(boomBox, &realAnimData);
-
-	{
-		BoneData testBoneData{};
-		testBoneData.numJoints = 3;
-		testBoneData.jointMatrix[0] = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f));
-		testBoneData.jointMatrix[1] = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 10.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(100.0f));
-		testBoneData.jointMatrix[2] = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 60.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f));
-		glBindBuffer(GL_UNIFORM_BUFFER, skinData.skinUniform);
-		glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &testBoneData, GL_STATIC_DRAW);
-	}
 
 
 	base.model = boomBox;
@@ -96,19 +77,11 @@ int main()
 		float dt = curTime - timer;
 		timer = curTime;
 
-		{
-			BoneData testBoneData{};
-			testBoneData.numJoints = 2;
-			testBoneData.jointMatrix[0] = glm::mat4(1.0f);
-			testBoneData.jointMatrix[1] = glm::rotate(glm::mat4(1.0f), (float)curTime, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::translate(glm::mat4(1.0f), glm::vec3(sin(curTime), sin(curTime), sin(curTime)));
 
-			glBindBuffer(GL_UNIFORM_BUFFER, skinData.skinUniform);
-			glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &testBoneData, GL_STATIC_DRAW);
-		}
 		static float animIdx = 0.0f;
 		animIdx += dt;
 		UpdateBoneDataFromModel(boomBox, 0, 0, &realAnimData, animIdx);
-		if (animIdx > 40.0f) animIdx = 0.0f;
+		if (animIdx > 2.0f) animIdx = 0.0f;
 
 
 		SC_Update(game->scene, dt);
@@ -144,7 +117,9 @@ int main()
 			RE_SetLightData(game->renderer, game->manager->defaultLightGroup);
 
 			
+
 			RE_RenderShadows(game->renderer);
+
 			glBindFramebuffer(GL_FRAMEBUFFER, game->manager->AAbuffer.fbo);
 			glClearColor(0.2f, 0.2f, 0.6f, 1.0f);
 			glClearDepthf(1.0f);

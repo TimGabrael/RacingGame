@@ -140,14 +140,19 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		{
 			for (auto& p : m.primitives)
 			{
-				if (p.mode == TINYGLTF_MODE_TRIANGLES && p.indices > -1)
+				if ((p.mode == TINYGLTF_MODE_LINE || p.mode == TINYGLTF_MODE_TRIANGLES) && p.indices > -1)
 				{
 					model->numVertices += gltfModel.accessors[p.attributes.find("POSITION")->second].count;
 					model->numIndices += gltfModel.accessors[p.indices].count;
 				}
+				else if (p.mode == TINYGLTF_MODE_LINE || p.mode == TINYGLTF_MODE_TRIANGLES)
+				{
+					model->numVertices += gltfModel.accessors[p.attributes.find("POSITION")->second].count;
+				}
 				else
 				{
 					LOG("WARNING MODEL HAS UNSUPPORTED MESH\n");
+					LOG("p.mode: / p.indices: %d %d\n", p.mode, p.indices);
 				}
 				model->numMeshes++;
 			}
@@ -165,7 +170,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		model->materials = new Material[model->numMaterials];
 		memset(model->materials, 0, sizeof(Material) * model->numMaterials);
 		model->joints = new Joint[model->numJoints];
-		memset(model->joints, 0, sizeof(Joint));
+		memset(model->joints, 0, sizeof(Joint) * model->numJoints);
 		model->skins = new Skin[model->numSkins];
 		memset(model->skins, 0, sizeof(Skin) * model->numSkins);
 		model->animations = new Animation[model->numAnimations];
@@ -177,7 +182,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		// GENERATE BUFFER DATA
 		{
 			Vertex3D* verts = new Vertex3D[model->numVertices];
-			uint32_t* inds = new uint32_t[model->numIndices];
+			uint32_t* inds = nullptr;
+			if(model->numIndices > 0) inds = new uint32_t[model->numIndices];
 
 			uint32_t curVertPos = 0;
 			uint32_t curIndPos = 0;
@@ -187,8 +193,11 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			{
 				for (auto& primitive : m.primitives)
 				{
-					if (primitive.mode == TINYGLTF_MODE_TRIANGLES && primitive.indices > -1)
+					if (primitive.mode == TINYGLTF_MODE_TRIANGLES || primitive.mode == TINYGLTF_MODE_LINE)
 					{
+						if (primitive.mode == TINYGLTF_MODE_LINE) model->meshes[curMeshIdx].flags |= MESH_FLAG_LINE;
+						if (primitive.indices <= -1) model->meshes[curMeshIdx].flags |= MESH_FLAG_NO_INDEX_BUFFER;
+
 						const uint32_t vertexStart = curVertPos;
 						{
 							bool hasSkin = false;
@@ -292,7 +301,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 								curVertPos++;
 							}
 						}
-
+						if(primitive.indices > -1)
 						{
 							model->meshes[curMeshIdx].startIdx = curIndPos;
 							const tinygltf::Accessor& accessor = gltfModel.accessors[primitive.indices];
@@ -329,6 +338,11 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 							}
 							}
 						}
+						else
+						{
+							model->meshes[curMeshIdx].startIdx = vertexStart;
+							model->meshes[curMeshIdx].numInd = curVertPos - vertexStart;
+						}
 					}
 					else
 					{
@@ -341,10 +355,12 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 
 			GenerateModelVertexBuffer(&model->vao, &model->vertexBuffer, verts, curVertPos);
 
-			glGenBuffers(1, &model->indexBuffer);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->indexBuffer);
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * curIndPos, inds, GL_STATIC_DRAW);
-
+			if (inds)
+			{
+				glGenBuffers(1, &model->indexBuffer);
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->indexBuffer);
+				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * curIndPos, inds, GL_STATIC_DRAW);
+			}
 
 			GameState* game = GetGameState();
 			if (flags & MODEL_LOAD_CONVEX)
@@ -353,15 +369,23 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			}
 			if (flags & MODEL_LOAD_CONCAVE)
 			{
+				if (!inds)
+				{
+					inds = new uint32_t[curVertPos];
+					for (uint32_t i = 0; i < curVertPos; i++)
+					{
+						inds[i] = i;
+					}
+					curIndPos = curVertPos;
+				}
 				model->concaveMesh = PH_AddPhysicsConcaveMesh(game->physics, verts, curVertPos, sizeof(Vertex3D), inds, curIndPos);
 			}
 
 
 			delete[] verts;
-			delete[] inds;
+			if(inds) delete[] inds;
 
 		}
-
 		// LOAD TEXTURES
 		for (uint32_t i = 0; i < gltfModel.textures.size(); i++)
 		{
@@ -533,7 +557,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			model->bound.min = glm::min(model->bound.min, model->meshes[i].bound.min);
 			model->bound.max = glm::max(model->bound.max, model->meshes[i].bound.max);
 		}
-
 		// LOAD NODES(JOINTS)
 		{
 			std::function<void(Model* m, tinygltf::Model* gm, Joint* parent, int curNode)> setJointNodeHirarchy = [&](Model* m, tinygltf::Model* gm, Joint* parent, int curNode)
@@ -541,7 +564,9 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				tinygltf::Node& node = gm->nodes[curNode];
 				Joint& j = m->joints[curNode];
 				j.matrix = glm::mat4(1.0f);
+				j.defMatrix = glm::mat4(1.0f);
 				j.skinIndex = node.skin;
+
 
 				if (node.mesh > -1) {
 					m->meshes[node.mesh].skinIdx = node.skin;
@@ -554,6 +579,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				
 				j.parent = parent;
 				j.children = new Joint*[gm->nodes[curNode].children.size()];
+				memset(j.children, 0, sizeof(Joint*) * gm->nodes[curNode].children.size());
 				j.numChildren = gm->nodes[curNode].children.size();
 				glm::vec3 translation = glm::vec3(0.0f);
 				if (node.translation.size() == 3) {
@@ -574,11 +600,18 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				j.rotation = rotation;
 				j.scale = scale;
 
-				for (size_t k = 0; k < gm->nodes[curNode].children.size(); k++)
+				for (size_t k = 0; k < j.numChildren; k++)
 				{
 					int cur = gm->nodes[curNode].children.at(k);
-					m->joints[curNode].children[k] = &m->joints[cur];
-					setJointNodeHirarchy(m, gm, &m->joints[curNode], cur);
+					if (cur > -1 && cur < m->numJoints)
+					{
+						m->joints[curNode].children[k] = &m->joints[cur];
+						setJointNodeHirarchy(m, gm, &m->joints[curNode], cur);
+					}
+					else
+					{
+						LOG("WARNING: Trying to add child out of joint range\n");
+					}
 				}
 			};
 			for (size_t i = 0; i < gltfModel.nodes.size(); i++)
@@ -595,6 +628,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				Skin* curSkin = &model->skins[i];
 				curSkin->numJoints = source.joints.size();
 				curSkin->joints = new Joint*[curSkin->numJoints];
+				memset(curSkin->joints, 0, sizeof(Joint*) * curSkin->numJoints);
 
 				if (source.skeleton > -1)
 				{
@@ -605,9 +639,9 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					const tinygltf::Accessor& accessor = gltfModel.accessors[source.inverseBindMatrices];
 					const tinygltf::BufferView& bufferView = gltfModel.bufferViews[accessor.bufferView];
 					const tinygltf::Buffer& buffer = gltfModel.buffers[bufferView.buffer];
-					curSkin->inverseBindMatrices = new glm::mat4[curSkin->numJoints];
+					curSkin->inverseBindMatrices = new glm::mat4[accessor.count];
 					if (curSkin->numJoints != accessor.count) LOG("ERROR JOINTS AND BIND MATRICES MISMATCH\n");
-					memcpy(curSkin->inverseBindMatrices, &buffer.data[accessor.byteOffset + bufferView.byteOffset], sizeof(glm::mat4) * glm::min((uint32_t)accessor.count, curSkin->numJoints));
+					memcpy(curSkin->inverseBindMatrices, &buffer.data[accessor.byteOffset + bufferView.byteOffset], sizeof(glm::mat4) * accessor.count);
 				}
 				for (size_t j = 0; j < source.joints.size(); j++)
 				{
@@ -615,7 +649,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				}
 			}
 		}
-
 		// LOAD ANIMATIONS
 		{
 			for (size_t i = 0; i < gltfModel.animations.size(); i++)
@@ -630,6 +663,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				memset(myAnim.samplers, 0, sizeof(AnimationSampler)* myAnim.numSamplers);
 				myAnim.channels = new  AnimationChannel[myAnim.numChannels];
 				memset(myAnim.channels, 0, sizeof(AnimationChannel)* myAnim.numChannels);
+
 				for (size_t j = 0; j < anim.samplers.size(); j++)
 				{
 					tinygltf::AnimationSampler& samp = anim.samplers.at(j);
@@ -705,6 +739,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					}
 				}
 
+
 				for (size_t j = 0; j < anim.channels.size(); j++)
 				{
 					tinygltf::AnimationChannel& channel = anim.channels.at(j);
@@ -729,7 +764,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					}
 				}
 			}
-
 		}
 
 	}
@@ -1006,12 +1040,31 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		importer.FreeScene();
 	}
 
+
 	// INITIALIZE THE DEFAULT POSE OF ALL JOINTS
 	{
 		for (uint32_t i = 0; i < model->numJoints; i++)
 		{
 			Joint& j = model->joints[i];
-			j.defMatrix = glm::translate(glm::mat4(1.0f), j.translation)* glm::mat4(j.rotation)* glm::scale(glm::mat4(1.0f), j.scale) * j.matrix;
+			if (j.skin && j.mesh && j.skinIndex > -1)
+			{
+				j.defMatrix = glm::translate(glm::mat4(1.0f), j.translation) * glm::mat4(j.rotation) * glm::scale(glm::mat4(1.0f), j.scale) * j.matrix;
+				glm::mat4 inverse = glm::inverse(j.defMatrix);
+				for (uint32_t idx = 0; idx < j.skin->numJoints; idx++)
+				{
+					Joint* childJoint = j.skin->joints[idx];
+					glm::mat4 m = glm::translate(glm::mat4(1.0f), childJoint->translation) * glm::mat4(childJoint->rotation) * glm::scale(glm::mat4(1.0f), childJoint->scale) * childJoint->matrix;
+					Joint* parent = childJoint->parent;
+					while (parent)
+					{
+						m = glm::translate(glm::mat4(1.0f), parent->translation) * glm::mat4(parent->rotation) * glm::scale(glm::mat4(1.0f), parent->scale) * parent->matrix * m;
+						parent = parent->parent;
+					}
+					
+					glm::mat4 jointMat = inverse * m * j.skin->inverseBindMatrices[idx];
+					childJoint->defMatrix = jointMat;
+				}
+			}
 		}
 	}
 

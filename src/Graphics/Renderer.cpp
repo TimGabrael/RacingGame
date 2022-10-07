@@ -827,6 +827,8 @@ uniform sampler2D tex1;\
 uniform sampler2D tex2;\
 uniform float mipLevel1;\
 uniform float mipLevel2;\
+uniform float exposure;\
+uniform float gamma;\
 vec3 aces(vec3 x) {\
     const float a = 2.51;\
     const float b = 0.03;\
@@ -840,10 +842,27 @@ vec3 filmic(vec3 x) {\
     vec3 result = (X * (6.2 * X + 0.5)) / (X * (6.2 * X + 1.7) + 0.06);\
     return pow(result, vec3(2.2));\
 }\
+vec3 Uncharted2Tonemap(vec3 color)\
+{\
+	float A = 0.15;\
+	float B = 0.50;\
+	float C = 0.10;\
+	float D = 0.20;\
+	float E = 0.02;\
+	float F = 0.30;\
+	float W = 11.2;\
+	return ((color * (A * color + C * B) + D * E) / (color * (A * color + B) + D * F)) - E / F;\
+}\
+vec4 tonemap(vec4 color)\
+{\
+	vec3 outcol = Uncharted2Tonemap(color.rgb * exposure);\
+	outcol = outcol * (1.0f / Uncharted2Tonemap(vec3(11.2f)));\
+	return vec4(pow(outcol, vec3(1.0f / gamma)), color.a);\
+}\
 out vec4 outCol;\
 void main()\
 {\
-    vec4 c = textureLod(tex1, UV, mipLevel1) + textureLod(tex2, UV, mipLevel2);\n\
+    vec4 c = tonemap(textureLod(tex1, UV, mipLevel1) + textureLod(tex2, UV, mipLevel2));\n\
     outCol = c;\
 }";
 static constexpr char* ssrFragmentShader = "#version 330\n\
@@ -1293,6 +1312,8 @@ struct PostProcessingRenderInfo
 		GLuint program;
 		GLuint mipLevel1Loc;
 		GLuint mipLevel2Loc;
+		GLuint exposureLoc;
+		GLuint gammaLoc;
 	}dualCopy;
 	struct Upsampling
 	{
@@ -1768,6 +1789,8 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 
 	info->dualCopy.mipLevel1Loc = glGetUniformLocation(info->dualCopy.program, "mipLevel1");
 	info->dualCopy.mipLevel2Loc = glGetUniformLocation(info->dualCopy.program, "mipLevel2");
+	info->dualCopy.exposureLoc = glGetUniformLocation(info->dualCopy.program, "exposure");
+	info->dualCopy.gammaLoc = glGetUniformLocation(info->dualCopy.program, "gamma");
 
 	glUseProgram(info->dualCopy.program);
 	GLuint idx = glGetUniformLocation(info->dualCopy.program, "tex1");
@@ -2262,6 +2285,8 @@ void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t 
 
 	data->blurRadius = 4.0f;		// set standard value for blur
 	data->bloomIntensity = 1.0f;	// set standard value for bloom
+	data->exposure = 4.5f;			// set standard value for exposure
+	data->gamma = 1.5f;				// set standard value for gamme
 
 
 	data->numPPFbos = 1 + floor(log2(glm::max(data->width, data->height)));
@@ -2944,14 +2969,36 @@ void RE_RenderShadows(struct Renderer* renderer)
 				glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 
 				glBindVertexArray(obj->model->vao);
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+				if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 				for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 				{
 					Mesh* m = &obj->model->meshes[j];
 					if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
+					if (obj->anim)
+					{
+						if (m->skinIdx < obj->anim->numSkins)
+						{
+							glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
+						}
+						else
+						{
+							glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+						}
+					}
+					else
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+					}
 					BindMaterialGeometry(renderer, m->material);
-					if (m->flags & MESH_FLAG_LINE) glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-					else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+					GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+					if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+					{
+						glDrawArrays(renderMode, m->startIdx, m->numInd);
+					}
+					else
+					{
+						glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+					}
 				}
 			}
 		}
@@ -3122,7 +3169,7 @@ void RE_RenderGeometry(struct Renderer* renderer)
 			glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 
 			glBindVertexArray(obj->model->vao);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+			if(obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
@@ -3145,8 +3192,15 @@ void RE_RenderGeometry(struct Renderer* renderer)
 				}
 
 				BindMaterialGeometry(renderer, m->material);
-				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+				if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+				{
+					glDrawArrays(renderMode, m->startIdx, m->numInd);
+				}
+				else
+				{
+					glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				}
 			}
 		}
 	}
@@ -3186,7 +3240,6 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 	
-
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
 		SceneObject* obj = renderer->objList[i];
@@ -3196,7 +3249,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 
 			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 			glBindVertexArray(obj->model->vao);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+			if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
@@ -3218,8 +3271,15 @@ void RE_RenderOpaque(struct Renderer* renderer)
 					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 				}
 				BindMaterial(renderer, m->material);
-				if(m->flags & MESH_FLAG_LINE) glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+				if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+				{
+					glDrawArrays(renderMode, m->startIdx, m->numInd);
+				}
+				else
+				{
+					glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				}
 			}
 		}
 	}
@@ -3289,8 +3349,15 @@ void RE_RenderTransparent(struct Renderer* renderer)
 					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 				}
 				BindMaterial(renderer, m->material);
-				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+				if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+				{
+					glDrawArrays(renderMode, m->startIdx, m->numInd);
+				}
+				else
+				{
+					glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				}
 			}
 		}
 	}
@@ -3386,6 +3453,7 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
+				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
 				if (obj->anim)
 				{
 					if (m->skinIdx < obj->anim->numSkins)
@@ -3401,10 +3469,17 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 				{
 					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 				}
-				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
+
 				BindMaterialSSR(renderer, m->material);
-				if (m->flags & MESH_FLAG_LINE)glDrawElements(GL_LINES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-				else glDrawElements(GL_TRIANGLES, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+				if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+				{
+					glDrawArrays(renderMode, m->startIdx, m->numInd);
+				}
+				else
+				{
+					glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				}
 			}
 		}
 	}
@@ -3545,6 +3620,8 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 
 		glUniform1f(renderer->ppInfo.dualCopy.mipLevel1Loc, 0);
 		glUniform1f(renderer->ppInfo.dualCopy.mipLevel2Loc, 0);
+		glUniform1f(renderer->ppInfo.dualCopy.exposureLoc, ppData->exposure);
+		glUniform1f(renderer->ppInfo.dualCopy.gammaLoc, ppData->gamma);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 	}
 }
