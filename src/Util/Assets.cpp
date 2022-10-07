@@ -586,9 +586,10 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				if (node.translation.size() == 3) {
 					translation = glm::make_vec3(node.translation.data());
 				}
-				glm::quat rotation = glm::mat4(1.0f);
+				glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 				if (node.rotation.size() == 4) {
-					rotation = glm::make_quat(node.rotation.data());
+					glm::vec4 r = glm::make_vec4(node.rotation.data());
+					rotation = glm::quat(r.w, r.x, r.y, r.z);
 				}
 				glm::vec3 scale = glm::vec3(1.0f);
 				if (node.scale.size() == 3) {

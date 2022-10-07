@@ -60,7 +60,7 @@ int main()
 	base.model = boomBox;
 	for (int i = 0; i < 1; i++)
 	{
-		//base.anim = &realAnimData;
+		base.anim = &realAnimData;
 		base.rigidBody = nullptr;// PH_AddDynamicRigidBody(game->physics, boomBoxShape, glm::vec3(-3.0f, 30.0f + i * 50.0f, 0.0f), def);
 		SC_AddDynamicObject(game->scene, &base);
 	}
