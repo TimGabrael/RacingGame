@@ -243,9 +243,11 @@ void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap);
 
 
 
-// THIS LOOKS REALLY BAD AND PERFORMCE HORRIBLY, BUT MAYBE THE UNIFORM DATA NEEDS TO BE CONFIGURED BETTER
-void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
+void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
 
+
+// THIS DOESN'T REALLY WORK, BUT MAYBE THE UNIFORM DATA NEEDS TO BE CONFIGURED BETTER
+void RE_RenderScreenSpaceAmbientOcclusion_Experimental(struct Renderer* renderer, GLuint srcColorTexture, GLuint srcDepthTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
 
 void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
 

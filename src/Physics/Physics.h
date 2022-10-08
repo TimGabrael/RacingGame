@@ -10,6 +10,15 @@ struct PhysicsConvexMesh;
 struct PhysicsConcaveMesh;
 struct PhysicsShape;
 
+struct PhysicsController
+{
+	void Move(const glm::vec3& mov);
+	RigidBody* GetRigidBody();
+};
+
+
+
+
 PhysicsScene* PH_CreatePhysicsScene();
 void PH_CleanUpPhysicsScene(PhysicsScene* scene);
 
@@ -31,11 +40,17 @@ PhysicsShape* PH_AddBoxShape(PhysicsScene* scene, const PhysicsMaterial* materia
 RigidBody* PH_AddStaticRigidBody(PhysicsScene* scene, PhysicsShape* shape, const glm::vec3& pos, const glm::quat& rot);
 RigidBody* PH_AddDynamicRigidBody(PhysicsScene* scene, PhysicsShape* shape, const glm::vec3& pos, const glm::quat& rot);
 
+PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMaterial* material, const glm::vec3& pos, float height, float radius);
+
+
 
 void PH_AddShapeToRigidBody(RigidBody* body, PhysicsShape* shape);
 
 
+void PH_RemoveController(PhysicsController* controller);
 void PH_RemoveRigidBody(PhysicsScene* scene, RigidBody* body);
+
+
 
 void PH_SetTransformation(RigidBody* body, glm::mat4& m);
 

@@ -60,17 +60,14 @@ Model CreateModelFromVertices(Vertex3D* verts, uint32_t numVerts)
 	m.meshes->startIdx = 0;
 	m.baseTransform = glm::mat4(1.0f);
 
-	m.numIndices = numVerts;
+	m.numIndices = 0;
 	m.numVertices = numVerts;
-	uint32_t* indices = new uint32_t[numVerts];
-	for (uint32_t i = 0; i < numVerts; i++)
-	{
-		indices[i] = i;
-	}
+	
+	m.meshes->flags = MESH_FLAG_NO_INDEX_BUFFER;
+
 	glGenBuffers(1, &m.indexBuffer);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.indexBuffer);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * numVerts, indices, GL_DYNAMIC_DRAW);
-	delete[] indices;
+
 	return m;
 }
 void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts)
@@ -78,28 +75,18 @@ void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts)
 	if (numVerts == 0) return;
 	glBindVertexArray(model->vao);
 	glBindBuffer(GL_ARRAY_BUFFER, model->vertexBuffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->indexBuffer);
 
 	model->numVertices = numVerts;
-	model->numIndices = numVerts;
+	model->numIndices = 0;
 
 	model->meshes->bound = { glm::vec3(-FLT_MAX), glm::vec3(FLT_MAX) };
 	model->meshes->material = nullptr;
 	model->meshes->numInd = numVerts;
 	model->meshes->startIdx = 0;
 	model->baseTransform = glm::mat4(1.0f);
-	model->meshes->flags = MESH_FLAG_LINE;
+	model->meshes->flags |= MESH_FLAG_LINE;
 
-	uint32_t* indices = new uint32_t[numVerts];
-	for (uint32_t i = 0; i < numVerts; i++)
-	{
-		indices[i] = i;
-	}
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * numVerts, verts, GL_DYNAMIC_DRAW);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * numVerts, indices, GL_DYNAMIC_DRAW);
-
-
-	delete[] indices;
 }
 
 void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim)

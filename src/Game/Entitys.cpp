@@ -3,6 +3,7 @@
 #include "../Graphics/Camera.h"
 #include "../Graphics/Renderer.h"
 #include "../GameState.h"
+#include "../Physics/Physics.h"
 
 void Player::Update(float dt)
 {
@@ -16,8 +17,13 @@ void Player::Update(float dt)
 		if (input.back) forwardSpeed -= 1.0f;
 		if (input.right) rightSpeed = 1.0f;
 		if (input.left) rightSpeed -= 1.0f;
-		camera.base.pos += forwardSpeed * camera.front + rightSpeed * right;
+		glm::vec3 vel = forwardSpeed * camera.front + rightSpeed * right;
+		camera.base.pos += vel;
 		CA_UpdatePerspectiveCamera(&camera);
+
+		vel.y -= 9.81f;
+
+		controller->Move(vel);
 	}
 
 

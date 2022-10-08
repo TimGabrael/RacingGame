@@ -1,16 +1,18 @@
 #include "Physics.h"
 
+#define PX_PHYSX_CHARACTER_STATIC_LIB
 #include <PxPhysicsAPI.h> 
-#include <extensions\PxExtensionsAPI.h>
-#include <extensions\PxDefaultErrorCallback.h>
-#include <extensions\PxDefaultAllocator.h> 
-#include <extensions\PxDefaultSimulationFilterShader.h>
-#include <extensions\PxDefaultCpuDispatcher.h>
-#include <extensions\PxShapeExt.h>
-#include <foundation\PxMat33.h> 
-#include <extensions\PxSimpleFactory.h>
+#include <extensions/PxExtensionsAPI.h>
+#include <extensions/PxDefaultErrorCallback.h>
+#include <extensions/PxDefaultAllocator.h> 
+#include <extensions/PxDefaultSimulationFilterShader.h>
+#include <extensions/PxDefaultCpuDispatcher.h>
+#include <extensions/PxShapeExt.h>
+#include <foundation/PxMat33.h> 
+#include <extensions/PxSimpleFactory.h>
 #include <extensions/PxTriangleMeshExt.h>
 #include <extensions/PxConvexMeshExt.h>
+#include <vehicle/PxVehicleSDK.h>
 #include <foundation/PxQuat.h>
 
 #include "../Util/Utility.h"
@@ -18,17 +20,35 @@
 
 using namespace physx;
 
+
 struct PhysicsScene
 {
 	PxPhysics* physicsSDK = NULL;
 	PxDefaultErrorCallback defaultErrorCallback;
 	PxDefaultAllocator defaultAllocatorCallback;
 	PxSimulationFilterShader defaultFilterShader = PxDefaultSimulationFilterShader;
+	PxControllerManager* manager = NULL;
 	PxFoundation* foundation = NULL;
 	PxCooking* cooking = NULL;
+	
 	PxScene* scene = NULL;
 };
 
+
+void PhysicsController::Move(const glm::vec3& mov)
+{
+	PxController* c = (PxController*)this;
+	PxControllerFilters filters;
+	filters.mFilterCallback = NULL;
+	filters.mCCTFilterCallback = NULL;
+	filters.mFilterData = NULL;
+	c->move({ mov.x, mov.y, mov.z }, 0.1f, 1.0f / 60.0f, filters);
+}
+RigidBody* PhysicsController::GetRigidBody()
+{
+	PxController* c = (PxController*)this;
+	return (RigidBody*)c->getActor();
+}
 
 
 struct PhysicsScene* PH_CreatePhysicsScene()
@@ -39,6 +59,7 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 
 	// Creating instance of PhysX SDK
 	out->physicsSDK = PxCreatePhysics(PX_PHYSICS_VERSION, *out->foundation, PxTolerancesScale(), true);
+	PxInitVehicleSDK(*out->physicsSDK);
 
 	if (out->physicsSDK == NULL) {
 		LOG("Error creating PhysX3 device.\n");
@@ -59,6 +80,11 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 	out->cooking = PxCreateCooking(PX_PHYSICS_VERSION, *out->foundation, cookingParams);
 
 	out->scene = out->physicsSDK->createScene(sceneDesc);
+	out->manager = PxCreateControllerManager(*out->scene);
+
+
+	out->scene->setVisualizationParameter(PxVisualizationParameter::eSCALE, 1.0f);
+	out->scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, 1.0f);
 
 	return out;
 }
@@ -160,12 +186,45 @@ RigidBody* PH_AddDynamicRigidBody(struct PhysicsScene* scene, PhysicsShape* shap
 	return (RigidBody*)body;
 }
 
+PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMaterial* material, const glm::vec3& pos, float height, float radius)
+{
+	PxCapsuleControllerDesc desc;
+	desc.behaviorCallback = NULL;
+	desc.climbingMode = PxCapsuleClimbingMode::eEASY;
+	desc.contactOffset = 0.001f;
+	desc.density = 10.0f;
+	desc.height = height;
+	desc.invisibleWallHeight = 0.0f;
+	desc.material = (PxMaterial*)material;
+	desc.maxJumpHeight = 20.0f;
+	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
+	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING;
+	desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
+	desc.position = { pos.x, pos.y, pos.z };
+	desc.radius = radius;
+	desc.registerDeletionListener = false;
+	desc.reportCallback = nullptr;
+	desc.scaleCoeff = 1.0f;
+	desc.slopeLimit = 0.1f;
+	desc.stepOffset = 0.5f;
+	desc.upDirection = { 0.0f, 1.0f, 0.0f };
+	desc.userData = nullptr;
+	desc.volumeGrowth = 1.5f;
+	PxController* controller = scene->manager->createController(desc);
+
+	return (PhysicsController*)controller;
+}
+
 void PH_AddShapeToRigidBody(RigidBody* body, PhysicsShape* shape)
 {
 	((PxRigidActor*)body)->attachShape(*(PxShape*)shape);
 }
 
-
+void PH_RemoveController(PhysicsController* controller)
+{
+	PxController* c = (PxController*)controller;
+	c->release();
+}
 void PH_RemoveRigidBody(struct PhysicsScene* scene, RigidBody* body)
 {
 	scene->scene->removeActor(*(PxRigidActor*)body);

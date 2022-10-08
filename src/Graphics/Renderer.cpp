@@ -5,9 +5,8 @@
 #include "Scene.h"
 
 #include "finders_interface.h"
-#define MAX_NUM_SHADOW_POINT_LIGHTS MAX_NUM_LIGHTS / 6
 
-const char* baseVertexShader = "#version 330\n\
+static const char* baseVertexShader = "#version 330\n\
 layout(location = 0) in vec3 position;\n\
 layout(location = 1) in vec3 normal;\n\
 layout(location = 2) in vec2 uv1;\n\
@@ -51,7 +50,7 @@ void main(){\n\
 	fragColor = color;\n\
 	gl_Position = projection * view * vec4(worldPos, 1.0);\n\
 }";
-const char* baseFragmentShader = "#version 330\n\
+static const char* baseFragmentShader = "#version 330\n\
 in vec3 worldPos;\n\
 in vec3 fragNormal;\n\
 in vec2 fragUV1;\n\
@@ -451,7 +450,7 @@ void main()\n\
 	outColor = vec4(color, baseColor.a);\n\
 }\n\
 ";
-const char* baseGeometryFragmentShader = "#version 330\n\
+static const char* baseGeometryFragmentShader = "#version 330\n\
 in vec3 worldPos;\n\
 in vec3 fragNormal;\n\
 in vec2 fragUV1;\n\
@@ -493,7 +492,7 @@ void main()\n\
 		discard;\n\
 	}\n\
 }";
-const char* ssrPbrFragmentShader = "#version 330\n\
+static const char* ssrPbrFragmentShader = "#version 330\n\
 in vec3 worldPos;\n\
 in vec3 fragNormal;\n\
 in vec2 fragUV1;\n\
@@ -791,7 +790,7 @@ void main()\
         }\n\
     outCol = col;\
 }";
-static constexpr char* copyFragmentShader = "#version 330\n\
+static const char* copyFragmentShader = "#version 330\n\
 in vec2 UV;\
 in vec2 pos;\
 uniform sampler2D tex;\
@@ -801,7 +800,7 @@ void main()\
 {\
     outCol = textureLod(tex, UV, mipLevel);\
 }";
-static constexpr char* upsamplingFragmentShader = "#version 330\n\
+static const char* upsamplingFragmentShader = "#version 330\n\
 in vec2 UV;\
 in vec2 pos;\
 uniform sampler2D tex;\
@@ -822,7 +821,7 @@ void main()\
     vec3 accum = 1.0f / 16.0f * (c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9);\
     outCol = vec4(accum, 1.0f);\
 }";
-static constexpr char* copyDualFragmentShader = "#version 330\n\
+static const char* copyDualFragmentShader = "#version 330\n\
 in vec2 UV;\
 in vec2 pos;\
 uniform sampler2D tex1;\
@@ -867,7 +866,7 @@ void main()\
     vec4 c = tonemap(textureLod(tex1, UV, mipLevel1) + textureLod(tex2, UV, mipLevel2));\n\
     outCol = c;\
 }";
-static constexpr char* ssrFragmentShader = "#version 330\n\
+static const char* ssrFragmentShader = "#version 330\n\
 in vec2 UV;\n\
 in vec2 pos;\n\
 out vec4 outColor;\n\
@@ -990,8 +989,134 @@ void main() {\n\
 		}\n\
 	}\n\
 }";
-
-
+static const char* ssaoFragmentShader = "#version 330\n\
+in vec2 UV;\n\
+in vec2 pos;\n\
+\n\
+uniform sampler2D textureColor;\n\
+uniform sampler2D textureDepth;\n\
+uniform vec2 resolution;\n\
+uniform float zNear;\n\
+uniform float zFar;\n\
+uniform float strength;\n\
+uniform int samples;\n\
+uniform float radius;\n\
+\n\
+float aoclamp = 0.125; //depth clamp - reduces haloing at screen edges\n\
+bool noise = true; //use noise instead of pattern for sample dithering\n\
+float noiseamount = 0.0002; //dithering amount\n\
+float diffarea = 0.3; //self-shadowing reduction\n\
+float gdisplace = 0.4; //gauss bell center //0.4\n\
+bool mist = false; //use mist?\n\
+float miststart = 0.0; //mist start\n\
+float mistend = zFar; //mist end\n\
+\n\
+#define PI 3.14159265\n\
+float width = resolution.x;\n\
+float height = resolution.y;\n\
+vec2 texCoord = UV;\n\
+vec2 rand(vec2 coord)\n\
+{\n\
+	float noiseX = ((fract(1.0 - coord.s * (width / 2.0)) * 0.25) + (fract(coord.t * (height / 2.0)) * 0.75)) * 2.0 - 1.0;\n\
+	float noiseY = ((fract(1.0 - coord.s * (width / 2.0)) * 0.75) + (fract(coord.t * (height / 2.0)) * 0.25)) * 2.0 - 1.0;\n\
+	if (noise)\n\
+	{\n\
+		noiseX = clamp(fract(sin(dot(coord, vec2(12.9898, 78.233))) * 43758.5453), 0.0, 1.0) * 2.0 - 1.0;\n\
+		noiseY = clamp(fract(sin(dot(coord, vec2(12.9898, 78.233) * 2.0)) * 43758.5453), 0.0, 1.0) * 2.0 - 1.0;\n\
+	}\n\
+	return vec2(noiseX, noiseY) * noiseamount;\n\
+}\n\
+float doMist()\n\
+{\n\
+	float zdepth = texture2D(textureDepth, texCoord.xy).x;\n\
+	float depth = -zFar * zNear / (zdepth * (zFar - zNear) - zFar);\n\
+	return clamp((depth - miststart) / mistend, 0.0, 1.0);\n\
+}\n\
+float readDepth(vec2 coord)\n\
+{\n\
+	if (UV.x < 0.0 || UV.y < 0.0) return 1.0;\n\
+	else {\n\
+		float z_b = texture2D(textureDepth, coord).x;\n\
+		float z_n = 2.0 * z_b - 1.0;\n\
+		return (2.0 * zNear) / (zFar + zNear - z_n * (zFar - zNear));\n\
+	}\n\
+}\n\
+int compareDepthsFar(float depth1, float depth2) {\n\
+	float garea = 2.0;\n\
+	float diff = (depth1 - depth2) * 100.0;\n\
+	if (diff < gdisplace)\n\
+	{\n\
+		return 0;\n\
+	}\n\
+	else {\n\
+		return 1;\n\
+	}\n\
+}\n\
+float compareDepths(float depth1, float depth2)\n\
+{\n\
+	float garea = 2.0;\n\
+	float diff = (depth1 - depth2) * 100.0;\n\
+	if (diff < gdisplace)\n\
+	{\n\
+		garea = diffarea;\n\
+	}\n\
+	float gauss = pow(2.7182, -2.0 * (diff - gdisplace) * (diff - gdisplace) / (garea * garea));\n\
+	return gauss;\n\
+}\n\
+float calAO(float depth,float dw, float dh)\n\
+{\n\
+	float dd = (1.0 - depth) * radius;\n\
+	float temp = 0.0;\n\
+	float temp2 = 0.0;\n\
+	float coordw = UV.x + dw * dd;\n\
+	float coordh = UV.y + dh * dd;\n\
+	float coordw2 = UV.x - dw * dd;\n\
+	float coordh2 = UV.y - dh * dd;\n\
+	vec2 coord = vec2(coordw, coordh);\n\
+	vec2 coord2 = vec2(coordw2, coordh2);\n\
+	float cd = readDepth(coord);\n\
+	int far = compareDepthsFar(depth, cd);\n\
+	temp = compareDepths(depth, cd);\n\
+	if (far > 0)\n\
+	{\n\
+		temp2 = compareDepths(readDepth(coord2), depth);\n\
+		temp += (1.0 - temp) * temp2;\n\
+	}\n\
+	return temp;\n\
+}\n\
+void main(void)\n\
+{\n\
+	vec2 noise = rand(texCoord);\n\
+	float depth = readDepth(texCoord);\n\
+	float w = (1.0 / width) / clamp(depth, aoclamp, 1.0) + (noise.x * (1.0 - noise.x));\n\
+	float h = (1.0 / height) / clamp(depth, aoclamp, 1.0) + (noise.y * (1.0 - noise.y));\n\
+	float pw = 0.0;\n\
+	float ph = 0.0;\n\
+	float ao = 0.0;\n\
+	float dl = PI * (3.0 - sqrt(5.0));\n\
+	float dz = 1.0 / float(samples);\n\
+	float l = 0.0;\n\
+	float z = 1.0 - dz / 2.0;\n\
+	for (int i = 0; i < 64; i++)\n\
+	{\n\
+		if (i > samples) break;\n\
+		float r = sqrt(1.0 - z);\n\
+		pw = cos(l) * r;\n\
+		ph = sin(l) * r;\n\
+		ao += calAO(depth, pw * w, ph * h);\n\
+		z = z - dz;\n\
+		l = l + dl;\n\
+	}\n\
+	ao /= float(samples);\n\
+	ao *= strength;\n\
+	ao = 1.0 - ao;\n\
+	if (mist)\n\
+	{\n\
+		ao = mix(ao, 1.0, doMist());\n\
+	}\n\
+	gl_FragColor = vec4(texture(textureColor, texCoord).rgb, 1.0f) * ao;\n\
+}\n\
+";
 
 
 
@@ -1342,6 +1467,16 @@ struct PostProcessingRenderInfo
 		GLuint debugDrawLoc;
 		GLuint samplingCoefficientLoc;
 	}ssr;
+	struct ScreenSpaceAmbientOcclusion
+	{
+		GLuint program;
+		GLuint resolutionLoc;
+		GLuint zNearLoc;
+		GLuint zFarLoc;
+		GLuint strengthLoc;
+		GLuint samplesLoc;
+		GLuint radiusLoc;
+	}ssao;
 };
 
 struct ProjectionData
@@ -1782,6 +1917,7 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	info->dualCopy.program = CreateProgram(quadFilterVertexShader, copyDualFragmentShader);
 	info->upsampling.program = CreateProgram(quadFilterVertexShader, upsamplingFragmentShader);
 	info->ssr.program = CreateProgram(quadFilterVertexShader, ssrFragmentShader);
+	info->ssao.program = CreateProgram(quadFilterVertexShader, ssaoFragmentShader);
 
 	info->blur.radiusLoc = glGetUniformLocation(info->blur.program, "blurRadius");
 	info->blur.axisLoc = glGetUniformLocation(info->blur.program, "axis");
@@ -1834,6 +1970,29 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	glUniform1i(idx, 2);
 	idx = glGetUniformLocation(info->ssr.program, "textureDepth");
 	glUniform1i(idx, 3);
+
+	//  uniform sampler2D textureColor; \n\
+	// 	uniform sampler2D textureDepth; \n\
+	// 	uniform vec2 resolution; \n\
+	// 	uniform float zNear; \n\
+	// 	uniform float zFar; \n\
+	// 	uniform float strength; \n\
+	// 	uniform int samples; \n\
+	// 	uniform float radius;
+
+	info->ssao.resolutionLoc = glGetUniformLocation(info->ssao.program, "resolution");
+	info->ssao.zNearLoc = glGetUniformLocation(info->ssao.program, "zNear");
+	info->ssao.zFarLoc = glGetUniformLocation(info->ssao.program, "zFar");
+	info->ssao.strengthLoc = glGetUniformLocation(info->ssao.program, "strength");
+	info->ssao.samplesLoc = glGetUniformLocation(info->ssao.program, "samples");
+	info->ssao.radiusLoc = glGetUniformLocation(info->ssao.program, "radius");
+
+	glUseProgram(info->ssao.program);
+	idx = glGetUniformLocation(info->ssr.program, "textureColor");
+	glUniform1i(idx, 0);
+	idx = glGetUniformLocation(info->ssr.program, "textureDepth");
+	glUniform1i(idx, 1);
+
 }
 static void CleanUpPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 {
@@ -1843,6 +2002,7 @@ static void CleanUpPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	glDeleteProgram(info->dualCopy.program);
 	glDeleteProgram(info->upsampling.program);
 	glDeleteProgram(info->ssr.program);
+	glDeleteProgram(info->ssao.program);
 }
 
 
@@ -3427,7 +3587,7 @@ void RE_EndScene(struct Renderer* renderer)
 
 
 
-void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
+void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
@@ -3532,6 +3692,35 @@ void RE_RenderScreenSpaceReflection_Experimental(struct Renderer* renderer, cons
 	glUniformMatrix4fv(ssr.invViewLoc, 1, GL_FALSE, (GLfloat*)&invView);
 
 	glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+void RE_RenderScreenSpaceAmbientOcclusion(struct Renderer* renderer, GLuint srcColorTexture, GLuint srcDepthTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
+{
+	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
+	glViewport(0, 0, targetWidth, targetHeight);
+
+	glUseProgram(renderer->ppInfo.ssao.program);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, srcColorTexture);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, srcDepthTexture);
+
+	float nearClipping = renderer->currentCam->proj[3][2] / (renderer->currentCam->proj[2][2] - 1.0f);
+	float farClipping = renderer->currentCam->proj[3][2] / (renderer->currentCam->proj[2][2] + 1.0f);
+
+	glUniform2f(renderer->ppInfo.ssao.resolutionLoc, srcWidth, srcHeight);
+	glUniform1f(renderer->ppInfo.ssao.zNearLoc, nearClipping);
+	glUniform1f(renderer->ppInfo.ssao.zFarLoc, farClipping);
+	glUniform1f(renderer->ppInfo.ssao.strengthLoc, 1.0f);
+	glUniform1i(renderer->ppInfo.ssao.samplesLoc, 64);
+	glUniform1f(renderer->ppInfo.ssao.radiusLoc, 0.01f);
+
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+
 }
 void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {

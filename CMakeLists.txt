@@ -7,8 +7,10 @@ add_subdirectory(3rd-party/assimp)
 add_subdirectory(3rd-party/glad)
 add_subdirectory(3rd-party/NFDriver)
 
+set(ENGINE_FILES "src/Graphics/Renderer.h" "src/Graphics/Renderer.cpp"   "src/Util/Math.h" "src/Util/Assets.h" "src/Graphics/Scene.h" "src/Graphics/Scene.cpp" "src/GameState.h" "src/Util/Assets.cpp" "src/Graphics/ModelInfo.h" "src/Graphics/ModelInfo.cpp" "src/Util/Utility.h" "src/Graphics/GLIncludes.h" "src/GameState.cpp" "src/Graphics/Camera.h" "src/Graphics/Camera.cpp" "src/Physics/Physics.h" "src/Physics/Physics.cpp" "src/Audio/WavFile.cpp" "src/Audio/AudioManager.cpp")
 
-add_executable(RacingGame "src/main.cpp" "src/Graphics/Renderer.h" "src/Graphics/Renderer.cpp"   "src/Util/Math.h" "src/Util/Assets.h" "src/Graphics/Scene.h" "src/Graphics/Scene.cpp" "src/GameState.h" "src/Util/Assets.cpp" "src/Graphics/ModelInfo.h" "src/Graphics/ModelInfo.cpp" "src/Util/Utility.h" "src/Graphics/GLIncludes.h" "src/GameState.cpp" "src/Graphics/Camera.h" "src/Graphics/Camera.cpp" "src/Game/Entitys.h" "src/Game/Entitys.cpp" "src/Physics/Physics.h" "src/Physics/Physics.cpp" "src/Game/GameManager.h" "src/Game/GameManager.cpp")
+
+add_executable(RacingGame "src/main.cpp" ${ENGINE_FILES} "src/Game/GameManager.cpp" "src/Game/Entitys.cpp")
 
 
 set(PHYSX_LIBRARIES
@@ -28,10 +30,10 @@ set(PHYSX_ROOT_DIR D:/SDKs/PhysX-4.0.0/physx)
 set(TARGET_BUILD_PLATFORM "windows")
 set(PX_BUILDSNIPPETS OFF CACHE BOOL "Generate the snippets")
 set(PX_BUILDPUBLICSAMPLES OFF CACHE BOOL "Generate the samples projects")
-set(PX_GENERATE_STATIC_LIBRARIES ON CACHE BOOL "Generate static libraries")
+set(PX_GENERATE_STATIC_LIBRARIES OFF CACHE BOOL "Generate static libraries")
 set(PX_FLOAT_POINT_PRECISE_MATH OFF CACHE BOOL "Float point precise math")
-set(NV_USE_STATIC_WINCRT ON CACHE BOOL "Use the statically linked windows CRT")
-set(NV_USE_DEBUG_WINCRT ON CACHE BOOL "Use the debug version of the CRT")
+set(NV_USE_STATIC_WINCRT OFF CACHE BOOL "Use the statically linked windows CRT")
+set(NV_USE_DEBUG_WINCRT OFF CACHE BOOL "Use the debug version of the CRT")
 set(PXSHARED_PATH ${PHYSX_ROOT_DIR}/../pxshared)
 set(PXSHARED_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
 set(CMAKEMODULES_VERSION "1.27")

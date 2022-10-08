@@ -23,6 +23,7 @@ struct Player : public Entity
 	virtual void Update(float dt) override;
 
 	struct SceneObject* sceneObject;
+	struct PhysicsController* controller;
 	PlayerInputData input;
 	PerspectiveCamera camera;
 };

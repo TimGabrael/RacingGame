@@ -29,16 +29,17 @@ int main()
 	model->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.25f, 0.25f, 0.25f));
 	//Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BoomBox/glTF-Binary/BoomBox.glb", MODEL_LOAD_CONVEX | MODEL_LOAD_CONCAVE);
 	//boomBox->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(500.0f, 500.0f, 500.0f));
-	Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Fox/glTF-Binary/Fox.glb", 0);
+	Model* boomBox = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Fox/glTF-Binary/Fox.glb", MODEL_LOAD_CONVEX);
 	boomBox->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f));
 
 	PhysicsMaterial* material = PH_AddMaterial(game->physics, 0.5f, 0.5f, 0.5f);
 
 	PhysicsShape* otherShape = PH_AddConcaveShape(game->physics, model->concaveMesh, material, glm::vec3(0.25f, 0.25f, 0.25f));
-	//PhysicsShape* boomBoxShape = PH_AddConvexShape(game->physics, boomBox->convexMesh, material, glm::vec3(500.0f, 500.0f, 500.0f));
+	PhysicsShape* boomBoxShape = PH_AddConvexShape(game->physics, boomBox->convexMesh, material, glm::vec3(0.5f, 0.5f, 0.5f));
 	//PhysicsShape* ground = PH_AddBoxShape(game->physics, material, glm::vec3(4.0f, 4.0f, 4.0f));
 
-
+	Vertex3D verts[4] = {};
+	Model debugModel = CreateModelFromVertices(verts, 0);
 	
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 	SceneObject base;
@@ -50,6 +51,9 @@ int main()
 	base.transform = glm::mat4(1.0f);
 	SC_AddStaticObject(game->scene, &base);
 
+	base.rigidBody = nullptr;
+	base.model = &debugModel;
+	SC_AddStaticObject(game->scene, &base);
 
 
 	// TEST ANIM INSTANCE DATA
@@ -61,11 +65,12 @@ int main()
 	for (int i = 0; i < 1; i++)
 	{
 		base.anim = &realAnimData;
-		base.rigidBody = nullptr;// PH_AddDynamicRigidBody(game->physics, boomBoxShape, glm::vec3(-3.0f, 30.0f + i * 50.0f, 0.0f), def);
+		base.rigidBody = PH_AddDynamicRigidBody(game->physics, boomBoxShape, glm::vec3(0.0f, 20.0f, 0.0f), def);
 		SC_AddDynamicObject(game->scene, &base);
 	}
 
 
+	std::vector<Vertex3D> debugLines;
 	while (true)
 	{
 		glfwPollEvents();
@@ -97,6 +102,10 @@ int main()
 			}
 		}
 
+		debugLines.clear();
+		PH_GetPhysicsVertices(game->physics, debugLines);
+		UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
+
 
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
@@ -117,7 +126,6 @@ int main()
 			RE_SetLightData(game->renderer, game->manager->defaultLightGroup);
 
 			
-
 			RE_RenderShadows(game->renderer);
 
 			glBindFramebuffer(GL_FRAMEBUFFER, game->manager->AAbuffer.fbo);
@@ -135,10 +143,10 @@ int main()
 
 
 		RE_FinishAntialiasingData(&game->manager->AAbuffer);
-		//RE_RenderScreenSpaceReflection_Experimental(game->renderer, &game->manager->SSRbuffer, game->manager->AAbuffer.intermediateTexture, 0, game->winWidth, game->winHeight);
+		//RE_RenderScreenSpaceReflection(game->renderer, &game->manager->SSRbuffer, game->manager->AAbuffer.intermediateTexture, 0, game->winWidth, game->winHeight);
 		RE_RenderPostProcessingBloom(game->renderer, &game->manager->PPbuffer, 
-			game->manager->AAbuffer.intermediateTexture, game->manager->AAbuffer.width, game->manager->AAbuffer.height,
-			0, game->winWidth, game->winHeight);
+		game->manager->AAbuffer.intermediateTexture, game->manager->AAbuffer.width, game->manager->AAbuffer.height,
+		0, game->winWidth, game->winHeight);
 		
 		glfwSwapBuffers(window);
 

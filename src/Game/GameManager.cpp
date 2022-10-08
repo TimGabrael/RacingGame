@@ -2,6 +2,7 @@
 #include "../GameState.h"
 #include "../Graphics/ModelInfo.h"
 #include "../Graphics/Scene.h"
+#include "../Physics/Physics.h"
 
 GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* assets)
 {
@@ -96,8 +97,11 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 
 		CA_InitPerspectiveCamera(&player->camera, pos, yaw, pitch, state->winWidth, state->winHeight);
 
+		PhysicsMaterial* mat = PH_AddMaterial(state->physics, 1.0f, 1.0f, 1.0f);
 
 		player->sceneObject = SC_AddDynamicObject(state->scene, &obj);
+		player->controller = PH_AddCapsuleController(state->physics, mat, { 0.0f, 20.0f, 0.0f }, 10.0f, 2.0f);
+		player->sceneObject->rigidBody = player->controller->GetRigidBody();
 		game->localPlayer = player;
 	}
 }
@@ -106,8 +110,6 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 void GM_Update(GameManager* game, float dt)
 {
 	RELI_Update(game->defaultLightGroup, &game->localPlayer->camera.base);
-
-
 
 }
 void GM_OnResizeCallback(GameManager* game, int width, int height)
