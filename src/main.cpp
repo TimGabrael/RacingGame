@@ -12,6 +12,7 @@ int main()
 	if (!glfwInit())
 		return 1;
 
+
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 	GLFWwindow* window = glfwCreateWindow(1600, 900, "RacingGame", NULL, NULL);
@@ -102,9 +103,9 @@ int main()
 			}
 		}
 
-		debugLines.clear();
-		PH_GetPhysicsVertices(game->physics, debugLines);
-		UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
+		//debugLines.clear();
+		//PH_GetPhysicsVertices(game->physics, debugLines);
+		//UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
 
 
 		glEnable(GL_DEPTH_TEST);

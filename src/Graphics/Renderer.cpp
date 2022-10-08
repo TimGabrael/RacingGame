@@ -2157,6 +2157,16 @@ void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env)
 	constexpr float deltaTheta = (0.5f * float(M_PI)) / 64.0f;
 	constexpr uint32_t numSamples = 32;
 
+	static constexpr glm::vec3 cubeDirs[6] = {
+		{ 1.0f,  0.0f,  0.0f},
+		{-1.0f,  0.0f,  0.0f},
+		{ 0.0f,  1.0f,  0.0f},
+		{ 0.0f, -1.0f,  0.0f},
+		{ 0.0f,  0.0f,  1.0f},
+		{ 0.0f,  0.0f, -1.0f},
+
+	};
+
 	uint32_t numMipLevels = 1 + floor(log2(glm::max(env->width, env->height)));
 	env->mipLevels = numMipLevels;
 	GLuint framebuffer;
@@ -2167,8 +2177,7 @@ void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env)
 
 	PerspectiveCamera perspectiveCam;
 	memset(&perspectiveCam, 0, sizeof(PerspectiveCamera));
-	perspectiveCam.width = env->width;
-	perspectiveCam.height = env->height;
+	CA_InitPerspectiveCamera(&perspectiveCam, { 0.0f, 0.0f, 0.0f }, 90.0f, env->width, env->height);
 
 	RE_SetCameraBase(renderer, &perspectiveCam.base);
 	RE_SetEnvironmentData(renderer, env);
@@ -2203,33 +2212,33 @@ void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env)
 		for (uint32_t i = 0; i < numMipLevels; i++)
 		{
 			glViewport(0, 0, glm::max(env->width >> i, 1u), glm::max(env->height >> i, 1u));
-			perspectiveCam.yaw = 0.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[0]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X, env->irradianceMap, i);
 			RE_RenderIrradiance(renderer, deltaPhi, deltaTheta, CUBE_MAP_FRONT);
 
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 1, env->irradianceMap, i);
-			perspectiveCam.yaw = 180.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[1]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			RE_RenderIrradiance(renderer, deltaPhi, deltaTheta, CUBE_MAP_BACK);
 
 
-			perspectiveCam.pitch = 90.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f / 2.0f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[2]);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 2, env->irradianceMap, i);
 			RE_RenderIrradiance(renderer, deltaPhi, deltaTheta, CUBE_MAP_TOP);
 
 
-			perspectiveCam.pitch = -90.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), -3.14159f / 2.0f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[3]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3, env->irradianceMap, i);
 			RE_RenderIrradiance(renderer, deltaPhi, deltaTheta, CUBE_MAP_BOTTOM);
 
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 4, env->irradianceMap, i);
-			perspectiveCam.yaw = 90.0f; perspectiveCam.pitch = 0.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[4]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			RE_RenderIrradiance(renderer, deltaPhi, deltaTheta, CUBE_MAP_RIGHT);
 
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 5, env->irradianceMap, i);
-			perspectiveCam.yaw = -90.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[5]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			RE_RenderIrradiance(renderer, deltaPhi, deltaTheta, CUBE_MAP_LEFT);
 		}
 	}
@@ -2265,33 +2274,33 @@ void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env)
 		{
 			float roughness = (float)i / (float)(numMipLevels - 1);
 			glViewport(0, 0, glm::max(env->width >> i, 1u), glm::max(env->height >> i, 1u));
-			perspectiveCam.yaw = 0.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[0]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X, env->prefilteredMap, i);
 			RE_RenderPreFilterCubeMap(renderer, roughness, numSamples, CUBE_MAP_FRONT);
 
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 1, env->prefilteredMap, i);
-			perspectiveCam.yaw = 180.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[1]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			RE_RenderPreFilterCubeMap(renderer, roughness, numSamples, CUBE_MAP_BACK);
 
 
-			perspectiveCam.pitch = 90.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f / 2.0f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[2]);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 2, env->prefilteredMap, i);
 			RE_RenderPreFilterCubeMap(renderer, roughness, numSamples, CUBE_MAP_TOP);
 
 
-			perspectiveCam.pitch = -90.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), -3.14159f / 2.0f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[3]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3, env->prefilteredMap, i);
 			RE_RenderPreFilterCubeMap(renderer, roughness, numSamples, CUBE_MAP_BOTTOM);
 
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 4, env->prefilteredMap, i);
-			perspectiveCam.yaw = 90.0f; perspectiveCam.pitch = 0.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[4]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			RE_RenderPreFilterCubeMap(renderer, roughness, numSamples, CUBE_MAP_RIGHT);
 
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 5, env->prefilteredMap, i);
-			perspectiveCam.yaw = -90.0f; CA_UpdatePerspectiveCamera(&perspectiveCam); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
+			CA_UpdatePerspectiveCamera(&perspectiveCam, cubeDirs[5]); perspectiveCam.base.view = glm::rotate(glm::mat4(1.0f), 3.14159f, glm::vec3(0.0f, 0.0f, 1.0f)) * perspectiveCam.base.view;
 			RE_RenderPreFilterCubeMap(renderer, roughness, numSamples, CUBE_MAP_LEFT);
 		}
 	}

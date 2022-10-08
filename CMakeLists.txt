@@ -10,7 +10,7 @@ add_subdirectory(3rd-party/NFDriver)
 set(ENGINE_FILES "src/Graphics/Renderer.h" "src/Graphics/Renderer.cpp"   "src/Util/Math.h" "src/Util/Assets.h" "src/Graphics/Scene.h" "src/Graphics/Scene.cpp" "src/GameState.h" "src/Util/Assets.cpp" "src/Graphics/ModelInfo.h" "src/Graphics/ModelInfo.cpp" "src/Util/Utility.h" "src/Graphics/GLIncludes.h" "src/GameState.cpp" "src/Graphics/Camera.h" "src/Graphics/Camera.cpp" "src/Physics/Physics.h" "src/Physics/Physics.cpp" "src/Audio/WavFile.cpp" "src/Audio/AudioManager.cpp")
 
 
-add_executable(RacingGame "src/main.cpp" ${ENGINE_FILES} "src/Game/GameManager.cpp" "src/Game/Entitys.cpp")
+add_executable(RacingGame "src/main.cpp" ${ENGINE_FILES} "src/Game/GameManager.cpp" "src/Game/Entitys.cpp" "src/Physics/Controller.h" "src/Physics/Controller.cpp")
 
 
 set(PHYSX_LIBRARIES

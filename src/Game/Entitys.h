@@ -1,14 +1,6 @@
 #pragma once
 #include "../Graphics/Camera.h"
-
-struct PlayerInputData
-{
-	bool forward = false;
-	bool back = false;
-	bool right = false;
-	bool left = false;
-	bool mouseDown = false;
-};
+#include "../Physics/Controller.h"
 
 
 struct Entity
@@ -23,8 +15,7 @@ struct Player : public Entity
 	virtual void Update(float dt) override;
 
 	struct SceneObject* sceneObject;
-	struct PhysicsController* controller;
-	PlayerInputData input;
+	DefaultFPSController controller;
 	PerspectiveCamera camera;
 };
 

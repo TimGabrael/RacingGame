@@ -44,6 +44,12 @@ void PhysicsController::Move(const glm::vec3& mov)
 	filters.mFilterData = NULL;
 	c->move({ mov.x, mov.y, mov.z }, 0.1f, 1.0f / 60.0f, filters);
 }
+glm::vec3 PhysicsController::GetPos()
+{
+	PxController* c = (PxController*)this;
+	const PxExtendedVec3& pos = c->getPosition();
+	return {pos.x, pos.y, pos.z};
+}
 RigidBody* PhysicsController::GetRigidBody()
 {
 	PxController* c = (PxController*)this;

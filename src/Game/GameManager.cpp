@@ -15,7 +15,6 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 
 	if (!AM_LoadEnvironment(&out->env, "Assets/Environment.menv"))
 	{
-		RE_CreateEnvironment(state->renderer, &out->env);
 		AM_StoreEnvironment(&out->env, "Assets/Environment.menv");
 	}
 
@@ -81,8 +80,10 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 	GameState* state = GetGameState();
 	if (game->localPlayer)
 	{
-
-		CA_InitPerspectiveCamera(&game->localPlayer->camera, pos, yaw, pitch, state->winWidth, state->winHeight);
+		game->localPlayer->controller.pitch = pitch;
+		game->localPlayer->controller.yaw = yaw;
+		game->localPlayer->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
+		CA_InitPerspectiveCamera(&game->localPlayer->camera, pos, 90.0f, state->winWidth, state->winHeight);
 	}
 	else
 	{
@@ -95,15 +96,20 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		obj.entity = player;
 		obj.transform = glm::mat4(1.0f);
 
-		CA_InitPerspectiveCamera(&player->camera, pos, yaw, pitch, state->winWidth, state->winHeight);
+		CA_InitPerspectiveCamera(&player->camera, pos, 90.0f, state->winWidth, state->winHeight);
 
 		PhysicsMaterial* mat = PH_AddMaterial(state->physics, 1.0f, 1.0f, 1.0f);
 
 		player->sceneObject = SC_AddDynamicObject(state->scene, &obj);
-		player->controller = PH_AddCapsuleController(state->physics, mat, { 0.0f, 20.0f, 0.0f }, 10.0f, 2.0f);
-		player->sceneObject->rigidBody = player->controller->GetRigidBody();
+		player->controller.controller = PH_AddCapsuleController(state->physics, mat, { 0.0f, 20.0f, 0.0f }, 10.0f, 2.0f);
+		player->controller.yaw = yaw;
+		player->controller.pitch = pitch;
+		player->sceneObject->rigidBody = player->controller.controller->GetRigidBody();
+		player->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
 		game->localPlayer = player;
 	}
+	game->localPlayer->controller.SetCamera(&game->localPlayer->camera, 8.0f);
+
 }
 
 

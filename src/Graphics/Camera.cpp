@@ -2,29 +2,33 @@
 static constexpr glm::vec3 up = { 0.0f, 1.0f, 0.0f };
 static constexpr float nearClipping = 0.1f;
 static constexpr float farClipping = 1000.0f;
-static constexpr float FOV = 90.0f;
+//static constexpr float FOV = 90.0f;
 
-void CA_InitPerspectiveCamera(PerspectiveCamera* cam, const glm::vec3& pos, float yaw, float pitch, float width, float height)
+void CA_InitPerspectiveCamera(PerspectiveCamera* cam, const glm::vec3& pos, float fov, float width, float height)
 {
 	cam->base.pos = pos;
-	cam->yaw = yaw;
-	cam->pitch = pitch;
+	cam->fov = fov;
 	cam->width = width;
 	cam->height = height;
-	CA_UpdatePerspectiveCamera(cam);
+	cam->nearClipping = nearClipping;
+	cam->farClipping = farClipping;
+	CA_UpdatePerspectiveCamera(cam, {1.0f, 0.0f, 0.0f});
 }
-void CA_UpdatePerspectiveCamera(PerspectiveCamera* cam)
+void CA_UpdatePerspectiveCamera(PerspectiveCamera* cam, const glm::vec3& front)
 {
-	cam->front.x = cosf(glm::radians(cam->yaw)) * cosf(glm::radians(cam->pitch));
-	cam->front.y = sinf(glm::radians(cam->pitch));
-	cam->front.z = sinf(glm::radians(cam->yaw)) * cosf(glm::radians(cam->pitch));
-
-	cam->base.proj = glm::perspectiveRH(glm::radians(FOV), cam->width / cam->height, nearClipping, farClipping);
-	cam->base.view = glm::lookAtRH(cam->base.pos, cam->base.pos + cam->front, up);
+	cam->base.proj = glm::perspectiveRH(glm::radians(cam->fov), cam->width / cam->height, cam->nearClipping, cam->farClipping);
+	if (front.x == 0.0f && front.z == 0.0f)
+	{
+		cam->base.view = glm::lookAtRH(cam->base.pos, cam->base.pos + front, {0.0f, 0.0f, 1.0f});
+	}
+	else
+	{
+		cam->base.view = glm::lookAtRH(cam->base.pos, cam->base.pos + front, up);
+	}
 }
-glm::vec3 CA_GetPerspectiveRightDir(const PerspectiveCamera* cam)
+glm::vec3 CA_GetRight(const glm::vec3& front)
 {
-	return glm::normalize(glm::cross(cam->front, up));
+	return glm::normalize(glm::cross(front, up));
 }
 
 
@@ -112,4 +116,13 @@ void CA_CreateOrthoTightFit(const CameraBase* relativeCam, CameraBase* output, c
 	output->pos = glm::round(frustumCenter - outDir * -minExtents.z);
 	output->view = outViewMatrix;
 	output->proj = outOrthoMatrix;
+}
+
+glm::vec3 CA_YawPitchToFoward(float yaw, float pitch)
+{
+	glm::vec3 front;
+	front.x = cosf(glm::radians(yaw)) * cosf(glm::radians(pitch));
+	front.y = sinf(glm::radians(pitch));
+	front.z = sinf(glm::radians(yaw)) * cosf(glm::radians(pitch));
+	return front;
 }

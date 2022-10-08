@@ -38,17 +38,17 @@ static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 		{
 			if (action == GLFW_PRESS)
 			{
-				if (key == GLFW_KEY_W) p->input.forward = true;
-				if (key == GLFW_KEY_A) p->input.left = true;
-				if (key == GLFW_KEY_S) p->input.back = true;
-				if (key == GLFW_KEY_D) p->input.right = true;
+				if (key == GLFW_KEY_W) p->controller.movement.forward = true;
+				if (key == GLFW_KEY_A) p->controller.movement.left = true;
+				if (key == GLFW_KEY_S) p->controller.movement.back = true;
+				if (key == GLFW_KEY_D) p->controller.movement.right = true;
 			}
 			else if(action == GLFW_RELEASE)
 			{
-				if (key == GLFW_KEY_W) p->input.forward = false;
-				if (key == GLFW_KEY_A) p->input.left = false;
-				if (key == GLFW_KEY_S) p->input.back = false;
-				if (key == GLFW_KEY_D) p->input.right = false;
+				if (key == GLFW_KEY_W) p->controller.movement.forward = false;
+				if (key == GLFW_KEY_A) p->controller.movement.left = false;
+				if (key == GLFW_KEY_S) p->controller.movement.back = false;
+				if (key == GLFW_KEY_D) p->controller.movement.right = false;
 			}
 		}
 	}
@@ -60,8 +60,8 @@ static void MouseButtonCallback(GLFWwindow* window, int button, int action, int 
 		Player* p = g_gameState->manager->localPlayer;
 		if (button == GLFW_MOUSE_BUTTON_LEFT)
 		{
-			if (action == GLFW_PRESS) p->input.mouseDown = true;
-			else if (action == GLFW_RELEASE) p->input.mouseDown = false;
+			if (action == GLFW_PRESS) p->controller.movement.actionDown = true;
+			else if (action == GLFW_RELEASE) p->controller.movement.actionDown = false;
 		}
 	}
 }
@@ -74,12 +74,10 @@ static void MousePositionCallback(GLFWwindow* window, double x, double y)
 		double dx = x - oldX;
 		double dy = oldY - y;
 		Player* p = g_gameState->manager->localPlayer;
-		if (p && p->input.mouseDown)
+		if (p && p->controller.movement.actionDown)
 		{
-			p->camera.yaw += dx;
-			p->camera.pitch += dy;
-			p->camera.pitch = glm::max(glm::min(p->camera.pitch, 89.9f), -89.9f);
-			CA_UpdatePerspectiveCamera(&p->camera);
+			p->controller.movement.deltaYaw += dx;
+			p->controller.movement.deltaPitch += dy;
 		}
 		oldX = x;
 		oldY = y;
