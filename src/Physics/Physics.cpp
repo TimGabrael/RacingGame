@@ -14,6 +14,7 @@
 #include <extensions/PxConvexMeshExt.h>
 #include <vehicle/PxVehicleSDK.h>
 #include <foundation/PxQuat.h>
+#include "vehicle/PxVehicleUtil.h"
 
 #include "../Util/Utility.h"
 
@@ -81,7 +82,7 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 		LOG("PxInitExtensions failed!\n");
 
 	PxSceneDesc sceneDesc(out->physicsSDK->getTolerancesScale());
-	sceneDesc.gravity = PxVec3(0.0f, -9.8f, 0.0f);
+	sceneDesc.gravity = PxVec3(0.0f, -9.81f, 0.0f);
 	PxDefaultCpuDispatcher* dispatcher = PxDefaultCpuDispatcherCreate(2);
 	sceneDesc.cpuDispatcher = dispatcher;
 	sceneDesc.filterShader = PxDefaultSimulationFilterShader;
@@ -208,8 +209,8 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 	desc.invisibleWallHeight = 0.0f;
 	desc.material = (PxMaterial*)material;
 	desc.maxJumpHeight = 20.0f;
-	desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
-	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING;
+	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
+	desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING;
 	desc.position = { pos.x, pos.y, pos.z };
 	desc.radius = radius;
 	desc.registerDeletionListener = false;
@@ -221,6 +222,9 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 	desc.userData = nullptr;
 	desc.volumeGrowth = 1.5f;
 	PxController* controller = scene->manager->createController(desc);
+	controller->invalidateCache();
+
+
 
 	return (PhysicsController*)controller;
 }

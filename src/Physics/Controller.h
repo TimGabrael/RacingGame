@@ -9,7 +9,10 @@ struct FPSUserInput
 	bool back = false;
 	bool right = false;
 	bool left = false;
+	bool sprintDown = false;
+	bool jumpDown = false;
 	bool actionDown = false;
+	bool crouchDown = false;
 };
 
 
@@ -29,6 +32,8 @@ struct DefaultFPSController
 	float yaw;
 	float pitch;
 	float velocity;
+	float sprintModifier;
+	float jumpSpeed;
 };
 
 struct FreecamFPSController
@@ -47,4 +52,5 @@ struct FreecamFPSController
 	float yaw;
 	float pitch;
 	float velocity;
+	float sprintModifier;
 };

@@ -18,8 +18,21 @@ struct PhysicsController
 	RigidBody* GetRigidBody();
 };
 
+struct VehicleDesc
+{
+	float chassisMass;
+	glm::vec3 chassisDims;
+	glm::vec3 chassisMOI;
+	glm::vec3 chassisCMOffset;
+	PhysicsMaterial* chassisMaterial;
 
-
+	float wheelMass;
+	float wheelWidth;
+	float wheelRadius;
+	float wheelMOI;
+	PhysicsMaterial* wheelMaterial;
+	uint32_t numWheels;
+};
 
 PhysicsScene* PH_CreatePhysicsScene();
 void PH_CleanUpPhysicsScene(PhysicsScene* scene);

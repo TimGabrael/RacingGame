@@ -11,6 +11,18 @@
 #include "Game/Entitys.h"
 #include "Game/GameManager.h"
 
+
+typedef void (*UPDATE_CALLBACK)(struct GameState* state, float dt);
+typedef void (*GENERAL_CALLBACK)(struct GameState* state);
+
+struct MainCallbacks
+{
+	UPDATE_CALLBACK presceneUpdate;
+	UPDATE_CALLBACK prephysicsUpdate;
+	UPDATE_CALLBACK postphysicsUpdate;
+	GENERAL_CALLBACK renderCallback;
+};
+
 struct GameState
 {
 	struct Renderer* renderer;
@@ -24,10 +36,14 @@ struct GameState
 	uint32_t winWidth;
 	uint32_t winHeight;
 	uint32_t swapChainInterval;
+	MainCallbacks callbacks;
 	bool hasFocus;
 	bool isFullscreen;
 	bool isMouseCaptured;
 };
 
-GameState* CreateGameState(struct GLFWwindow* window, uint32_t windowWidth, uint32_t windowHeight);
+GameState* CreateGameState(const char* windowName, MainCallbacks* cbs, uint32_t windowWidth, uint32_t windowHeight);
 GameState* GetGameState();
+void SetFullscreen(GameState* state, int monitorIdx, int* width, int* height);
+
+void UpateGameState();

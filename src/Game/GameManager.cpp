@@ -4,13 +4,12 @@
 #include "../Graphics/Scene.h"
 #include "../Physics/Physics.h"
 
-GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* assets)
+GameManager* GM_CreateGameManager(GameState* state)
 {
 	GameManager* out = new GameManager;
-	GameState* state = GetGameState();
-	out->env.environmentMap = assets->textures[DEFAULT_CUBE_MAP]->uniform;
-	out->env.width = assets->textures[DEFAULT_CUBE_MAP]->width;
-	out->env.height = assets->textures[DEFAULT_CUBE_MAP]->height;
+	out->env.environmentMap = state->assets->textures[DEFAULT_CUBE_MAP]->uniform;
+	out->env.width = state->assets->textures[DEFAULT_CUBE_MAP]->width;
+	out->env.height = state->assets->textures[DEFAULT_CUBE_MAP]->height;
 	out->env.mipLevels = 1;
 
 	if (!AM_LoadEnvironment(&out->env, "Assets/Environment.menv"))
@@ -18,7 +17,7 @@ GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* asset
 		AM_StoreEnvironment(&out->env, "Assets/Environment.menv");
 	}
 
-	out->defaultLightGroup = RELI_AddLightGroup(renderer);
+	out->defaultLightGroup = RELI_AddLightGroup(state->renderer);
 
 	DirectionalLight* l = RELI_AddDirectionalLight(out->defaultLightGroup);
 	l->direction = { 0.0f, -1.0f, 0.0f };
@@ -101,14 +100,15 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		PhysicsMaterial* mat = PH_AddMaterial(state->physics, 1.0f, 1.0f, 1.0f);
 
 		player->sceneObject = SC_AddDynamicObject(state->scene, &obj);
-		player->controller.controller = PH_AddCapsuleController(state->physics, mat, { 0.0f, 20.0f, 0.0f }, 10.0f, 2.0f);
+		player->controller.controller = PH_AddCapsuleController(state->physics, mat, pos, 10.0f, 2.0f);
 		player->controller.yaw = yaw;
 		player->controller.pitch = pitch;
 		player->sceneObject->rigidBody = player->controller.controller->GetRigidBody();
 		player->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
 		game->localPlayer = player;
 	}
-	game->localPlayer->controller.velocity = 10.0f;
+	game->localPlayer->controller.velocity = 40.0f;
+	game->localPlayer->controller.sprintModifier = 2.0f;
 	game->localPlayer->controller.SetCamera(&game->localPlayer->camera, 8.0f);
 
 }
@@ -121,11 +121,14 @@ void GM_Update(GameManager* game, float dt)
 }
 void GM_OnResizeCallback(GameManager* game, int width, int height)
 {
-	uint32_t prevSamples = game->AAbuffer.msaaCount;
-	RE_CleanUpAntialiasingData(&game->AAbuffer);
-	RE_CleanUpPostProcessingRenderData(&game->PPbuffer);
-	RE_CleanUpScreenSpaceReflectionRenderData(&game->SSRbuffer);
+	if (width > 0 && height > 0)
+	{
+		uint32_t prevSamples = game->AAbuffer.msaaCount;
+		RE_CleanUpAntialiasingData(&game->AAbuffer);
+		RE_CleanUpPostProcessingRenderData(&game->PPbuffer);
+		RE_CleanUpScreenSpaceReflectionRenderData(&game->SSRbuffer);
 
-	RE_CreateAntialiasingData(&game->AAbuffer, width, height, prevSamples);
-	RE_CreatePostProcessingRenderData(&game->PPbuffer, width, height);
+		RE_CreateAntialiasingData(&game->AAbuffer, width, height, prevSamples);
+		RE_CreatePostProcessingRenderData(&game->PPbuffer, width, height);
+	}
 }

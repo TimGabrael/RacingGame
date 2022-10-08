@@ -7,8 +7,8 @@
 
 void Player::Update(float dt)
 {
-	controller.Update(dt);
 	controller.SetCamera(&camera, 8.0f);
+	controller.Update(dt);
 }
 
 

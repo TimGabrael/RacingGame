@@ -12,7 +12,7 @@ struct GameManager
 	Player* localPlayer;
 };
 
-GameManager* GM_CreateGameManager(struct Renderer* renderer, AssetManager* assets);
+GameManager* GM_CreateGameManager(struct GameState* state);
 void GM_CleanUpGameManager(GameManager* manager);
 
 void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, float pitch);
