@@ -7,6 +7,7 @@
 
 
 
+
 int main()
 {
 	if (!glfwInit())

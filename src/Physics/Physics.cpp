@@ -30,7 +30,6 @@ struct PhysicsScene
 	PxControllerManager* manager = NULL;
 	PxFoundation* foundation = NULL;
 	PxCooking* cooking = NULL;
-	
 	PxScene* scene = NULL;
 };
 
@@ -49,6 +48,12 @@ glm::vec3 PhysicsController::GetPos()
 	PxController* c = (PxController*)this;
 	const PxExtendedVec3& pos = c->getPosition();
 	return {pos.x, pos.y, pos.z};
+}
+glm::vec3 PhysicsController::GetVelocity()
+{
+	PxController* c = (PxController*)this;
+	const PxVec3& vel = c->getActor()->getLinearVelocity();
+	return { vel.x, vel.y, vel.z };
 }
 RigidBody* PhysicsController::GetRigidBody()
 {
@@ -203,9 +208,8 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 	desc.invisibleWallHeight = 0.0f;
 	desc.material = (PxMaterial*)material;
 	desc.maxJumpHeight = 20.0f;
-	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
-	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING;
 	desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
+	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING;
 	desc.position = { pos.x, pos.y, pos.z };
 	desc.radius = radius;
 	desc.registerDeletionListener = false;
@@ -220,6 +224,11 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 
 	return (PhysicsController*)controller;
 }
+
+
+
+
+
 
 void PH_AddShapeToRigidBody(RigidBody* body, PhysicsShape* shape)
 {

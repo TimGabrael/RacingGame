@@ -108,6 +108,7 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		player->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
 		game->localPlayer = player;
 	}
+	game->localPlayer->controller.velocity = 10.0f;
 	game->localPlayer->controller.SetCamera(&game->localPlayer->camera, 8.0f);
 
 }

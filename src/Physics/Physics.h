@@ -14,6 +14,7 @@ struct PhysicsController
 {
 	void Move(const glm::vec3& mov);
 	glm::vec3 GetPos();
+	glm::vec3 GetVelocity();
 	RigidBody* GetRigidBody();
 };
 

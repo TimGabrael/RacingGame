@@ -1,4 +1,10 @@
 #pragma once
+
+// FOR CONTROLLER INPUT
+#include <Windows.h>
+#include <Xinput.h>
+
+
 #include <stdint.h>
 #include "Util/Assets.h"
 #include "Util/Math.h"

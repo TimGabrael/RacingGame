@@ -34,23 +34,7 @@ static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 	if (g_gameState && g_gameState->manager)
 	{
 		Player* p = g_gameState->manager->localPlayer;
-		if (p)
-		{
-			if (action == GLFW_PRESS)
-			{
-				if (key == GLFW_KEY_W) p->controller.movement.forward = true;
-				if (key == GLFW_KEY_A) p->controller.movement.left = true;
-				if (key == GLFW_KEY_S) p->controller.movement.back = true;
-				if (key == GLFW_KEY_D) p->controller.movement.right = true;
-			}
-			else if(action == GLFW_RELEASE)
-			{
-				if (key == GLFW_KEY_W) p->controller.movement.forward = false;
-				if (key == GLFW_KEY_A) p->controller.movement.left = false;
-				if (key == GLFW_KEY_S) p->controller.movement.back = false;
-				if (key == GLFW_KEY_D) p->controller.movement.right = false;
-			}
-		}
+		if (p) p->controller.HandleKey(key, scancode, action, mods);
 	}
 }
 static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
@@ -58,11 +42,7 @@ static void MouseButtonCallback(GLFWwindow* window, int button, int action, int 
 	if (g_gameState && g_gameState->manager)
 	{
 		Player* p = g_gameState->manager->localPlayer;
-		if (button == GLFW_MOUSE_BUTTON_LEFT)
-		{
-			if (action == GLFW_PRESS) p->controller.movement.actionDown = true;
-			else if (action == GLFW_RELEASE) p->controller.movement.actionDown = false;
-		}
+		if(p) p->controller.HandleMouseButton(button, action, mods);
 	}
 }
 static void MousePositionCallback(GLFWwindow* window, double x, double y)
@@ -74,11 +54,7 @@ static void MousePositionCallback(GLFWwindow* window, double x, double y)
 		double dx = x - oldX;
 		double dy = oldY - y;
 		Player* p = g_gameState->manager->localPlayer;
-		if (p && p->controller.movement.actionDown)
-		{
-			p->controller.movement.deltaYaw += dx;
-			p->controller.movement.deltaPitch += dy;
-		}
+		if (p) p->controller.HandleMouseMovement(dx, dy);
 		oldX = x;
 		oldY = y;
 	}
