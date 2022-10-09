@@ -35,6 +35,7 @@ struct PhysicsScene
 };
 
 
+
 void PhysicsController::Move(const glm::vec3& mov)
 {
 	PxController* c = (PxController*)this;
@@ -42,7 +43,7 @@ void PhysicsController::Move(const glm::vec3& mov)
 	filters.mFilterCallback = NULL;
 	filters.mCCTFilterCallback = NULL;
 	filters.mFilterData = NULL;
-	c->move({ mov.x, mov.y, mov.z }, 0.1f, 1.0f / 60.0f, filters);
+	c->move({ mov.x, mov.y, mov.z }, 0.01f, 1.0f / 60.0f, filters);
 }
 glm::vec3 PhysicsController::GetPos()
 {
@@ -60,6 +61,13 @@ RigidBody* PhysicsController::GetRigidBody()
 {
 	PxController* c = (PxController*)this;
 	return (RigidBody*)c->getActor();
+}
+bool PhysicsController::IsOnGround()
+{
+	PxController* c = (PxController*)this;
+	PxControllerState state;
+	c->getState(state);
+	return state.touchedShape;
 }
 
 
@@ -83,10 +91,9 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 
 	PxSceneDesc sceneDesc(out->physicsSDK->getTolerancesScale());
 	sceneDesc.gravity = PxVec3(0.0f, -9.81f, 0.0f);
-	PxDefaultCpuDispatcher* dispatcher = PxDefaultCpuDispatcherCreate(2);
+	PxDefaultCpuDispatcher* dispatcher = PxDefaultCpuDispatcherCreate(1);
 	sceneDesc.cpuDispatcher = dispatcher;
 	sceneDesc.filterShader = PxDefaultSimulationFilterShader;
-
 
 	PxCookingParams cookingParams = PxCookingParams::PxCookingParams(out->physicsSDK->getTolerancesScale());
 	out->cooking = PxCreateCooking(PX_PHYSICS_VERSION, *out->foundation, cookingParams);
@@ -192,7 +199,7 @@ RigidBody* PH_AddDynamicRigidBody(struct PhysicsScene* scene, PhysicsShape* shap
 	PxRigidDynamic* body = scene->physicsSDK->createRigidDynamic(pose);
 	body->attachShape(*(PxShape*)shape);
 	scene->scene->addActor(*body);
-	PxRigidBodyExt::updateMassAndInertia(*body, 10.0f);
+	PxRigidBodyExt::updateMassAndInertia(*body, 1.0f);
 	body->wakeUp();
 
 	return (RigidBody*)body;
@@ -208,7 +215,7 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 	desc.height = height;
 	desc.invisibleWallHeight = 0.0f;
 	desc.material = (PxMaterial*)material;
-	desc.maxJumpHeight = 20.0f;
+	desc.maxJumpHeight = 2.0f;
 	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
 	desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING;
 	desc.position = { pos.x, pos.y, pos.z };
@@ -223,9 +230,8 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 	desc.volumeGrowth = 1.5f;
 	PxController* controller = scene->manager->createController(desc);
 	controller->invalidateCache();
-
-
-
+	
+	
 	return (PhysicsController*)controller;
 }
 

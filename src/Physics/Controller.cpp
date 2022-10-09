@@ -18,7 +18,6 @@ static glm::vec3 GenerateVelocityFromFPSUserInput(FPSUserInput& movement, const 
 		vel = glm::normalize(forwardSpeed * horizontalForwardDir + rightSpeed * horizontalRightDir) * velocity;
 		if (movement.sprintDown) vel *= sprintMultiplier;
 	}
-	vel.y -= 9.81f;
 	return vel;
 }
 static void UpdateFPSUserInput(FPSUserInput& movement, glm::vec3& front, glm::vec3& right, float* yaw, float* pitch)
@@ -67,12 +66,12 @@ static void UpdateFPSFromKey(FPSUserInput& movement, int key, int action, int mo
 
 void DefaultFPSController::Update(float dt)
 {
-	glm::vec3 curVel = controller->GetVelocity() - glm::vec3(0.0f, 9.81f, 0.0f) * dt;
-	curVel = glm::vec3(0.0f, glm::min(glm::max(curVel.y, -1000.0f), 200.0f), 0.0f);
+	glm::vec3 curVel = (controller->GetVelocity() - glm::vec3(0.0f, 9.81f, 0.0f) * 0.5f);
+	curVel.x = 0.0f; curVel.z = 0.0f;
 	UpdateFPSUserInput(movement, forwardDir, rightDir, &yaw, &pitch);
 	glm::vec3 vel = (GenerateVelocityFromFPSUserInput(movement, forwardDir, rightDir, velocity, sprintModifier) + curVel) * dt;
-	if (movement.jumpDown) {
-		vel.y = 5.0f;
+	if (controller->IsOnGround() && movement.jumpDown) {
+		vel.y = 1.5f;
 	}
 	controller->Move(vel);
 }

@@ -107,7 +107,7 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		player->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
 		game->localPlayer = player;
 	}
-	game->localPlayer->controller.velocity = 40.0f;
+	game->localPlayer->controller.velocity = 20.0f;
 	game->localPlayer->controller.sprintModifier = 2.0f;
 	game->localPlayer->controller.SetCamera(&game->localPlayer->camera, 8.0f);
 
@@ -130,5 +130,6 @@ void GM_OnResizeCallback(GameManager* game, int width, int height)
 
 		RE_CreateAntialiasingData(&game->AAbuffer, width, height, prevSamples);
 		RE_CreatePostProcessingRenderData(&game->PPbuffer, width, height);
+		RE_CreateScreenSpaceReflectionRenderData(&game->SSRbuffer, width, height);
 	}
 }

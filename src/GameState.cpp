@@ -85,6 +85,17 @@ static void WindowMaximizedCallback(GLFWwindow* window, int maximized)
 		}
 	}
 }
+static void JoystickCallback(int jid, int event)
+{
+	if (event == GLFW_CONNECTED)
+	{
+		g_gameState->numGamepads++;
+	}
+	else if (event == GLFW_DISCONNECTED)
+	{
+		g_gameState->numGamepads--;
+	}
+}
 
 GameState* CreateGameState(const char* windowName, MainCallbacks* cbs, uint32_t windowWidth, uint32_t windowHeight)
 {
@@ -104,7 +115,9 @@ GameState* CreateGameState(const char* windowName, MainCallbacks* cbs, uint32_t 
 	}
 
 
+
 	g_gameState = new GameState;
+	g_gameState->numGamepads = 0;
 	g_gameState->swapChainInterval = 2;
 	g_gameState->isFullscreen = false;
 	g_gameState->window = window;
@@ -124,6 +137,7 @@ GameState* CreateGameState(const char* windowName, MainCallbacks* cbs, uint32_t 
 	glfwSetWindowFocusCallback(window, WindowFocusCallback);
 	glfwSetWindowPosCallback(window, WindowPositionCallback);
 	glfwSetWindowMaximizeCallback(window, WindowMaximizedCallback);
+	glfwSetJoystickCallback(JoystickCallback);
 
 	gladLoadGL();
 	glfwSwapInterval(g_gameState->swapChainInterval);
@@ -139,12 +153,27 @@ GameState* CreateGameState(const char* windowName, MainCallbacks* cbs, uint32_t 
 	{
 		int count = 0;
 		GLFWmonitor** m = glfwGetMonitors(&count);
-		int width, height;
-		glfwGetMonitorPhysicalSize(m[0], &width, &height);
-		glfwSetWindowMonitor(window, m[0], 0, 0, width, height, 60);
-		g_gameState->winWidth = width;
-		g_gameState->winHeight = height;
+		if (count > 0)
+		{
+			int width, height;
+			glfwGetMonitorPhysicalSize(m[0], &width, &height);
+			glfwSetWindowMonitor(window, m[0], 0, 0, width, height, 0);
+			g_gameState->winWidth = width;
+			g_gameState->winHeight = height;
+		}
 	}
+
+	for (int i = 0; i < 16; i++)
+	{
+		if (glfwJoystickPresent(i))
+		{
+			if (glfwJoystickIsGamepad(GLFW_JOYSTICK_1 + i))
+			{
+				g_gameState->numGamepads++;
+			}
+		}
+	}
+
 
 	return g_gameState;
 }
@@ -170,6 +199,10 @@ void SetFullscreen(GameState* state, int monitorIdx, int* width, int* height)
 		glfwGetMonitorWorkarea(monitors[monitorIdx], &xPos, &yPos, &w, &h);
 		glfwSetWindowMonitor(state->window, monitors[monitorIdx], xPos, yPos, w, h, 0);
 	}
+}
+void SetWindowed(GameState* state, int width, int height)
+{
+	glfwSetWindowSize(state->window, width, height);
 }
 
 void UpateGameState()
@@ -198,7 +231,6 @@ void UpateGameState()
 			PH_Update(g_gameState->physics, TIME_STEP);
 			if (g_gameState->callbacks.postphysicsUpdate) g_gameState->callbacks.postphysicsUpdate(g_gameState, TIME_STEP);
 			accTime -= TIME_STEP;
-			break;
 		}
 		
 		if (g_gameState->winWidth > 0 && g_gameState->winHeight > 0)

@@ -16,6 +16,7 @@ struct PhysicsController
 	glm::vec3 GetPos();
 	glm::vec3 GetVelocity();
 	RigidBody* GetRigidBody();
+	bool IsOnGround();
 };
 
 struct VehicleDesc

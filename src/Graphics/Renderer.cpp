@@ -2522,23 +2522,24 @@ void RE_CreatePostProcessingRenderData(PostProcessingRenderData* data, uint32_t 
 			}
 		}
 
-		glGenFramebuffers(1, &data->intermediateFbo);
-		glBindFramebuffer(GL_TEXTURE_2D, data->intermediateFbo);
-		glGenTextures(1, &data->intermediateTexture);
-		glBindTexture(GL_TEXTURE_2D, data->intermediateTexture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->intermediateTexture, 0);
-
-		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-			LOG("FAILED  TO CREATE FRAMEBUFFER\n");
-		}
-		
 	}
+
+	glGenFramebuffers(1, &data->intermediateFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, data->intermediateFbo);
+	glGenTextures(1, &data->intermediateTexture);
+	glBindTexture(GL_TEXTURE_2D, data->intermediateTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, data->intermediateTexture, 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		LOG("FAILED  TO CREATE FRAMEBUFFER\n");
+	}
+
 }
 void RE_CleanUpPostProcessingRenderData(PostProcessingRenderData* data)
 {

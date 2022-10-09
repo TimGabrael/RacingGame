@@ -23,8 +23,15 @@ struct MainCallbacks
 	GENERAL_CALLBACK renderCallback;
 };
 
+struct InputData
+{
+
+};
+
+
 struct GameState
 {
+	MainCallbacks callbacks;
 	struct Renderer* renderer;
 	struct Scene* scene;
 	struct PhysicsScene* physics;
@@ -36,7 +43,7 @@ struct GameState
 	uint32_t winWidth;
 	uint32_t winHeight;
 	uint32_t swapChainInterval;
-	MainCallbacks callbacks;
+	uint32_t numGamepads;
 	bool hasFocus;
 	bool isFullscreen;
 	bool isMouseCaptured;
@@ -45,5 +52,6 @@ struct GameState
 GameState* CreateGameState(const char* windowName, MainCallbacks* cbs, uint32_t windowWidth, uint32_t windowHeight);
 GameState* GetGameState();
 void SetFullscreen(GameState* state, int monitorIdx, int* width, int* height);
+void SetWindowed(GameState* state, int width, int height);
 
 void UpateGameState();

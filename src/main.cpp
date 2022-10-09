@@ -6,12 +6,19 @@
 #include "Physics/Physics.h"
 
 static Model debugModel;
+static Model* animModel = nullptr;
+static AnimationInstanceData testAnim;
 static std::vector<Vertex3D> debugLines;
 void RenderMainScene(GameState* game)
 {
-	debugLines.clear();
-	PH_GetPhysicsVertices(game->physics, debugLines);
-	UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
+	// debugLines.clear();
+	// PH_GetPhysicsVertices(game->physics, debugLines);
+	// UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
+
+	static float updatetimer = 0.0f;
+	UpdateBoneDataFromModel(animModel, 0, 0, &testAnim, updatetimer);
+	updatetimer += 1.0f / 60.0f;
+	if (updatetimer > 5.0f) updatetimer = 0.0f;
 
 	Player* localPlayer = game->manager->localPlayer;
 	if (localPlayer)
@@ -42,7 +49,18 @@ void RenderMainScene(GameState* game)
 
 
 	RE_FinishAntialiasingData(&game->manager->AAbuffer);
+
+	// RENDER SSR WITH BLOOM
+	//RE_RenderScreenSpaceReflection(game->renderer, &game->manager->SSRbuffer, game->manager->AAbuffer.intermediateTexture,
+	//	game->manager->PPbuffer.intermediateFbo, game->manager->PPbuffer.width, game->manager->PPbuffer.height);
+	//RE_RenderPostProcessingBloom(game->renderer, &game->manager->PPbuffer,
+	//	game->manager->PPbuffer.intermediateTexture, game->manager->PPbuffer.width, game->manager->PPbuffer.height,
+	//	0, game->winWidth, game->winHeight);
+
+	// RENDER SSR
 	//RE_RenderScreenSpaceReflection(game->renderer, &game->manager->SSRbuffer, game->manager->AAbuffer.intermediateTexture, 0, game->winWidth, game->winHeight);
+
+	// RENDER BLOOM
 	RE_RenderPostProcessingBloom(game->renderer, &game->manager->PPbuffer,
 		game->manager->AAbuffer.intermediateTexture, game->manager->AAbuffer.width, game->manager->AAbuffer.height,
 		0, game->winWidth, game->winHeight);
@@ -93,14 +111,14 @@ int main()
 
 
 	// TEST ANIM INSTANCE DATA
-	AnimationInstanceData realAnimData; memset(&realAnimData, 0, sizeof(AnimationInstanceData));
-	CreateBoneDataFromModel(boomBox, &realAnimData);
-
+	memset(&testAnim, 0, sizeof(AnimationInstanceData));
+	CreateBoneDataFromModel(boomBox, &testAnim);
+	animModel = boomBox;
 
 	base.model = boomBox;
 	for (int i = 0; i < 1; i++)
 	{
-		base.anim = &realAnimData;
+		base.anim = &testAnim;
 		base.rigidBody = PH_AddDynamicRigidBody(game->physics, boomBoxShape, glm::vec3(0.0f, 20.0f, 0.0f), def);
 		SC_AddDynamicObject(game->scene, &base);
 	}
