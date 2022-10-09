@@ -86,6 +86,7 @@ void FreecamFPSController::Update(float dt)
 	glm::vec3 vel = GenerateVelocityFromFPSUserInput(movement, forwardDir, rightDir, velocity, sprintModifier);
 	if (movement.jumpDown) vel.y = velocity;
 	if (movement.crouchDown) vel.y -= velocity;
+	if (movement.sprintDown) vel.y *= sprintModifier;
 	pos += vel * dt;
 }
 void FreecamFPSController::SetCamera(struct PerspectiveCamera* cam)

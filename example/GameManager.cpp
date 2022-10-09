@@ -19,14 +19,14 @@ GameManager* GM_CreateGameManager(GameState* state)
 
 	out->defaultLightGroup = RELI_AddLightGroup(state->renderer);
 
-	DirectionalLight* l = RELI_AddDirectionalLight(out->defaultLightGroup);
-	l->direction = { 0.0f, -1.0f, 0.0f };
-	l->color = { 2.0f, 2.0f, 2.0f };
+	//DirectionalLight* l = RELI_AddDirectionalLight(out->defaultLightGroup);
+	//l->direction = { 0.0f, -1.0f, 0.0f };
+	//l->color = { 2.0f, 2.0f, 0.0f };
 
 	DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 0x1000, 0x1000, false);
 	sl->pos = { 0.0f, 30.0f, 0.0f };
 	sl->light.direction = { 0.0f, -1.0f, 0.0f };
-	sl->light.color = { 5.0f, 5.0f, 5.0f };
+	sl->light.color = { 2.0f, 2.0f, 2.0f };
 	//
 	//SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
 	//spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };

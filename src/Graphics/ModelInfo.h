@@ -60,6 +60,7 @@ struct Joint
 {
 	Joint* parent;
 	Joint** children;
+	struct Model* model;
 	struct Mesh* mesh;
 	struct Skin* skin;
 	int32_t skinIndex = -1;
@@ -129,9 +130,9 @@ struct Mesh
 {
 	uint32_t startIdx;
 	uint32_t numInd;
-	Material* material;
 	uint32_t flags;
 	uint32_t skinIdx;
+	struct Material* material;
 	AABB bound;
 };
 struct Model
@@ -145,6 +146,7 @@ struct Model
 	Texture** textures;
 	Joint* joints;
 	Skin* skins;
+	Joint** nodes;	// renderable objects
 	
 	uint32_t numMaterials;
 	uint32_t numAnimations;
@@ -152,6 +154,7 @@ struct Model
 	uint32_t numMeshes;
 	uint32_t numJoints;
 	uint32_t numSkins;
+	uint32_t numNodes;
 
 	GLuint vao;
 	GLuint vertexBuffer;

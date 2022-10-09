@@ -267,6 +267,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 							for (size_t v = 0; v < posAccessor.count; v++) {
 								Vertex3D& vert = verts[curVertPos];
 								vert.pos = glm::make_vec3(&bufferPos[v * posByteStride]);
+								model->meshes[curMeshIdx].bound.min = glm::min(model->meshes[curMeshIdx].bound.min, vert.pos);
+								model->meshes[curMeshIdx].bound.max = glm::max(model->meshes[curMeshIdx].bound.max, vert.pos);
 								vert.nor = glm::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * normByteStride]) : glm::vec3(0.0f)));
 								vert.uv1 = bufferTexCoordSet0 ? glm::make_vec2(&bufferTexCoordSet0[v * uv0ByteStride]) : glm::vec3(0.0f);
 								vert.uv2 = bufferTexCoordSet1 ? glm::make_vec2(&bufferTexCoordSet1[v * uv1ByteStride]) : glm::vec3(0.0f);
@@ -353,6 +355,24 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 
 			}
 
+			if (flags & MODEL_LOAD_REVERSE_FACE_ORIENTATION)
+			{
+				if (inds)
+				{
+					for (uint32_t i = 0; i < curIndPos; i+=3)
+					{
+						std::swap(inds[i], inds[i + 2]);	
+					}
+					for (uint32_t i = 0; i < curVertPos; i++)
+					{
+						verts[i].nor = -verts[i].nor;
+					}
+				}
+				else
+				{
+					LOG("WARNING REVERSEING THE FACES OF A VERTEX ONLY MESH\n");
+				}
+			}
 			GenerateModelVertexBuffer(&model->vao, &model->vertexBuffer, verts, curVertPos);
 
 			if (inds)
@@ -497,7 +517,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				myMat.tex.aoUV = texCoord;
 			}
 
-			myMat.alphaCutoff = 1.0f;
+
+			myMat.mode = Material::ALPHA_MODE::ALPHA_MODE_OPAQUE;
 			if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end()) {
 				tinygltf::Parameter param = mat.additionalValues["alphaMode"];
 				if (param.string_value == "BLEND") {
@@ -506,7 +527,6 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				if (param.string_value == "MASK") {
 					myMat.alphaCutoff = 0.5f;
 					myMat.alphaMask = 1.0f;
-					myMat.mode = Material::ALPHA_MODE::ALPHA_MODE_OPAQUE;
 				}
 			}
 			if (mat.additionalValues.find("alphaCutoff") != mat.additionalValues.end()) {
@@ -566,7 +586,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				j.matrix = glm::mat4(1.0f);
 				j.defMatrix = glm::mat4(1.0f);
 				j.skinIndex = node.skin;
-
+				j.model = m;
 
 				if (node.mesh > -1) {
 					m->meshes[node.mesh].skinIdx = node.skin;
@@ -1069,6 +1089,28 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		}
 	}
 
+
+	// LOAD NODES
+	{
+		model->numNodes = 0;
+		for (uint32_t i = 0; i < model->numJoints; i++)
+		{
+			if (model->joints[i].mesh) // JOINT IS NODE
+			{
+				model->numNodes++;
+			}
+		}
+		uint32_t nodeIdx = 0;
+		model->nodes = new Joint*[model->numNodes];
+		for (uint32_t i = 0; i < model->numJoints; i++)
+		{
+			if (model->joints[i].mesh) // JOINT IS NODE
+			{
+				model->nodes[nodeIdx] = &model->joints[i];
+				nodeIdx++;
+			}
+		}
+	}
 
 	m->models.push_back(model);
 	return model;

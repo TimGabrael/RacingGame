@@ -1556,6 +1556,14 @@ struct LightGroup
 	GLuint uniform;
 };
 
+struct RenderObjectData
+{
+	Joint* node;
+	glm::mat4 transform;
+	AABB bound;
+	float zDepth;
+	GLuint animUniform;
+};
 
 struct Renderer
 {
@@ -1570,8 +1578,10 @@ struct Renderer
 	GLuint whiteTexture;	// these are not owned by the renderer
 	GLuint blackTexture;	// these are not owned by the renderer
 
+	uint32_t listCapacity;
 	uint32_t numObjs;
-	struct SceneObject** objList;
+	uint32_t firstTransparentObject;
+	RenderObjectData* objList;
 };
 
 
@@ -2005,7 +2015,10 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 	renderer->currentCam = nullptr;
 	renderer->currentEnvironmentData = nullptr;
 	renderer->currentLightData = 0;
-
+	renderer->listCapacity = 0;
+	renderer->objList = 0;
+	renderer->numObjs = 0;
+	renderer->firstTransparentObject = 0;
 	// Create Material Defaults
 	{
 		BoneData boneData = {};
@@ -3097,18 +3110,27 @@ void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* lig
 
 
 
-
-static bool IsInViewFrustrum(const glm::mat4& mvp, const AABB& aabb)
+static bool AABBOverlapp(const AABB& frustum, const AABB& aabb)
+{
+	if (aabb.max.x >= frustum.min.x && frustum.max.x >= aabb.min.x &&
+		aabb.max.y >= frustum.min.y && frustum.max.y >= aabb.min.y &&
+		aabb.max.z >= frustum.min.z && frustum.max.z >= aabb.min.z)
+	{
+		return true;
+	}
+	return false;
+}
+static bool IsInViewFrustrum(const AABB& frustum, const glm::mat4& modelMat, const AABB& aabb)
 {
 	glm::vec4 positions[8] = {
-		mvp * glm::vec4(aabb.min.x, aabb.min.y, aabb.min.z, 1.0f),
-		mvp * glm::vec4(aabb.max.x, aabb.min.y, aabb.min.z, 1.0f),
-		mvp * glm::vec4(aabb.min.x, aabb.max.y, aabb.min.z, 1.0f),
-		mvp * glm::vec4(aabb.max.x, aabb.max.y, aabb.min.z, 1.0f),
-		mvp * glm::vec4(aabb.min.x, aabb.min.y, aabb.max.z, 1.0f),
-		mvp * glm::vec4(aabb.max.x, aabb.min.y, aabb.max.z, 1.0f),
-		mvp * glm::vec4(aabb.min.x, aabb.max.y, aabb.max.z, 1.0f),
-		mvp * glm::vec4(aabb.max.x, aabb.max.y, aabb.max.z, 1.0f),
+		modelMat * glm::vec4(aabb.min.x, aabb.min.y, aabb.min.z, 1.0f),
+		modelMat * glm::vec4(aabb.max.x, aabb.min.y, aabb.min.z, 1.0f),
+		modelMat * glm::vec4(aabb.min.x, aabb.max.y, aabb.min.z, 1.0f),
+		modelMat * glm::vec4(aabb.max.x, aabb.max.y, aabb.min.z, 1.0f),
+		modelMat * glm::vec4(aabb.min.x, aabb.min.y, aabb.max.z, 1.0f),
+		modelMat * glm::vec4(aabb.max.x, aabb.min.y, aabb.max.z, 1.0f),
+		modelMat * glm::vec4(aabb.min.x, aabb.max.y, aabb.max.z, 1.0f),
+		modelMat * glm::vec4(aabb.max.x, aabb.max.y, aabb.max.z, 1.0f),
 	};
 	glm::vec3 min = glm::vec3(FLT_MAX);
 	glm::vec3 max = glm::vec3(-FLT_MAX);
@@ -3118,21 +3140,158 @@ static bool IsInViewFrustrum(const glm::mat4& mvp, const AABB& aabb)
 		min = glm::min(min, glm::vec3(positions[i].x, positions[i].y, positions[i].z));
 		max = glm::max(max, glm::vec3(positions[i].x, positions[i].y, positions[i].z));
 	}
-	if (max.x >= -1.0f && 1.0f >= min.x &&
-		max.y >= -1.0f && 1.0f >= min.y &&
-		max.z >= -1.0f && 1.0f >= min.z)
+	return AABBOverlapp(frustum, { min, max });
+}
+static AABB GenerateAABB(const glm::mat4& invViewProj)
+{
+	glm::vec4 positions[8] = {
+		invViewProj * glm::vec4( 1.0f,  1.0f,  1.0f, 1.0f),
+		invViewProj * glm::vec4(-1.0f,  1.0f,  1.0f, 1.0f),
+		invViewProj * glm::vec4( 1.0f, -1.0f,  1.0f, 1.0f),
+		invViewProj * glm::vec4(-1.0f, -1.0f,  1.0f, 1.0f),
+		invViewProj * glm::vec4( 1.0f,  1.0f, -1.0f, 1.0f),
+		invViewProj * glm::vec4(-1.0f,  1.0f, -1.0f, 1.0f),
+		invViewProj * glm::vec4( 1.0f, -1.0f, -1.0f, 1.0f),
+		invViewProj * glm::vec4(-1.0f, -1.0f, -1.0f, 1.0f),
+	};
+	glm::vec3 min = glm::vec3(FLT_MAX);
+	glm::vec3 max = glm::vec3(-FLT_MAX);
+	for (int i = 0; i < 8; i++)
 	{
-		return true;
+		positions[i] /= positions[i].w;
+		min = glm::min(min, glm::vec3(positions[i].x, positions[i].y, positions[i].z));
+		max = glm::max(max, glm::vec3(positions[i].x, positions[i].y, positions[i].z));
 	}
-	return false;
+	return { min, max };
 }
 
 
 
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num)
 {
-	renderer->numObjs = num;
-	renderer->objList = objList;
+	uint32_t numNodes = 0;
+	for (uint32_t i = 0; i < num; i++)
+	{
+		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
+		{
+			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
+			{
+				if (objList[i]->model->nodes[j]->mesh->flags & MESH_FLAG_UNSUPPORTED) continue;
+				numNodes++;
+			}
+		}
+	}
+	if (renderer->listCapacity <= numNodes)
+	{
+		renderer->listCapacity = numNodes + 100;
+		if (renderer->objList) delete[] renderer->objList;
+		renderer->objList = new RenderObjectData[renderer->listCapacity];
+	}
+
+	renderer->numObjs = numNodes;
+	renderer->firstTransparentObject = 0;
+	// FILL OPAQUE OBJECTS
+	for (uint32_t i = 0; i < num; i++)
+	{
+		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
+		{
+			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
+			{
+				if (objList[i]->model->nodes[j]->mesh->flags & MESH_FLAG_UNSUPPORTED) continue;
+
+				if (!(objList[i]->model->nodes[j]->mesh->material && objList[i]->model->nodes[j]->mesh->material->mode == Material::ALPHA_MODE_BLEND))
+				{
+					RenderObjectData& d = renderer->objList[renderer->firstTransparentObject];
+					d.node = objList[i]->model->nodes[j];
+					d.transform = objList[i]->model->baseTransform;
+					d.animUniform = renderer->pbrData.defaultBoneData;
+					if (objList[i]->model->animations && objList[i]->anim)
+					{
+						if (objList[i]->model->joints->mesh->skinIdx < objList[i]->anim->numSkins)
+						{
+							d.transform = d.transform * objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].baseTransform;
+							d.animUniform = objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].skinUniform;
+						}
+					}
+					glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
+					glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
+					glm::vec4 positions[8] = {
+						d.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
+						d.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
+						d.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
+						d.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
+						d.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
+						d.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
+						d.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
+						d.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
+					};
+					min = glm::vec3(FLT_MAX);
+					max = glm::vec3(-FLT_MAX);
+					for (int posIdx = 0; posIdx < 8; posIdx++)
+					{
+						positions[posIdx] /= positions[posIdx].w;
+						min = glm::min(min, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
+						max = glm::max(max, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
+					}
+					d.bound = { min, max };
+					renderer->firstTransparentObject++;
+				}
+			}
+		}
+	}
+
+
+	uint32_t curOffset = renderer->firstTransparentObject;
+	// FILL TRANSPARENT OBJECTS
+	for (uint32_t i = 0; i < num; i++)
+	{
+		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
+		{
+			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
+			{
+				if (objList[i]->model->nodes[j]->mesh->flags & MESH_FLAG_UNSUPPORTED) continue;
+
+				if (objList[i]->model->nodes[j]->mesh->material && objList[i]->model->nodes[j]->mesh->material->mode == Material::ALPHA_MODE_BLEND)
+				{
+					RenderObjectData& d = renderer->objList[curOffset];
+					d.node = objList[i]->model->nodes[j];
+					d.transform = objList[i]->model->baseTransform;
+					d.animUniform = renderer->pbrData.defaultBoneData;
+					if (objList[i]->model->animations && objList[i]->anim)
+					{
+						if (objList[i]->model->joints->mesh->skinIdx < objList[i]->anim->numSkins)
+						{
+							d.transform = d.transform * objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].baseTransform;
+							d.animUniform = objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].skinUniform;
+						}
+					}
+					glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
+					glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
+					glm::vec4 positions[8] = {
+						d.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
+						d.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
+						d.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
+						d.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
+						d.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
+						d.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
+						d.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
+						d.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
+					};
+					min = glm::vec3(FLT_MAX);
+					max = glm::vec3(-FLT_MAX);
+					for (int posIdx = 0; posIdx < 8; posIdx++)
+					{
+						positions[posIdx] /= positions[posIdx].w;
+						min = glm::min(min, glm::vec3(positions[posIdx]));
+						max = glm::max(max, glm::vec3(positions[posIdx]));
+					}
+					d.bound = { min, max };
+					curOffset++;
+				}
+			}
+		}
+	}
+
 }
 
 void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBase)
@@ -3151,7 +3310,7 @@ void RE_SetLightData(struct Renderer* renderer, LightGroup* group)
 void RE_RenderShadows(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	LightGroup* g = renderer->currentLightData;
 	if (!g->shadowGroup.fbo) return;
@@ -3163,6 +3322,7 @@ void RE_RenderShadows(struct Renderer* renderer)
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LESS);
+	glDepthMask(GL_TRUE);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, g->shadowGroup.fbo);
 	glClearDepthf(1.0f);
@@ -3171,47 +3331,34 @@ void RE_RenderShadows(struct Renderer* renderer)
 		glm::mat4 mat(1.0f);
 		glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&mat);
 	}
-	static const auto stdRender = [&](const glm::mat4& viewProj)
+	static const auto stdRender = [&](const AABB& frustum)
 	{
 		for (uint32_t i = 0; i < renderer->numObjs; i++)
 		{
-			SceneObject* obj = renderer->objList[i];
-			if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+			RenderObjectData* obj = &renderer->objList[i];
+			
+			if (AABBOverlapp(frustum, obj->bound))
 			{
-				const glm::mat4 mat = obj->transform * obj->model->baseTransform;
-				if (IsInViewFrustrum(viewProj * mat, obj->model->bound))
+				glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
+				glBindVertexArray(obj->node->model->vao);
+				if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+				
+				Mesh* m = obj->node->mesh;
+				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->animUniform);
+		
+				BindMaterialGeometry(renderer, m->material);
+				GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+				if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
 				{
-					glBindVertexArray(obj->model->vao);
-					if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-					for (uint32_t j = 0; j < obj->model->numMeshes; j++)
-					{
-						Mesh* m = &obj->model->meshes[j];
-						if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
-
-						glm::mat4 modelMat = mat;
-						if (obj->anim && m->skinIdx < obj->anim->numSkins)
-						{
-							modelMat = mat * obj->anim->data[m->skinIdx].baseTransform;
-							glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-						}
-						else
-						{
-							glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-						}
-						glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&modelMat);
-						BindMaterialGeometry(renderer, m->material);
-						GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-						if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
-						{
-							glDrawArrays(renderMode, m->startIdx, m->numInd);
-						}
-						else
-						{
-							glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-						}
-					}
+					glDrawArrays(renderMode, m->startIdx, m->numInd);
 				}
+				else
+				{
+					glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				}
+				
 			}
+			
 		}
 	};
 	for (int i = 0; i < g->numDirLights; i++)
@@ -3225,7 +3372,9 @@ void RE_RenderShadows(struct Renderer* renderer)
 			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.pos);
 			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
 
-			stdRender(g->shadowGroup.projections[l.light.light.projIdx].proj);
+			const glm::mat4 inv = glm::inverse(g->shadowGroup.projections[l.light.light.projIdx].proj);
+
+			stdRender(GenerateAABB(inv));
 		}
 	}
 	for (int i = 0; i < g->numPointLights; i++)
@@ -3242,7 +3391,9 @@ void RE_RenderShadows(struct Renderer* renderer)
 				
 				glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx + j].proj);
 
-				stdRender(g->shadowGroup.projections[l.light.light.projIdx + j].proj);
+				const glm::mat4 inv = glm::inverse(g->shadowGroup.projections[l.light.light.projIdx + j].proj);
+
+				stdRender(GenerateAABB(inv));
 			}
 
 		}
@@ -3258,8 +3409,9 @@ void RE_RenderShadows(struct Renderer* renderer)
 			
 			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.light.pos);
 			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
+			const glm::mat4 inv = glm::inverse(g->shadowGroup.projections[l.light.light.projIdx].proj);
 
-			stdRender(g->shadowGroup.projections[l.light.light.projIdx].proj);
+			stdRender(GenerateAABB(inv));
 		}
 	}
 
@@ -3356,68 +3508,56 @@ void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint3
 void RE_RenderGeometry(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	if (renderer->numObjs == 0) return;
 
 	glUseProgram(renderer->pbrData.geomProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LEQUAL);
+	glDepthMask(GL_TRUE);
 
 
 	glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
 	glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
 	glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
 
-	const glm::mat4 viewProjMat = renderer->currentCam->proj * renderer->currentCam->view;
+	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
-	for (uint32_t i = 0; i < renderer->numObjs; i++)
+
+	for (uint32_t i = 0; i < renderer->firstTransparentObject; i++)
 	{
-		SceneObject* obj = renderer->objList[i];
-		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+		RenderObjectData* obj = &renderer->objList[i];
+		
+		if (AABBOverlapp(frustum, obj->bound))
 		{
-			const glm::mat4 mat = obj->transform * obj->model->baseTransform;
-			if (IsInViewFrustrum(viewProjMat * mat, obj->model->bound))
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
+			glBindVertexArray(obj->node->model->vao);
+			if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			
+			Mesh* m = obj->node->mesh;
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->animUniform);
+			
+			BindMaterialGeometry(renderer, m->material);
+			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
 			{
-				glBindVertexArray(obj->model->vao);
-				if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-				for (uint32_t j = 0; j < obj->model->numMeshes; j++)
-				{
-					Mesh* m = &obj->model->meshes[j];
-					if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
-
-					glm::mat4 modelMat = mat;
-					if (obj->anim && m->skinIdx < obj->anim->numSkins)
-					{
-						modelMat = mat * obj->anim->data[m->skinIdx].baseTransform;
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
-					glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&modelMat);
-
-					BindMaterialGeometry(renderer, m->material);
-					GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-					if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
-					{
-						glDrawArrays(renderMode, m->startIdx, m->numInd);
-					}
-					else
-					{
-						glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-					}
-				}
+				glDrawArrays(renderMode, m->startIdx, m->numInd);
 			}
+			else
+			{
+				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+			}
+			
 		}
+		
 	}
 }
 
 void RE_RenderOpaque(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numObjs == 0) return;
@@ -3426,6 +3566,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LEQUAL);
+	glDepthMask(GL_TRUE);
 
 	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->prefilteredMap);
@@ -3448,49 +3589,34 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 	
-	const glm::mat4 viewProjMat = renderer->currentCam->proj * renderer->currentCam->view;
+	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
-	for (uint32_t i = 0; i < renderer->numObjs; i++)
+	for (uint32_t i = 0; i < renderer->firstTransparentObject; i++)
 	{
-		SceneObject* obj = renderer->objList[i];
-		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+		RenderObjectData* obj = &renderer->objList[i];
+		
+		if (AABBOverlapp(frustum, obj->bound))
 		{
-			const glm::mat4 mat = obj->transform * obj->model->baseTransform;
-			if (IsInViewFrustrum(viewProjMat * mat, obj->model->bound))
+			glBindVertexArray(obj->node->model->vao);
+			if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
+			
+			Mesh* m = obj->node->mesh;
+
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->animUniform);
+			
+			BindMaterial(renderer, m->material);
+			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
 			{
-				glBindVertexArray(obj->model->vao);
-				if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-				for (uint32_t j = 0; j < obj->model->numMeshes; j++)
-				{
-					Mesh* m = &obj->model->meshes[j];
-					if (m->flags & MESH_FLAG_UNSUPPORTED || (m->material && m->material->mode == Material::ALPHA_MODE_BLEND)) continue;
-
-					glm::mat4 modelMat = mat;
-
-					if (obj->anim && m->skinIdx < obj->anim->numSkins)
-					{
-						modelMat = mat * obj->anim->data[m->skinIdx].baseTransform;
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
-					glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&modelMat);
-					BindMaterial(renderer, m->material);
-					GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-					if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
-					{
-						glDrawArrays(renderMode, m->startIdx, m->numInd);
-					}
-					else
-					{
-						glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-					}
-					
-				}
+				glDrawArrays(renderMode, m->startIdx, m->numInd);
+			}
+			else
+			{
+				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
 			}
 		}
+		
 	}
 
 
@@ -3498,14 +3624,16 @@ void RE_RenderOpaque(struct Renderer* renderer)
 void RE_RenderTransparent(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numObjs == 0) return;
 
 	glUseProgram(renderer->pbrData.baseProgram);
 
-	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);
+	glDepthMask(GL_FALSE);
+	glDepthFunc(GL_LEQUAL);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -3526,49 +3654,33 @@ void RE_RenderTransparent(struct Renderer* renderer)
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 
-	const glm::mat4 viewProj = renderer->currentCam->proj * renderer->currentCam->view;
+	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
-	for (uint32_t i = 0; i < renderer->numObjs; i++)
+	for (uint32_t i = renderer->firstTransparentObject; i < renderer->numObjs; i++)
 	{
-		SceneObject* obj = renderer->objList[i];
-		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+		RenderObjectData* obj = &renderer->objList[i];
+		
+		if (AABBOverlapp(frustum, obj->bound))
 		{
-			const glm::mat4 mat = obj->transform * obj->model->baseTransform;
-			if (IsInViewFrustrum(viewProj * mat, obj->model->bound))
+			glBindVertexArray(obj->node->model->vao);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->animUniform);
+			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
+
+			Mesh* m = obj->node->mesh;
+			BindMaterial(renderer, m->material);
+			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
 			{
-				glBindVertexArray(obj->model->vao);
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-
-				for (uint32_t j = 0; j < obj->model->numMeshes; j++)
-				{
-					Mesh* m = &obj->model->meshes[j];
-					if (m->flags & MESH_FLAG_UNSUPPORTED || !m->material || (m->material && m->material->mode == Material::ALPHA_MODE_OPAQUE)) continue;
-
-					glm::mat4 modelMat = mat;
-					if (obj->anim && m->skinIdx < obj->anim->numSkins)
-					{
-						modelMat = mat * obj->anim->data[m->skinIdx].baseTransform;
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
-					glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&modelMat);
-
-					BindMaterial(renderer, m->material);
-					GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-					if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
-					{
-						glDrawArrays(renderMode, m->startIdx, m->numInd);
-					}
-					else
-					{
-						glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-					}
-				}
+				glDrawArrays(renderMode, m->startIdx, m->numInd);
 			}
+			else
+			{
+				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+			}
+			
 		}
+		
 	}
 
 
@@ -3597,8 +3709,7 @@ void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 
 void RE_EndScene(struct Renderer* renderer)
 {
-	renderer->numObjs = 0xFFFFFFFF;
-	renderer->objList = nullptr;
+	renderer->numObjs = 0;
 
 	renderer->currentCam = nullptr;
 	renderer->currentEnvironmentData = nullptr;
@@ -3638,6 +3749,7 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 	glDisable(GL_BLEND);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
+	glDepthMask(GL_TRUE);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, ssrData->fbo);
 	glViewport(0, 0, ssrData->width, ssrData->height);
@@ -3650,47 +3762,33 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
 	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
 
-	const glm::mat4 viewProj = renderer->currentCam->proj * renderer->currentCam->view;
+	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
-		SceneObject* obj = renderer->objList[i];
-		if (obj->model && (obj->flags & SCENE_OBJECT_FLAG_VISIBLE))
+		RenderObjectData* obj = &renderer->objList[i];
+		
+		if (AABBOverlapp(frustum, obj->bound))
 		{
-			const glm::mat4 mat = obj->transform * obj->model->baseTransform;
-			if (IsInViewFrustrum(viewProj * mat, obj->model->bound))
+			glBindVertexArray(obj->node->model->vao);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, obj->animUniform);
+			glUniformMatrix4fv(renderer->pbrData.ssrUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
+			
+			Mesh* m = obj->node->mesh;
+			BindMaterialSSR(renderer, m->material);
+			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
 			{
-				glBindVertexArray(obj->model->vao);
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-				for (uint32_t j = 0; j < obj->model->numMeshes; j++)
-				{
-					Mesh* m = &obj->model->meshes[j];
-					if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
-					glm::mat4 modelMat = mat;
-					if (obj->anim && m->skinIdx < obj->anim->numSkins)
-					{
-						modelMat = mat * obj->anim->data[m->skinIdx].baseTransform;
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
-					}
-					else
-					{
-						glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-					}
-					glUniformMatrix4fv(renderer->pbrData.ssrUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&modelMat);
-
-					BindMaterialSSR(renderer, m->material);
-					GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-					if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
-					{
-						glDrawArrays(renderMode, m->startIdx, m->numInd);
-					}
-					else
-					{
-						glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
-					}
-				}
+				glDrawArrays(renderMode, m->startIdx, m->numInd);
 			}
+			else
+			{
+				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+			}
+			
 		}
+		
 	}
 
 	glm::mat4 invView = glm::inverse(renderer->currentCam->view);
