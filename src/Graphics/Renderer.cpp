@@ -1970,14 +1970,6 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	idx = glGetUniformLocation(info->ssr.program, "textureDepth");
 	glUniform1i(idx, 3);
 
-	//  uniform sampler2D textureColor; \n\
-	// 	uniform sampler2D textureDepth; \n\
-	// 	uniform vec2 resolution; \n\
-	// 	uniform float zNear; \n\
-	// 	uniform float zFar; \n\
-	// 	uniform float strength; \n\
-	// 	uniform int samples; \n\
-	// 	uniform float radius;
 
 	info->ssao.resolutionLoc = glGetUniformLocation(info->ssao.program, "resolution");
 	info->ssao.zNearLoc = glGetUniformLocation(info->ssao.program, "zNear");
@@ -3437,7 +3429,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
-				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
+				if (m->flags & MESH_FLAG_UNSUPPORTED || (m->material && m->material->mode == Material::ALPHA_MODE_BLEND)) continue;
 
 				if (obj->anim && m->skinIdx < obj->anim->numSkins)
 				{
@@ -3496,7 +3488,6 @@ void RE_RenderTransparent(struct Renderer* renderer)
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 
-
 	for (uint32_t i = 0; i < renderer->numObjs; i++)
 	{
 		SceneObject* obj = renderer->objList[i];
@@ -3511,7 +3502,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 			for (uint32_t j = 0; j < obj->model->numMeshes; j++)
 			{
 				Mesh* m = &obj->model->meshes[j];
-				if (m->flags & MESH_FLAG_UNSUPPORTED) continue;
+				if (m->flags & MESH_FLAG_UNSUPPORTED || !m->material || (m->material && m->material->mode == Material::ALPHA_MODE_OPAQUE)) continue;
 				if (obj->anim && m->skinIdx < obj->anim->numSkins)
 				{
 					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[m->skinIdx].skinUniform);
@@ -3522,6 +3513,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 				{
 					glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 				}
+				
 				BindMaterial(renderer, m->material);
 				GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
 				if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)

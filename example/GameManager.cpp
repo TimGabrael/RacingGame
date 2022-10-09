@@ -152,6 +152,7 @@ void GameManager::RenderCallback(GameState* state)
 		RE_RenderCubeMap(state->renderer, env.environmentMap);
 
 		RE_RenderOpaque(state->renderer);
+		RE_RenderTransparent(state->renderer);
 	}
 
 
