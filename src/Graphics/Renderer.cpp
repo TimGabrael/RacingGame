@@ -352,13 +352,13 @@ void main()\n\
 		float shadowVal = 1.0f;\n\
 		if(lights.dirLights[i].projIdx > -1)\n\
 		{\n\
-			shadowVal = pbrInputs.NdotL * calculateShadowValue(lights.projections[lights.dirLights[i].projIdx], ts);\n\
+			shadowVal = calculateShadowValue(lights.projections[lights.dirLights[i].projIdx], ts);\n\
 		}\n\
 		vec3 F = specularReflection(pbrInputs);\n\
 		float G = geometricOcclusion(pbrInputs);\n\
 		float D = microfacetDistribution(pbrInputs);\n\
 		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-		vec3 specContrib = min(F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV), vec3(1.0f));\n\
+		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
 		color += shadowVal * pbrInputs.NdotL * lights.dirLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 	}\n\
 	for(int i = 0; i < lights.numPointLights; i++)\n\
@@ -396,7 +396,6 @@ void main()\n\
 					else shadowVal = calculateShadowValue(lights.projections[lights.pointLights[i].projIdx + 5], ts);\n\
 				}\n\
 			}\n\
-			shadowVal *= pbrInputs.NdotL;\n\
 		}\n\
 		pbrInputs.NdotH = clamp(dot(n, h), 0.0, 1.0);\n\
 		pbrInputs.LdotH = clamp(dot(l, h), 0.0, 1.0);\n\
@@ -405,7 +404,7 @@ void main()\n\
 		float G = geometricOcclusion(pbrInputs);\n\
 		float D = microfacetDistribution(pbrInputs);\n\
 		vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-		vec3 specContrib = min(F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV), vec3(1.0f));\n\
+		vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
 		color += pbrInputs.NdotL * shadowVal * lights.pointLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 	}\n\
 	for(int i = 0; i < lights.numSpotLights; i++)\n\
@@ -423,11 +422,11 @@ void main()\n\
 			float G = geometricOcclusion(pbrInputs);\n\
 			float D = microfacetDistribution(pbrInputs);\n\
 			vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);\n\
-			vec3 specContrib = min(F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV), vec3(1.0f));\n\
+			vec3 specContrib = F * G * D / (4.0 * pbrInputs.NdotL * pbrInputs.NdotV);\n\
 			float shadowVal = 1.0f;\n\
 			if(lights.spotLights[i].projIdx > -1)\n\
 			{\n\
-				shadowVal = pbrInputs.NdotL * calculateShadowValue(lights.projections[lights.spotLights[i].projIdx], ts);\n\
+				shadowVal = calculateShadowValue(lights.projections[lights.spotLights[i].projIdx], ts);\n\
 			}\n\
 			color += pbrInputs.NdotL * shadowVal * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 		}\n\

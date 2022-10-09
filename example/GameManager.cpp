@@ -21,12 +21,12 @@ GameManager* GM_CreateGameManager(GameState* state)
 
 	DirectionalLight* l = RELI_AddDirectionalLight(out->defaultLightGroup);
 	l->direction = { 0.0f, -1.0f, 0.0f };
-	l->color = { 1.0f, 1.0f, 1.0f };
+	l->color = { 2.0f, 2.0f, 2.0f };
 
 	DirShadowLight* sl = RELI_AddDirectionalShadowLight(out->defaultLightGroup, 0x1000, 0x1000, false);
 	sl->pos = { 0.0f, 30.0f, 0.0f };
 	sl->light.direction = { 0.0f, -1.0f, 0.0f };
-	sl->light.color = { 2.0f, 2.0f, 2.0f };
+	sl->light.color = { 5.0f, 5.0f, 5.0f };
 	//
 	//SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
 	//spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };
@@ -45,7 +45,7 @@ GameManager* GM_CreateGameManager(GameState* state)
 	//point->pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
 	//PointShadowLight* point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
-	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	//point->light.color = { 3.0f, 3.0f, 3.0f, 1.0f };
 	//point->light.pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
 	//point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
@@ -55,6 +55,8 @@ GameManager* GM_CreateGameManager(GameState* state)
 	//point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
 	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->light.pos = { 0.0f, 20.0f, -10.0f, 0.0f };
+
+	//RELI_SetAmbientLightColor(out->defaultLightGroup, glm::vec3(0.2f));
 
 	RELI_Update(out->defaultLightGroup, nullptr);
 
