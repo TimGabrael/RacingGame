@@ -1141,10 +1141,6 @@ struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const ch
 		m->textures[name] = resTex;
 	}
 }
-struct AudioFile* AM_AddAudioSample(AssetManager* m, const char* file)
-{
-	return nullptr;
-}
 
 
 

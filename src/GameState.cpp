@@ -116,7 +116,6 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	}
 
 
-
 	g_gameState = new GameState;
 	g_gameState->numGamepads = 0;
 	g_gameState->swapChainInterval = 2;
@@ -137,6 +136,7 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	glfwSetWindowPosCallback(window, WindowPositionCallback);
 	glfwSetWindowMaximizeCallback(window, WindowMaximizedCallback);
 	glfwSetJoystickCallback(JoystickCallback);
+	glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 
 	gladLoadGL();
 	glfwSwapInterval(g_gameState->swapChainInterval);
@@ -174,7 +174,6 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 		}
 	}
 
-
 	return g_gameState;
 }
 
@@ -208,6 +207,26 @@ void SetWindowed(GameState* state, int width, int height)
 	g_gameState->isFullscreen = false;
 	g_gameState->accumulatedTime = 0.0f;
 	glfwSetWindowMonitor(state->window, nullptr, 0, 0, width, height, 0);
+}
+
+void SetConsumeMouse(bool consume)
+{
+	if (consume)
+	{
+		glfwSetInputMode(g_gameState->window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	}
+	else
+	{
+		glfwSetInputMode(g_gameState->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+}
+bool GetKey(int key)
+{
+	return glfwGetKey(g_gameState->window, key);
+}
+bool GetMouseButton(int button)
+{
+	return glfwGetMouseButton(g_gameState->window, button);
 }
 
 void UpateGameState()

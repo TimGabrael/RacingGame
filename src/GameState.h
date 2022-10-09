@@ -9,10 +9,6 @@
 
 
 
-struct InputData
-{
-
-};
 
 struct BaseGameManager
 {
@@ -54,5 +50,10 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 GameState* GetGameState();
 void SetFullscreen(GameState* state, int monitorIdx, int* width, int* height);
 void SetWindowed(GameState* state, int width, int height);
+
+void SetConsumeMouse(bool consume);
+
+bool GetKey(int key);
+bool GetMouseButton(int button);
 
 void UpateGameState();

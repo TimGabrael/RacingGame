@@ -1,21 +1,28 @@
 #include "Controller.h"
 #include "../Graphics/Camera.h"
+#include "GameState.h"
+
+static void GenerateFPSUserInputFromKeys(FPSUserInput& movement)
+{
+	movement.forward = 0.0f; movement.right = 0.0f;
+	if (GetKey(GLFW_KEY_W)) movement.forward = 1.0f;
+	if (GetKey(GLFW_KEY_S))movement.forward -= 1.0f;
+	if (GetKey(GLFW_KEY_D))movement.right = 1.0f;
+	if (GetKey(GLFW_KEY_A))movement.right -= 1.0f;
+	movement.jumpDown = GetKey(GLFW_KEY_SPACE);
+	movement.actionDown = GetMouseButton(GLFW_MOUSE_BUTTON_LEFT);
+	movement.crouchDown = GetKey(GLFW_KEY_LEFT_CONTROL);
+	movement.sprintDown = GetKey(GLFW_KEY_LEFT_SHIFT);
+}
 
 static glm::vec3 GenerateVelocityFromFPSUserInput(FPSUserInput& movement, const glm::vec3& front, const glm::vec3& right, float velocity, float sprintMultiplier)
 {
 	glm::vec3 vel = {};
-	if (movement.forward || movement.back || movement.left || movement.right)	// move player from input
+	if (movement.forward != 0.0f || movement.right != 0.0f)	// move player from input
 	{
-
-		float forwardSpeed = 0.0f;
-		float rightSpeed = 0.0f;
-		if (movement.forward) forwardSpeed = 1.0f;
-		if (movement.back) forwardSpeed -= 1.0f;
-		if (movement.right) rightSpeed = 1.0f;
-		if (movement.left) rightSpeed -= 1.0f;
 		glm::vec3 horizontalForwardDir = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
 		glm::vec3 horizontalRightDir = glm::normalize(glm::vec3(right.x, 0.0f, right.z));
-		vel = glm::normalize(forwardSpeed * horizontalForwardDir + rightSpeed * horizontalRightDir) * velocity;
+		vel = glm::normalize(movement.forward * horizontalForwardDir + movement.right * horizontalRightDir) * velocity;
 		if (movement.sprintDown) vel *= sprintMultiplier;
 	}
 	return vel;
@@ -33,29 +40,6 @@ static void UpdateFPSUserInput(FPSUserInput& movement, glm::vec3& front, glm::ve
 		movement.deltaPitch = 0.0f;
 	}
 }
-static void UpdateFPSFromKey(FPSUserInput& movement, int key, int action, int mods)
-{
-	if (action == GLFW_PRESS)
-	{
-		if (key == GLFW_KEY_W) movement.forward = true;
-		else if (key == GLFW_KEY_A) movement.left = true;
-		else if (key == GLFW_KEY_S) movement.back = true;
-		else if (key == GLFW_KEY_D) movement.right = true;
-		else if (key == GLFW_KEY_LEFT_SHIFT) movement.sprintDown = true;
-		else if (key == GLFW_KEY_SPACE) movement.jumpDown = true;
-		else if (key == GLFW_KEY_LEFT_CONTROL) movement.crouchDown = true;
-	}
-	else if (action == GLFW_RELEASE)
-	{
-		if (key == GLFW_KEY_W) movement.forward = false;
-		else if (key == GLFW_KEY_A) movement.left = false;
-		else if (key == GLFW_KEY_S) movement.back = false;
-		else if (key == GLFW_KEY_D) movement.right = false;
-		else if (key == GLFW_KEY_LEFT_SHIFT) movement.sprintDown = false;
-		else if (key == GLFW_KEY_SPACE) movement.jumpDown = false;
-		else if (key == GLFW_KEY_LEFT_CONTROL) movement.crouchDown = false;
-	}
-}
 
 
 
@@ -66,6 +50,7 @@ static void UpdateFPSFromKey(FPSUserInput& movement, int key, int action, int mo
 
 void DefaultFPSController::Update(float dt)
 {
+	GenerateFPSUserInputFromKeys(movement);
 	glm::vec3 curVel = (controller->GetVelocity() - glm::vec3(0.0f, 9.81f, 0.0f) * 0.5f);
 	curVel.x = 0.0f; curVel.z = 0.0f;
 	UpdateFPSUserInput(movement, forwardDir, rightDir, &yaw, &pitch);
@@ -79,18 +64,6 @@ void DefaultFPSController::SetCamera(PerspectiveCamera* cam, float camOffsetY)
 {
 	cam->base.pos = controller->GetPos() + glm::vec3(0.0f, camOffsetY, 0.0f);
 	CA_UpdatePerspectiveCamera(cam, forwardDir);
-}
-void DefaultFPSController::HandleMouseButton(int button, int action, int mods)
-{
-	if (button == GLFW_MOUSE_BUTTON_LEFT)
-	{
-		if (action == GLFW_PRESS) movement.actionDown = true;
-		else if (action == GLFW_RELEASE) movement.actionDown = false;
-	}
-}
-void DefaultFPSController::HandleKey(int key, int scancode, int action, int mods)
-{
-	UpdateFPSFromKey(movement, key, action, mods);
 }
 void DefaultFPSController::HandleMouseMovement(int dx, int dy)
 {
@@ -108,8 +81,11 @@ void DefaultFPSController::HandleMouseMovement(int dx, int dy)
 
 void FreecamFPSController::Update(float dt)
 {
+	GenerateFPSUserInputFromKeys(movement);
 	UpdateFPSUserInput(movement, forwardDir, rightDir, &yaw, &pitch);
 	glm::vec3 vel = GenerateVelocityFromFPSUserInput(movement, forwardDir, rightDir, velocity, sprintModifier);
+	if (movement.jumpDown) vel.y = velocity;
+	if (movement.crouchDown) vel.y -= velocity;
 	pos += vel * dt;
 }
 void FreecamFPSController::SetCamera(struct PerspectiveCamera* cam)
@@ -117,18 +93,6 @@ void FreecamFPSController::SetCamera(struct PerspectiveCamera* cam)
 	cam->base.pos = pos;
 	CA_UpdatePerspectiveCamera(cam, forwardDir);
 	
-}
-void FreecamFPSController::HandleMouseButton(int button, int action, int mods)
-{
-	if (button == GLFW_MOUSE_BUTTON_LEFT)
-	{
-		if (action == GLFW_PRESS) movement.actionDown = true;
-		else if (action == GLFW_RELEASE) movement.actionDown = false;
-	}
-}
-void FreecamFPSController::HandleKey(int key, int scancode, int action, int mods)
-{
-	UpdateFPSFromKey(movement, key, action, mods);
 }
 void FreecamFPSController::HandleMouseMovement(int dx, int dy)
 {

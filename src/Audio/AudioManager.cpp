@@ -1,9 +1,11 @@
 #include "AudioManager.h"
+#include "WavFile.h"
 #include "NFDriver/NFDriver.h"
 #include <atomic>
 #undef min
 #undef max
 
+#define NUM_AUDIO_FILES_IN_LIST sizeof(uintptr_t) * 8
 using namespace nativeformat;
 using namespace driver;
 
@@ -18,10 +20,75 @@ struct AudioPlaybackContext
 	bool inUse = false;
 };
 
+struct AudioFileList
+{
+	AudioFileList* next;
+	uintptr_t fillMask;
+	WavFile files[NUM_AUDIO_FILES_IN_LIST];
+};
+
+static WavFile* AllocWavFile(AudioFileList* list)
+{
+	for (uint64_t i = 0; i < NUM_AUDIO_FILES_IN_LIST; i++)
+	{
+		uint64_t cur = 1LL << i;
+		if (!(cur & list->fillMask))
+		{
+			list->fillMask |= cur;
+			memset(&list->files[i], 0, sizeof(WavFile));
+			return &list->files[i];
+		}
+	}
+	if (list->next)
+	{
+		return AllocWavFile(list);
+	}
+	list->next = new AudioFileList;
+	memset(list->next, 0, sizeof(AudioFileList));
+	list->next->fillMask = 1;
+	return &list->next->files[0];
+}
+static void DeallocWavFile(AudioFileList* list, WavFile* file)
+{
+	const size_t idx = (file - &list->files[0]) / sizeof(WavFile);
+	if (idx < NUM_AUDIO_FILES_IN_LIST)
+	{
+		if (list->fillMask & (1LL << idx))
+		{
+			list->fillMask &= ~(1LL << idx);
+			list->files[idx].~WavFile();
+			memset(&list->files[idx], 0, sizeof(WavFile));
+		}
+	}
+	else if(list->next)
+	{
+		DeallocWavFile(list->next, file);
+	}
+}
+static void CleanUpAllInList(AudioFileList* list)
+{
+	AudioFileList* child = list->next;
+	while (child)
+	{
+		AudioFileList* cur = child;
+		child = child->next;
+		delete cur;
+	}
+	for (size_t i = 0; i < NUM_AUDIO_FILES_IN_LIST; i++)
+	{
+		if (list->fillMask & (1LL << i))
+		{
+			list->files[i].~WavFile();
+		}
+	}
+	memset(list, 0, sizeof(AudioFileList));
+}
+
+
 struct AudioManager
 {
 	NFDriver* nfdriver = nullptr;
-	std::vector<WavFile> stored;
+	AudioFileList stored;
 	AudioPlaybackContext active[NUM_CONCURRENT_AUDIO_STREAMS];
 	std::atomic<int> currentNumPlaying = 0;
 };
@@ -107,7 +174,7 @@ struct AudioManager* AU_CreateAudioManager()
 
 	out->nfdriver = driver;
 	out->currentNumPlaying = 0;
-	out->stored.resize(NUM_AVAILABLE_AUDIO_FILES);
+	memset(&out->stored, 0, sizeof(AudioFileList));
 
 	out->nfdriver->setPlaying(true);
 }
@@ -115,15 +182,32 @@ void AU_ShutdownAudioManager(struct AudioManager* manager)
 {
 	manager->nfdriver->setPlaying(false);
 	manager->currentNumPlaying = 0;
+	CleanUpAllInList(&manager->stored);
 	delete manager->nfdriver;
 	manager->nfdriver = nullptr;
 	delete manager;
 	manager = nullptr;
 }
 
-AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, uint32_t audioFileIdx, float volume)
+struct WavFile* AU_LoadFile(struct AudioManager* manager, const char* file)
 {
-	if (audioFileIdx >= NUM_AVAILABLE_AUDIO_FILES) return nullptr;
+	WavFile* out = AllocWavFile(&manager->stored);
+	if (!out->Load(file))
+	{
+		DeallocWavFile(&manager->stored, out);
+		return nullptr;
+	}
+	return out;
+}
+void AU_FreeFile(struct AudioManager* manager, struct WavFile* file)
+{
+	DeallocWavFile(&manager->stored, file);
+}
+
+
+AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, WavFile* file, float volume)
+{
+	if (!file) return nullptr;
 
 	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
 
@@ -133,7 +217,7 @@ AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, uint32_t audioF
 		AudioPlaybackContext* cur = &manager->active[i];
 		if (!cur->inUse)
 		{
-			cur->file = &manager->stored.at(audioFileIdx);
+			cur->file = file;
 			cur->remaining = cur->file->GetNumSamples();
 			cur->index = 0;
 			cur->volume = volume;
@@ -146,9 +230,9 @@ AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, uint32_t audioF
 	manager->currentNumPlaying += 1;
 	return result;
 }
-struct AudioPlaybackContext* AU_PlayAudioOnRepeat(struct AudioManager* manager, uint32_t audioFileIdx, float volume)
+struct AudioPlaybackContext* AU_PlayAudioOnRepeat(struct AudioManager* manager, WavFile* file, float volume)
 {
-	if (audioFileIdx >= NUM_AVAILABLE_AUDIO_FILES) return nullptr;
+	if (!file) return nullptr;
 	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
 
 	AudioPlaybackContext* result = nullptr;
@@ -157,7 +241,7 @@ struct AudioPlaybackContext* AU_PlayAudioOnRepeat(struct AudioManager* manager, 
 		AudioPlaybackContext* cur = &manager->active[i];
 		if (!cur->inUse)
 		{
-			cur->file = &manager->stored.at(audioFileIdx);
+			cur->file = file;
 			cur->remaining = cur->file->GetNumSamples();
 			cur->index = 0;
 			cur->volume = volume;

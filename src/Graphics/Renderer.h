@@ -215,7 +215,7 @@ void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* lig
 
 
 
-// Creates the prefiltered-/irradiance-Map from the environmentMap or cleanes those to up
+// Creates the prefiltered-/irradiance-Map from the environmentMap or cleanes those two up
 void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env);
 void RE_CleanUpEnvironment(EnvironmentData* env);
 

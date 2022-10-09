@@ -3,12 +3,10 @@
 
 struct FPSUserInput
 {
-	float deltaYaw;
-	float deltaPitch;
-	bool forward = false;
-	bool back = false;
-	bool right = false;
-	bool left = false;
+	float deltaYaw = 0.0f;
+	float deltaPitch = 0.0f;
+	float forward = 0.0f;
+	float right = 0.0f;
 	bool sprintDown = false;
 	bool jumpDown = false;
 	bool actionDown = false;
@@ -21,8 +19,6 @@ struct DefaultFPSController
 	void Update(float dt);
 	void SetCamera(struct PerspectiveCamera* cam, float camOffsetY);
 
-	void HandleMouseButton(int button, int action, int mods);
-	void HandleKey(int key, int scancode, int action, int mods);
 	void HandleMouseMovement(int dx, int dy);
 
 	PhysicsController* controller;
@@ -41,8 +37,6 @@ struct FreecamFPSController
 	void Update(float dt);
 	void SetCamera(struct PerspectiveCamera* cam);
 
-	void HandleMouseButton(int button, int action, int mods);
-	void HandleKey(int key, int scancode, int action, int mods);
 	void HandleMouseMovement(int dx, int dy);
 
 	FPSUserInput movement;

@@ -102,16 +102,24 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		PhysicsMaterial* mat = PH_AddMaterial(state->physics, 1.0f, 1.0f, 1.0f);
 
 		player->sceneObject = SC_AddDynamicObject(state->scene, &obj);
+#ifndef FREE_CAM
 		player->controller.controller = PH_AddCapsuleController(state->physics, mat, pos, 10.0f, 2.0f);
+		player->sceneObject->rigidBody = player->controller.controller->GetRigidBody();
+#else
+		player->sceneObject->rigidBody = nullptr;
+#endif
 		player->controller.yaw = yaw;
 		player->controller.pitch = pitch;
-		player->sceneObject->rigidBody = player->controller.controller->GetRigidBody();
 		player->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
 		game->localPlayer = player;
 	}
 	game->localPlayer->controller.velocity = 20.0f;
 	game->localPlayer->controller.sprintModifier = 2.0f;
+#ifndef FREE_CAM
 	game->localPlayer->controller.SetCamera(&game->localPlayer->camera, 8.0f);
+#else
+	game->localPlayer->controller.SetCamera(&game->localPlayer->camera);
+#endif
 
 }
 
@@ -122,6 +130,7 @@ void GameManager::RenderCallback(GameState* state)
 	// debugLines.clear();
 	// PH_GetPhysicsVertices(game->physics, debugLines);
 	// UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
+
 
 	static float updatetimer = 0.0f;
 	UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
@@ -200,12 +209,10 @@ void GameManager::OnWindowResize(int width, int height)
 
 void GameManager::OnKey(int key, int scancode, int action, int mods)
 {
-	if (localPlayer) localPlayer->controller.HandleKey(key, scancode, action, mods);
 }
 
 void GameManager::OnMouseButton(int button, int action, int mods)
 {
-	if (localPlayer) localPlayer->controller.HandleMouseButton(button, action, mods);
 }
 
 void GameManager::OnMousePositionChanged(float x, float y, float dx, float dy)

@@ -27,7 +27,7 @@ set(ENGINE_LIBRARYS glfw assimp::assimp ${GLAD_LIBRARIES} NFDriver ${PHYSX_LIBRA
 
 
 
-add_executable(RacingGame "Example/main.cpp" ${ENGINE_FILES} "Example/GameManager.cpp" "Example/Entitys.cpp")
+add_executable(RacingGame "example/main.cpp" ${ENGINE_FILES} "example/GameManager.cpp" "example/Entitys.cpp")
 
 
 

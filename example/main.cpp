@@ -15,6 +15,8 @@ int main()
 	game->manager =  manager;
 	GM_AddPlayerToScene(manager, { 0.0f, 12.0f, 0.0f }, 90.0f, 0.0f);
 
+	SetConsumeMouse(true);
+
 	manager->sponzaModel = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONCAVE);
 	manager->sponzaModel->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.125f, 0.125f, 0.125f));
 	manager->foxModel= AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Fox/glTF-Binary/Fox.glb", MODEL_LOAD_CONVEX);
@@ -41,7 +43,7 @@ int main()
 
 	base.rigidBody = nullptr;
 	base.model = &manager->debugModel;
-	SC_AddStaticObject(game->scene, &base);
+	//SC_AddStaticObject(game->scene, &base);
 
 
 	// TEST ANIM INSTANCE DATA

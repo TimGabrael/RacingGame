@@ -20,7 +20,6 @@ struct AssetManager
 {
 	std::vector<struct Model*> models;
 	std::unordered_map<std::string, struct Texture*> textures;
-	std::vector<struct AudioFile*> audioSamples;
 };
 
 AssetManager* AM_CreateAssetManager();
@@ -32,7 +31,6 @@ void AM_CleanUpAssetManager(AssetManager* assets);
 struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags);
 struct Texture* AM_AddTexture(AssetManager* m, const char* file);
 struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const char* top, const char* bottom, const char* left, const char* right, const char* front, const char* back);
-struct AudioFile* AM_AddAudioSample(AssetManager* m, const char* file);
 
 
 
