@@ -108,6 +108,7 @@ struct AudioManager* AU_CreateAudioManager()
 	out->nfdriver = driver;
 	out->currentNumPlaying = 0;
 	out->stored.resize(NUM_AVAILABLE_AUDIO_FILES);
+
 	out->nfdriver->setPlaying(true);
 }
 void AU_ShutdownAudioManager(struct AudioManager* manager)
@@ -120,9 +121,9 @@ void AU_ShutdownAudioManager(struct AudioManager* manager)
 	manager = nullptr;
 }
 
-AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, AUDIO_FILE audio, float volume)
+AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, uint32_t audioFileIdx, float volume)
 {
-	if (audio >= NUM_AVAILABLE_AUDIO_FILES && audio < 0) return nullptr;
+	if (audioFileIdx >= NUM_AVAILABLE_AUDIO_FILES) return nullptr;
 
 	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
 
@@ -132,7 +133,7 @@ AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, AUDIO_FILE audi
 		AudioPlaybackContext* cur = &manager->active[i];
 		if (!cur->inUse)
 		{
-			cur->file = &manager->stored.at(audio);
+			cur->file = &manager->stored.at(audioFileIdx);
 			cur->remaining = cur->file->GetNumSamples();
 			cur->index = 0;
 			cur->volume = volume;
@@ -145,9 +146,9 @@ AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, AUDIO_FILE audi
 	manager->currentNumPlaying += 1;
 	return result;
 }
-struct AudioPlaybackContext* AU_PlayAudioOnRepeat(struct AudioManager* manager, AUDIO_FILE audio, float volume)
+struct AudioPlaybackContext* AU_PlayAudioOnRepeat(struct AudioManager* manager, uint32_t audioFileIdx, float volume)
 {
-	if (audio >= NUM_AVAILABLE_AUDIO_FILES && audio < 0) return nullptr;
+	if (audioFileIdx >= NUM_AVAILABLE_AUDIO_FILES) return nullptr;
 	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
 
 	AudioPlaybackContext* result = nullptr;
@@ -156,7 +157,7 @@ struct AudioPlaybackContext* AU_PlayAudioOnRepeat(struct AudioManager* manager, 
 		AudioPlaybackContext* cur = &manager->active[i];
 		if (!cur->inUse)
 		{
-			cur->file = &manager->stored.at(audio);
+			cur->file = &manager->stored.at(audioFileIdx);
 			cur->remaining = cur->file->GetNumSamples();
 			cur->index = 0;
 			cur->volume = volume;

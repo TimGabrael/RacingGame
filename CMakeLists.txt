@@ -21,13 +21,13 @@ set(PHYSX_LIBRARIES
 
 
 set(ENGINE_FILES "src/Graphics/Renderer.h" "src/Graphics/Renderer.cpp"   "src/Util/Math.h" "src/Util/Assets.h" "src/Graphics/Scene.h" "src/Graphics/Scene.cpp" "src/GameState.h" "src/Util/Assets.cpp" "src/Graphics/ModelInfo.h" "src/Graphics/ModelInfo.cpp" "src/Util/Utility.h" "src/Graphics/GLIncludes.h" "src/GameState.cpp" "src/Graphics/Camera.h" "src/Graphics/Camera.cpp" "src/Physics/Physics.h" "src/Physics/Physics.cpp" "src/Audio/WavFile.cpp" "src/Audio/AudioManager.cpp" "src/Physics/Controller.h" "src/Physics/Controller.cpp")
-set(ENGINE_INCLUDES D:/SDKs/PhysX-4.0.0/physx/include ${ZLIB_INCLUDE_DIR} 3rd-party/assimp/include 3rd-party/glfw/include 3rd-party/glm 3rd-party/NFDriver/include 3rd-party/rectpack2D/src)
+set(ENGINE_INCLUDES D:/SDKs/PhysX-4.0.0/physx/include ${ZLIB_INCLUDE_DIR} 3rd-party/assimp/include 3rd-party/glfw/include 3rd-party/glm 3rd-party/NFDriver/include 3rd-party/rectpack2D/src src/)
 set(ENGINE_LIBRARYS glfw assimp::assimp ${GLAD_LIBRARIES} NFDriver ${PHYSX_LIBRARIES} zlibstatic Xinput)
 
 
 
 
-add_executable(RacingGame "src/main.cpp" ${ENGINE_FILES} "src/Game/GameManager.cpp" "src/Game/Entitys.cpp")
+add_executable(RacingGame "Example/main.cpp" ${ENGINE_FILES} "Example/GameManager.cpp" "Example/Entitys.cpp")
 
 
 

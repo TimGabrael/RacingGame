@@ -1,13 +1,8 @@
 #pragma once
-#include "../Graphics/Camera.h"
-#include "../Physics/Controller.h"
+#include "Graphics/Camera.h"
+#include "Physics/Controller.h"
+#include "Graphics/Scene.h"
 
-
-struct Entity
-{
-	virtual ~Entity() = default;
-	virtual void Update(float dt) = 0;
-};
 
 struct Player : public Entity
 {

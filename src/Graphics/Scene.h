@@ -9,6 +9,13 @@ enum SCENE_OBJECT_FLAG
 	SCENE_OBJECT_FLAG_VISIBLE = 2,
 };
 
+struct Entity
+{
+	virtual ~Entity() = default;
+	virtual void Update(float dt) = 0;
+};
+
+
 struct SceneObject
 {
 	struct Model* model;

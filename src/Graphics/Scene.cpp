@@ -1,5 +1,4 @@
 #include "Scene.h"
-#include "../Game/Entitys.h"
 
 #define NUM_OBJECTS_IN_LIST sizeof(uintptr_t) * 8
 

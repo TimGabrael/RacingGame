@@ -1,8 +1,8 @@
 #include "GameManager.h"
-#include "../GameState.h"
-#include "../Graphics/ModelInfo.h"
-#include "../Graphics/Scene.h"
-#include "../Physics/Physics.h"
+#include "GameState.h"
+#include "Graphics/ModelInfo.h"
+#include "Graphics/Scene.h"
+#include "Physics/Physics.h"
 
 GameManager* GM_CreateGameManager(GameState* state)
 {
@@ -114,22 +114,98 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 }
 
 
-void GM_Update(GameManager* game, float dt)
+static std::vector<Vertex3D> debugLines;
+void GameManager::RenderCallback(GameState* state)
 {
-	RELI_Update(game->defaultLightGroup, &game->localPlayer->camera.base);
+	// debugLines.clear();
+	// PH_GetPhysicsVertices(game->physics, debugLines);
+	// UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
 
+	static float updatetimer = 0.0f;
+	UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
+	updatetimer += 1.0f / 60.0f;
+	if (updatetimer > 5.0f) updatetimer = 0.0f;
+
+	if (localPlayer)
+	{
+		uint32_t numSceneObjects = 0;
+		SceneObject** objs = SC_GetAllSceneObjects(state->scene, &numSceneObjects);
+
+		RE_BeginScene(state->renderer, objs, numSceneObjects);
+		RE_SetCameraBase(state->renderer, &localPlayer->camera.base);
+		RE_SetEnvironmentData(state->renderer, &env);
+		RE_SetLightData(state->renderer, defaultLightGroup);
+
+
+		RE_RenderShadows(state->renderer);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, AAbuffer.fbo);
+		glClearColor(0.2f, 0.2f, 0.6f, 1.0f);
+		glClearDepthf(1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glViewport(0, 0, AAbuffer.width, AAbuffer.height);
+
+		RE_RenderGeometry(state->renderer);
+
+		RE_RenderCubeMap(state->renderer, env.environmentMap);
+
+		RE_RenderOpaque(state->renderer);
+	}
+
+
+	RE_FinishAntialiasingData(&AAbuffer);
+
+	// RENDER SSR WITH BLOOM
+	//RE_RenderScreenSpaceReflection(state->renderer, &SSRbuffer, AAbuffer.intermediateTexture,
+	//	PPbuffer.intermediateFbo, PPbuffer.width, PPbuffer.height);
+	//RE_RenderPostProcessingBloom(state->renderer, &PPbuffer,
+	//	PPbuffer.intermediateTexture, PPbuffer.width, PPbuffer.height,
+	//	0, state->winWidth, state->winHeight);
+
+	// RENDER SSR
+	//RE_RenderScreenSpaceReflection(state->renderer, &SSRbuffer, AAbuffer.intermediateTexture, 0, state->winWidth, state->winHeight);
+
+	// RENDER BLOOM
+	RE_RenderPostProcessingBloom(state->renderer, &PPbuffer,
+		AAbuffer.intermediateTexture, AAbuffer.width, AAbuffer.height,
+		0, state->winWidth, state->winHeight);
 }
-void GM_OnResizeCallback(GameManager* game, int width, int height)
+
+void GameManager::Update(float dt)
+{
+	RELI_Update(defaultLightGroup, &localPlayer->camera.base);
+}
+
+void GameManager::OnWindowPositionChanged(int x, int y)
+{
+}
+
+void GameManager::OnWindowResize(int width, int height)
 {
 	if (width > 0 && height > 0)
 	{
-		uint32_t prevSamples = game->AAbuffer.msaaCount;
-		RE_CleanUpAntialiasingData(&game->AAbuffer);
-		RE_CleanUpPostProcessingRenderData(&game->PPbuffer);
-		RE_CleanUpScreenSpaceReflectionRenderData(&game->SSRbuffer);
+		uint32_t prevSamples = AAbuffer.msaaCount;
+		RE_CleanUpAntialiasingData(&AAbuffer);
+		RE_CleanUpPostProcessingRenderData(&PPbuffer);
+		RE_CleanUpScreenSpaceReflectionRenderData(&SSRbuffer);
 
-		RE_CreateAntialiasingData(&game->AAbuffer, width, height, prevSamples);
-		RE_CreatePostProcessingRenderData(&game->PPbuffer, width, height);
-		RE_CreateScreenSpaceReflectionRenderData(&game->SSRbuffer, width, height);
+		RE_CreateAntialiasingData(&AAbuffer, width, height, prevSamples);
+		RE_CreatePostProcessingRenderData(&PPbuffer, width, height);
+		RE_CreateScreenSpaceReflectionRenderData(&SSRbuffer, width, height);
 	}
+}
+
+void GameManager::OnKey(int key, int scancode, int action, int mods)
+{
+	if (localPlayer) localPlayer->controller.HandleKey(key, scancode, action, mods);
+}
+
+void GameManager::OnMouseButton(int button, int action, int mods)
+{
+	if (localPlayer) localPlayer->controller.HandleMouseButton(button, action, mods);
+}
+
+void GameManager::OnMousePositionChanged(float x, float y, float dx, float dy)
+{
+	if (localPlayer) localPlayer->controller.HandleMouseMovement(dx, dy);
 }
