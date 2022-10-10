@@ -127,15 +127,15 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 static std::vector<Vertex3D> debugLines;
 void GameManager::RenderCallback(GameState* state)
 {
-	// debugLines.clear();
-	// PH_GetPhysicsVertices(game->physics, debugLines);
-	// UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
+	//debugLines.clear();
+	//PH_GetPhysicsVertices(state->physics, debugLines);
+	//UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
 
 
-	static float updatetimer = 0.0f;
-	UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
-	updatetimer += 1.0f / 60.0f;
-	if (updatetimer > 5.0f) updatetimer = 0.0f;
+	//static float updatetimer = 0.0f;
+	//UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
+	//updatetimer += 1.0f / 60.0f;
+	//if (updatetimer > 5.0f) updatetimer = 0.0f;
 
 	if (localPlayer)
 	{
@@ -147,7 +147,6 @@ void GameManager::RenderCallback(GameState* state)
 		RE_SetEnvironmentData(state->renderer, &env);
 		RE_SetLightData(state->renderer, defaultLightGroup);
 
-
 		RE_RenderShadows(state->renderer);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, AAbuffer.fbo);
@@ -157,9 +156,9 @@ void GameManager::RenderCallback(GameState* state)
 		glViewport(0, 0, AAbuffer.width, AAbuffer.height);
 
 		RE_RenderGeometry(state->renderer);
-
+		
 		RE_RenderCubeMap(state->renderer, env.environmentMap);
-
+		
 		RE_RenderOpaque(state->renderer);
 		RE_RenderTransparent(state->renderer);
 	}

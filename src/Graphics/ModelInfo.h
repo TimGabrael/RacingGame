@@ -1,11 +1,11 @@
 #pragma once
 #include "GLIncludes.h"
 
-enum MESH_FLAG
+enum PRIMITIVE_FLAG
 {
-	MESH_FLAG_LINE = 1,
-	MESH_FLAG_NO_INDEX_BUFFER = (1 << 1),
-	MESH_FLAG_UNSUPPORTED = (1 << 2),
+	PRIMITIVE_FLAG_LINE = 1,
+	PRIMITIVE_FLAG_NO_INDEX_BUFFER = (1 << 1),
+	PRIMITIVE_FLAG_UNSUPPORTED = (1 << 2),
 };
 
 struct AnimationTransformation
@@ -60,8 +60,8 @@ struct Joint
 {
 	Joint* parent;
 	Joint** children;
-	struct Model* model;
 	struct Mesh* mesh;
+	struct Model* model;
 	struct Skin* skin;
 	int32_t skinIndex = -1;
 	uint32_t numChildren;
@@ -125,14 +125,18 @@ struct Material
 
 	GLuint uniform;
 };
-
-struct Mesh
+struct Primitive
 {
+	struct Material* material;
 	uint32_t startIdx;
 	uint32_t numInd;
 	uint32_t flags;
-	uint32_t skinIdx;
-	struct Material* material;
+	AABB bound;
+};
+struct Mesh
+{
+	Primitive* primitives;
+	uint32_t numPrimitives;
 	AABB bound;
 };
 struct Model

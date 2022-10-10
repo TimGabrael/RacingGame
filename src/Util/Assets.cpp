@@ -154,9 +154,10 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					LOG("WARNING MODEL HAS UNSUPPORTED MESH\n");
 					LOG("p.mode: / p.indices: %d %d\n", p.mode, p.indices);
 				}
-				model->numMeshes++;
+				
 			}
 		}
+		model->numMeshes = gltfModel.meshes.size();
 		model->numAnimations = gltfModel.animations.size();
 		model->numTextures = gltfModel.textures.size(); 
 		model->numMaterials = gltfModel.materials.size();
@@ -191,12 +192,20 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			int curMeshIdx = 0;
 			for (auto& m : gltfModel.meshes)
 			{
+				int curPrimIdx = 0;
+				Mesh& myMesh = model->meshes[curMeshIdx];
+				myMesh.numPrimitives = m.primitives.size();
+				myMesh.primitives = new Primitive[myMesh.numPrimitives];
+				memset(myMesh.primitives, 0, sizeof(Primitive) * myMesh.numPrimitives);
+				myMesh.bound = { glm::vec3(FLT_MAX), glm::vec3(-FLT_MAX) };
+
 				for (auto& primitive : m.primitives)
 				{
+					Primitive& myPrim = myMesh.primitives[curPrimIdx];
 					if (primitive.mode == TINYGLTF_MODE_TRIANGLES || primitive.mode == TINYGLTF_MODE_LINE)
 					{
-						if (primitive.mode == TINYGLTF_MODE_LINE) model->meshes[curMeshIdx].flags |= MESH_FLAG_LINE;
-						if (primitive.indices <= -1) model->meshes[curMeshIdx].flags |= MESH_FLAG_NO_INDEX_BUFFER;
+						if (primitive.mode == TINYGLTF_MODE_LINE) myPrim.flags |= PRIMITIVE_FLAG_LINE;
+						if (primitive.indices <= -1) myPrim.flags |= PRIMITIVE_FLAG_NO_INDEX_BUFFER;
 
 						const uint32_t vertexStart = curVertPos;
 						{
@@ -217,19 +226,22 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 
 							int jointComponentType;
 
-							if (primitive.material < gltfModel.materials.size() && primitive.material >= 0)
-							{
-								model->meshes[curMeshIdx].material = &model->materials[primitive.material];
-							}
-
 							const tinygltf::Accessor& posAccessor = gltfModel.accessors[primitive.attributes.find("POSITION")->second];
 							const tinygltf::BufferView& posView = gltfModel.bufferViews[posAccessor.bufferView];
 							bufferPos = reinterpret_cast<const float*>(&(gltfModel.buffers[posView.buffer].data[posAccessor.byteOffset + posView.byteOffset]));
 							posByteStride = posAccessor.ByteStride(posView) ? (posAccessor.ByteStride(posView) / sizeof(float)) : tinygltf::GetNumComponentsInType(TINYGLTF_TYPE_VEC3);
 
-							model->meshes[curMeshIdx].bound.min = glm::vec3(posAccessor.minValues[0], posAccessor.minValues[1], posAccessor.minValues[2]);
-							model->meshes[curMeshIdx].bound.max = glm::vec3(posAccessor.maxValues[0], posAccessor.maxValues[1], posAccessor.maxValues[2]);
+							myPrim.bound.min = glm::vec3(posAccessor.minValues[0], posAccessor.minValues[1], posAccessor.minValues[2]);
+							myPrim.bound.max = glm::vec3(posAccessor.maxValues[0], posAccessor.maxValues[1], posAccessor.maxValues[2]);
 
+							myMesh.bound.min = glm::min(myMesh.bound.min, myPrim.bound.min);
+							myMesh.bound.max = glm::max(myMesh.bound.max, myPrim.bound.max);
+
+
+							if (primitive.material > -1 && primitive.material < model->numMaterials)
+							{
+								myPrim.material = &model->materials[primitive.material];
+							}
 
 							if (primitive.attributes.find("NORMAL") != primitive.attributes.end()) {
 								const tinygltf::Accessor& normAccessor = gltfModel.accessors[primitive.attributes.find("NORMAL")->second];
@@ -305,13 +317,13 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 						}
 						if(primitive.indices > -1)
 						{
-							model->meshes[curMeshIdx].startIdx = curIndPos;
+							myPrim.startIdx = curIndPos;
 							const tinygltf::Accessor& accessor = gltfModel.accessors[primitive.indices];
 							const tinygltf::BufferView& bufferView = gltfModel.bufferViews[accessor.bufferView];
 							const tinygltf::Buffer& buffer = gltfModel.buffers[bufferView.buffer];
 							const void* dataPtr = &(buffer.data[accessor.byteOffset + bufferView.byteOffset]);
 
-							model->meshes[curMeshIdx].numInd = static_cast<uint32_t>(accessor.count);
+							myPrim.numInd = static_cast<uint32_t>(accessor.count);
 
 							switch (accessor.componentType) {
 							case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT: {
@@ -342,17 +354,18 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 						}
 						else
 						{
-							model->meshes[curMeshIdx].startIdx = vertexStart;
-							model->meshes[curMeshIdx].numInd = curVertPos - vertexStart;
+							myPrim.startIdx = vertexStart;
+							myPrim.numInd = curVertPos - vertexStart;
 						}
 					}
 					else
 					{
-						model->meshes[curMeshIdx].flags = MESH_FLAG_UNSUPPORTED;
+						myPrim.flags = PRIMITIVE_FLAG_UNSUPPORTED;
 					}
-					curMeshIdx++;
+					curPrimIdx++;
 				}
-
+				myMesh.numPrimitives = curPrimIdx;
+				curMeshIdx++;
 			}
 
 			if (flags & MODEL_LOAD_REVERSE_FACE_ORIENTATION)
@@ -591,11 +604,9 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				j.model = m;
 
 				if (node.mesh > -1) {
-					m->meshes[node.mesh].skinIdx = node.skin;
 					j.mesh = &m->meshes[node.mesh];
 				}
-				if (node.skin > -1)
-				{
+				if (node.skin > -1) {
 					j.skin = &m->skins[node.skin];
 				}
 				
@@ -835,10 +846,10 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			{
 				localNumInds += mesh->mFaces[j].mNumIndices;
 			}
-			myMesh->startIdx = numInds;
-			myMesh->numInd = localNumInds;
-
-			myMesh->material = &model->materials[mesh->mMaterialIndex];
+			// myMesh->startIdx = numInds;
+			// myMesh->numInd = localNumInds;
+			// 
+			// myMesh->material = &model->materials[mesh->mMaterialIndex];
 
 			numVerts += mesh->mNumVertices;
 			numInds += localNumInds;

@@ -1582,13 +1582,18 @@ struct LightGroup
 	GLuint uniform;
 };
 
-struct RenderObjectData
+struct RenderDrawCommand
 {
-	Joint* node;
-	glm::mat4 transform;
-	AABB bound;
-	float zDepth;
+	GLuint vao;
+	GLuint indexBuffer;
 	GLuint animUniform;
+	uint32_t startIdx;
+	uint32_t numIdx;
+	uint32_t flags;
+	float zDepth;
+	AABB bound;
+	glm::mat4 transform;
+	Material* material;
 };
 
 struct Renderer
@@ -1604,10 +1609,10 @@ struct Renderer
 	GLuint whiteTexture;	// these are not owned by the renderer
 	GLuint blackTexture;	// these are not owned by the renderer
 
-	uint32_t listCapacity;
-	uint32_t numObjs;
-	uint32_t firstTransparentObject;
-	RenderObjectData* objList;
+	uint32_t cmdlistCapacity;
+	uint32_t numCmds;
+	uint32_t firstTransparentCmd;
+	RenderDrawCommand* drawCmds;
 };
 
 
@@ -2052,10 +2057,10 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 	renderer->currentCam = nullptr;
 	renderer->currentEnvironmentData = nullptr;
 	renderer->currentLightData = 0;
-	renderer->listCapacity = 0;
-	renderer->objList = 0;
-	renderer->numObjs = 0;
-	renderer->firstTransparentObject = 0;
+	renderer->cmdlistCapacity = 0;
+	renderer->drawCmds = 0;
+	renderer->numCmds = 0;
+	renderer->firstTransparentCmd = 0;
 	// Create Material Defaults
 	{
 		BoneData boneData = {};
@@ -2190,8 +2195,8 @@ void RE_CleanUpRenderer(struct Renderer* renderer)
 		glDeleteProgram(renderer->cubemapInfo.program);
 		glDeleteProgram(renderer->cubemapInfo.irradianceFilterProgram);
 	}
-	if (renderer->objList) delete[] renderer->objList;
-	renderer->objList = nullptr;
+	if (renderer->drawCmds) delete[] renderer->drawCmds;
+	renderer->drawCmds = nullptr;
 	delete renderer;
 }
 
@@ -3216,27 +3221,31 @@ static AABB GenerateAABB(const glm::mat4& invViewProj)
 
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num)
 {
-	uint32_t numNodes = 0;
+	uint32_t numCommands = 0;
 	for (uint32_t i = 0; i < num; i++)
 	{
 		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
 		{
 			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
 			{
-				if (objList[i]->model->nodes[j]->mesh->flags & MESH_FLAG_UNSUPPORTED) continue;
-				numNodes++;
+				for (uint32_t k = 0; k < objList[i]->model->nodes[j]->mesh->numPrimitives; k++)
+				{
+					if (!(objList[i]->model->nodes[j]->mesh->primitives[k].flags & PRIMITIVE_FLAG_UNSUPPORTED))
+					{
+						numCommands++;
+					}
+				}
 			}
 		}
 	}
-	if (renderer->listCapacity <= numNodes)
+	if (renderer->cmdlistCapacity <= numCommands)
 	{
-		renderer->listCapacity = numNodes + 100;
-		if (renderer->objList) delete[] renderer->objList;
-		renderer->objList = new RenderObjectData[renderer->listCapacity];
+		renderer->cmdlistCapacity = numCommands + 100;
+		if (renderer->drawCmds) delete[] renderer->drawCmds;
+		renderer->drawCmds = new RenderDrawCommand[renderer->cmdlistCapacity];
 	}
-
-	renderer->numObjs = numNodes;
-	renderer->firstTransparentObject = 0;
+	renderer->numCmds = numCommands;
+	renderer->firstTransparentCmd = 0;
 	// FILL OPAQUE OBJECTS
 	for (uint32_t i = 0; i < num; i++)
 	{
@@ -3244,55 +3253,68 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 		{
 			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
 			{
-				if (objList[i]->model->nodes[j]->mesh->flags & MESH_FLAG_UNSUPPORTED) continue;
-
-				if (!(objList[i]->model->nodes[j]->mesh->material && objList[i]->model->nodes[j]->mesh->material->mode == Material::ALPHA_MODE_BLEND))
+				Joint* curNode = objList[i]->model->nodes[j];
+				for (uint32_t k = 0; k < curNode->mesh->numPrimitives; k++)
 				{
-					RenderObjectData& d = renderer->objList[renderer->firstTransparentObject];
-					d.node = objList[i]->model->nodes[j];
-					d.transform = objList[i]->model->baseTransform;
-					d.animUniform = renderer->pbrData.defaultBoneData;
-					if (objList[i]->model->animations && objList[i]->anim)
+					RenderDrawCommand& cmd = renderer->drawCmds[renderer->firstTransparentCmd];
+
+					Primitive* prim = &curNode->mesh->primitives[k];
+					if (prim->flags & PRIMITIVE_FLAG_UNSUPPORTED) continue;
+
+					if (!(prim->material && prim->material->mode == Material::ALPHA_MODE_BLEND))
 					{
-						if (objList[i]->model->joints->mesh->skinIdx < objList[i]->anim->numSkins)
+						cmd.vao = curNode->model->vao;
+						cmd.indexBuffer = curNode->model->indexBuffer;
+						cmd.flags = prim->flags;
+						cmd.material = prim->material;
+						cmd.numIdx = prim->numInd;
+						cmd.startIdx = prim->startIdx;
+
+						if (objList[i]->model->animations && objList[i]->anim)
 						{
-							d.transform = d.transform * objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].baseTransform;
-							d.animUniform = objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].skinUniform;
+							if (curNode->skinIndex < objList[i]->anim->numSkins)
+							{
+								cmd.transform = objList[i]->transform * objList[i]->model->baseTransform * objList[i]->anim->data[curNode->skinIndex].baseTransform;
+								cmd.animUniform = objList[i]->anim->data[curNode->skinIndex].skinUniform;
+							}
 						}
+						else
+						{
+							cmd.transform = objList[i]->transform *objList[i]->model->baseTransform * curNode->defMatrix;
+						}
+
+
+						glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
+						glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
+						glm::vec4 positions[8] = {
+							cmd.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
+							cmd.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
+						};
+						min = glm::vec3(FLT_MAX);
+						max = glm::vec3(-FLT_MAX);
+						for (int posIdx = 0; posIdx < 8; posIdx++)
+						{
+							positions[posIdx] /= positions[posIdx].w;
+							min = glm::min(min, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
+							max = glm::max(max, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
+						}
+						cmd.bound = { min, max };
+						renderer->firstTransparentCmd++;
 					}
-					else
-					{
-						d.transform = d.transform * objList[i]->model->nodes[j]->defMatrix;
-					}
-					glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
-					glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
-					glm::vec4 positions[8] = {
-						d.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
-						d.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
-						d.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
-						d.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
-						d.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
-						d.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
-						d.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
-						d.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
-					};
-					min = glm::vec3(FLT_MAX);
-					max = glm::vec3(-FLT_MAX);
-					for (int posIdx = 0; posIdx < 8; posIdx++)
-					{
-						positions[posIdx] /= positions[posIdx].w;
-						min = glm::min(min, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
-						max = glm::max(max, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
-					}
-					d.bound = { min, max };
-					renderer->firstTransparentObject++;
+
 				}
+
 			}
 		}
 	}
 
-
-	uint32_t curOffset = renderer->firstTransparentObject;
+	uint32_t curOffset = renderer->firstTransparentCmd;
 	// FILL TRANSPARENT OBJECTS
 	for (uint32_t i = 0; i < num; i++)
 	{
@@ -3300,53 +3322,67 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 		{
 			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
 			{
-				if (objList[i]->model->nodes[j]->mesh->flags & MESH_FLAG_UNSUPPORTED) continue;
-
-				if (objList[i]->model->nodes[j]->mesh->material && objList[i]->model->nodes[j]->mesh->material->mode == Material::ALPHA_MODE_BLEND)
+				Joint* curNode = objList[i]->model->nodes[j];
+				for (uint32_t k = 0; k < curNode->mesh->numPrimitives; k++)
 				{
-					RenderObjectData& d = renderer->objList[curOffset];
-					d.node = objList[i]->model->nodes[j];
-					d.transform = objList[i]->model->baseTransform;
-					d.animUniform = renderer->pbrData.defaultBoneData;
-					if (objList[i]->model->animations && objList[i]->anim)
+					RenderDrawCommand& cmd = renderer->drawCmds[curOffset];
+
+					Primitive* prim = &curNode->mesh->primitives[k];
+					if (prim->flags & PRIMITIVE_FLAG_UNSUPPORTED) continue;
+
+
+					if (prim->material && prim->material->mode == Material::ALPHA_MODE_BLEND)
 					{
-						if (objList[i]->model->joints->mesh->skinIdx < objList[i]->anim->numSkins)
+						cmd.vao = curNode->model->vao;
+						cmd.indexBuffer = curNode->model->indexBuffer;
+						cmd.flags = prim->flags;
+						cmd.material = prim->material;
+						cmd.numIdx = prim->numInd;
+						cmd.startIdx = prim->startIdx;
+
+						if (objList[i]->model->animations && objList[i]->anim)
 						{
-							d.transform = d.transform * objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].baseTransform;
-							d.animUniform = objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].skinUniform;
+							if (curNode->skinIndex < objList[i]->anim->numSkins)
+							{
+								cmd.transform = objList[i]->model->baseTransform * objList[i]->anim->data[curNode->skinIndex].baseTransform;
+								cmd.animUniform = objList[i]->anim->data[curNode->skinIndex].skinUniform;
+							}
 						}
+						else
+						{
+							cmd.transform = objList[i]->model->baseTransform * curNode->defMatrix;
+						}
+
+
+						glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
+						glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
+						glm::vec4 positions[8] = {
+							cmd.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
+							cmd.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
+							cmd.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
+							cmd.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
+						};
+						min = glm::vec3(FLT_MAX);
+						max = glm::vec3(-FLT_MAX);
+						for (int posIdx = 0; posIdx < 8; posIdx++)
+						{
+							positions[posIdx] /= positions[posIdx].w;
+							min = glm::min(min, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
+							max = glm::max(max, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
+						}
+						cmd.bound = { min, max };
+						curOffset++;
 					}
-					else
-					{
-						d.transform = d.transform * objList[i]->model->nodes[j]->defMatrix;
-					}
-					glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
-					glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
-					glm::vec4 positions[8] = {
-						d.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
-						d.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
-						d.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
-						d.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
-						d.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
-						d.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
-						d.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
-						d.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
-					};
-					min = glm::vec3(FLT_MAX);
-					max = glm::vec3(-FLT_MAX);
-					for (int posIdx = 0; posIdx < 8; posIdx++)
-					{
-						positions[posIdx] /= positions[posIdx].w;
-						min = glm::min(min, glm::vec3(positions[posIdx]));
-						max = glm::max(max, glm::vec3(positions[posIdx]));
-					}
-					d.bound = { min, max };
-					curOffset++;
+
 				}
+
 			}
 		}
 	}
-
 }
 
 void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBase)
@@ -3388,28 +3424,28 @@ void RE_RenderShadows(struct Renderer* renderer)
 	}
 	static const auto stdRender = [&](const AABB& frustum)
 	{
-		for (uint32_t i = 0; i < renderer->numObjs; i++)
+		for (uint32_t i = 0; i < renderer->numCmds; i++)
 		{
-			RenderObjectData* obj = &renderer->objList[i];
+			RenderDrawCommand* obj = &renderer->drawCmds[i];
 			
 			if (AABBOverlapp(frustum, obj->bound))
 			{
 				glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
-				glBindVertexArray(obj->node->model->vao);
-				if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+				glBindVertexArray(obj->vao);
+				if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
 				
-				Mesh* m = obj->node->mesh;
+
 				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->animUniform);
-		
-				BindMaterialGeometry(renderer, m->material);
-				GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-				if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+
+				BindMaterialGeometry(renderer, obj->material);
+				GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+				if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 				{
-					glDrawArrays(renderMode, m->startIdx, m->numInd);
+					glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
 				}
 				else
 				{
-					glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+					glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
 				}
 				
 			}
@@ -3564,7 +3600,7 @@ void RE_RenderGeometry(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
-	if (renderer->numObjs == 0) return;
+	if (renderer->numCmds == 0) return;
 
 	
 	glUseProgram(renderer->pbrData.geomProgram);
@@ -3581,28 +3617,27 @@ void RE_RenderGeometry(struct Renderer* renderer)
 	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
 
-	for (uint32_t i = 0; i < renderer->firstTransparentObject; i++)
+	for (uint32_t i = 0; i < renderer->firstTransparentCmd; i++)
 	{
-		RenderObjectData* obj = &renderer->objList[i];
+		RenderDrawCommand* obj = &renderer->drawCmds[i];
 		
 		if (AABBOverlapp(frustum, obj->bound))
 		{
 			glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
-			glBindVertexArray(obj->node->model->vao);
-			if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			glBindVertexArray(obj->vao);
+			if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
 			
-			Mesh* m = obj->node->mesh;
 			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->animUniform);
 			
-			BindMaterialGeometry(renderer, m->material);
-			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+			BindMaterialGeometry(renderer, obj->material);
+			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 			{
-				glDrawArrays(renderMode, m->startIdx, m->numInd);
+				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
 			}
 			else
 			{
-				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
 			}
 			
 		}
@@ -3616,7 +3651,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
-	if (renderer->numObjs == 0) return;
+	if (renderer->numCmds == 0) return;
 	
 	glUseProgram(renderer->pbrData.baseProgram);
 	glEnable(GL_DEPTH_TEST);
@@ -3647,29 +3682,28 @@ void RE_RenderOpaque(struct Renderer* renderer)
 	
 	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
-	for (uint32_t i = 0; i < renderer->firstTransparentObject; i++)
+	for (uint32_t i = 0; i < renderer->firstTransparentCmd; i++)
 	{
-		RenderObjectData* obj = &renderer->objList[i];
-		
+		RenderDrawCommand* obj = &renderer->drawCmds[i];
+
 		if (AABBOverlapp(frustum, obj->bound))
 		{
-			glBindVertexArray(obj->node->model->vao);
-			if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			glBindVertexArray(obj->vao);
+			if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
 			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
 			
-			Mesh* m = obj->node->mesh;
 
 			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->animUniform);
 			
-			BindMaterial(renderer, m->material);
-			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+			BindMaterial(renderer, obj->material);
+			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 			{
-				glDrawArrays(renderMode, m->startIdx, m->numInd);
+				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
 			}
 			else
 			{
-				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
 			}
 		}
 		
@@ -3683,16 +3717,16 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
-	if (renderer->numObjs == renderer->firstTransparentObject) return;
+	if (renderer->numCmds == renderer->firstTransparentCmd) return;
 
 	const glm::mat4 viewProj = renderer->currentCam->proj * renderer->currentCam->view;
 	const glm::mat4 invViewProj = glm::inverse(viewProj);
 	
 	// FILL OBJECTS DISTANCE FROM CAMERA
-	for (uint32_t i = renderer->firstTransparentObject; i < renderer->numObjs; i++)
+	for (uint32_t i = renderer->firstTransparentCmd; i < renderer->numCmds; i++)
 	{
-		const glm::vec3& min = renderer->objList[i].bound.min;
-		const glm::vec3& max = renderer->objList[i].bound.max;
+		const glm::vec3& min = renderer->drawCmds[i].bound.min;
+		const glm::vec3& max = renderer->drawCmds[i].bound.max;
 		glm::vec4 positions[8] = {
 			renderer->currentCam->view * glm::vec4(min.x, min.y, min.z, 1.0f),
 			renderer->currentCam->view * glm::vec4(max.x, min.y, min.z, 1.0f),
@@ -3703,16 +3737,16 @@ void RE_RenderTransparent(struct Renderer* renderer)
 			renderer->currentCam->view * glm::vec4(min.x, max.y, max.z, 1.0f),
 			renderer->currentCam->view * glm::vec4(max.x, max.y, max.z, 1.0f),
 		};
-		renderer->objList[i].zDepth = FLT_MAX;
+		renderer->drawCmds[i].zDepth = FLT_MAX;
 		for (uint32_t j = 0; j < 8; j++)
 		{
 			positions[j] /= positions[j].w;
-			renderer->objList[i].zDepth = glm::min(renderer->objList[i].zDepth, positions[j].z);
+			renderer->drawCmds[i].zDepth = glm::min(renderer->drawCmds[i].zDepth, positions[j].z);
 		}
 	}
 
 	// SORT TRANSPARENT OBJECTS
-	std::sort(&renderer->objList[renderer->firstTransparentObject], &renderer->objList[renderer->numObjs], [](RenderObjectData& d1, RenderObjectData& d2)
+	std::sort(&renderer->drawCmds[renderer->firstTransparentCmd], &renderer->drawCmds[renderer->numCmds], [](RenderDrawCommand& d1, RenderDrawCommand& d2)
 	{
 			return d2.zDepth > d1.zDepth;
 	});
@@ -3744,27 +3778,26 @@ void RE_RenderTransparent(struct Renderer* renderer)
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
 
-	for (uint32_t i = renderer->firstTransparentObject; i < renderer->numObjs; i++)
+	for (uint32_t i = renderer->firstTransparentCmd; i < renderer->numCmds; i++)
 	{
-		RenderObjectData* obj = &renderer->objList[i];
+		RenderDrawCommand* obj = &renderer->drawCmds[i];
 		
 		if (AABBOverlapp(frustum, obj->bound))
 		{
-			glBindVertexArray(obj->node->model->vao);
-			if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			glBindVertexArray(obj->vao);
+			if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
 			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->animUniform);
 			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
 
-			Mesh* m = obj->node->mesh;
-			BindMaterial(renderer, m->material);
-			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+			BindMaterial(renderer, obj->material);
+			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 			{
-				glDrawArrays(renderMode, m->startIdx, m->numInd);
+				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
 			}
 			else
 			{
-				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
 			}
 			
 		}
@@ -3775,13 +3808,14 @@ void RE_RenderTransparent(struct Renderer* renderer)
 }
 
 
-void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj)
+void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const struct Joint* optionalNode, float scale)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	if (!obj->model) return;
 
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
+	glDepthFunc(GL_LESS);
 	glDepthMask(GL_FALSE);
 
 	glUseProgram(renderer->pbrData.solidProgram);
@@ -3793,6 +3827,36 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj)
 	glBindVertexArray(obj->model->vao);
 	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 
+	glm::mat4 transform;
+	if (optionalNode)
+	{
+		for (uint32_t i = 0; i < optionalNode->mesh->numPrimitives; i++)
+		{
+			Primitive* prim = &optionalNode->mesh->primitives[i];
+			if (obj->anim && optionalNode->skinIndex < obj->anim->numSkins)
+			{
+				transform = obj->transform * obj->anim->data[optionalNode->skinIndex].baseTransform;
+				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.solidUniforms.boneDataLoc, obj->anim->data[optionalNode->skinIndex].skinUniform);
+			}
+			else
+			{
+				transform = obj->transform * optionalNode->defMatrix;
+			}
+			transform = transform * glm::scale(glm::mat4(1.0f), glm::vec3(scale));
+			glUniformMatrix4fv(renderer->pbrData.solidUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
+
+			Mesh* m = optionalNode->mesh;
+			GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
+			{
+				glDrawArrays(renderMode, prim->startIdx, prim->numInd);
+			}
+			else
+			{
+				glDrawElements(renderMode, prim->numInd, GL_UNSIGNED_INT, (void*)(prim->startIdx * sizeof(uint32_t)));
+			}
+		}
+	}
 
 }
 
@@ -3820,7 +3884,7 @@ void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 
 void RE_EndScene(struct Renderer* renderer)
 {
-	renderer->numObjs = 0;
+	renderer->numCmds = 0;
 
 	renderer->currentCam = nullptr;
 	renderer->currentEnvironmentData = nullptr;
@@ -3875,27 +3939,26 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 
 	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
-	for (uint32_t i = 0; i < renderer->numObjs; i++)
+	for (uint32_t i = 0; i < renderer->numCmds; i++)
 	{
-		RenderObjectData* obj = &renderer->objList[i];
+		RenderDrawCommand* obj = &renderer->drawCmds[i];
 		
 		if (AABBOverlapp(frustum, obj->bound))
 		{
-			glBindVertexArray(obj->node->model->vao);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			glBindVertexArray(obj->vao);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
 			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, obj->animUniform);
 			glUniformMatrix4fv(renderer->pbrData.ssrUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
 			
-			Mesh* m = obj->node->mesh;
-			BindMaterialSSR(renderer, m->material);
-			GLenum renderMode = (m->flags & MESH_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (m->flags & MESH_FLAG_NO_INDEX_BUFFER)
+			BindMaterialSSR(renderer, obj->material);
+			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 			{
-				glDrawArrays(renderMode, m->startIdx, m->numInd);
+				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
 			}
 			else
 			{
-				glDrawElements(renderMode, m->numInd, GL_UNSIGNED_INT, (void*)(m->startIdx * sizeof(uint32_t)));
+				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
 			}
 			
 		}

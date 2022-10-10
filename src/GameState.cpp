@@ -253,6 +253,7 @@ void UpateGameState()
 			PH_Update(g_gameState->physics, TIME_STEP);
 			g_gameState->manager->PostUpdate(TIME_STEP);
 			g_gameState->accumulatedTime -= TIME_STEP;
+			break;
 		}
 		
 		if (g_gameState->winWidth > 0 && g_gameState->winHeight > 0)

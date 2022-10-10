@@ -55,18 +55,28 @@ Model CreateModelFromVertices(Vertex3D* verts, uint32_t numVerts)
 	m.numMeshes = 1;
 
 	m.meshes->bound = { glm::vec3(-FLT_MAX), glm::vec3(FLT_MAX) };
-	m.meshes->material = nullptr;
-	m.meshes->numInd = numVerts;
-	m.meshes->startIdx = 0;
+	m.meshes->numPrimitives = 1;
+	m.meshes->primitives = new Primitive;
+	memset(m.meshes->primitives, 0, sizeof(Primitive));
+	m.numJoints = 1;
+	m.joints = new Joint;
+	memset(m.joints, 0, sizeof(Joint));
+	m.numNodes = 1;
+	m.nodes = &m.joints;
+
+	m.joints->defMatrix = glm::mat4(1.0f);
+	m.joints->mesh = m.meshes;
+	m.joints->model = &m;
+	m.joints->skinIndex = -1;
+	m.meshes->primitives->numInd = numVerts;
+	m.meshes->primitives->startIdx = 0;
 	m.baseTransform = glm::mat4(1.0f);
+
 
 	m.numIndices = 0;
 	m.numVertices = numVerts;
 	
-	m.meshes->flags = MESH_FLAG_NO_INDEX_BUFFER;
-
-	glGenBuffers(1, &m.indexBuffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.indexBuffer);
+	m.meshes->primitives->flags = PRIMITIVE_FLAG_NO_INDEX_BUFFER | PRIMITIVE_FLAG_LINE;
 
 	return m;
 }
@@ -80,11 +90,12 @@ void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts)
 	model->numIndices = 0;
 
 	model->meshes->bound = { glm::vec3(-FLT_MAX), glm::vec3(FLT_MAX) };
-	model->meshes->material = nullptr;
-	model->meshes->numInd = numVerts;
-	model->meshes->startIdx = 0;
+	model->meshes->primitives->bound = { glm::vec3(-FLT_MAX), glm::vec3(FLT_MAX) };
+	model->meshes->primitives->material = nullptr;
+	model->meshes->primitives->numInd = numVerts;
+	model->meshes->primitives->startIdx = 0;
 	model->baseTransform = glm::mat4(1.0f);
-	model->meshes->flags |= MESH_FLAG_LINE;
+	model->meshes->primitives->flags |= PRIMITIVE_FLAG_LINE;
 
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * numVerts, verts, GL_DYNAMIC_DRAW);
 }
