@@ -2151,6 +2151,8 @@ void RE_CleanUpRenderer(struct Renderer* renderer)
 		glDeleteProgram(renderer->cubemapInfo.program);
 		glDeleteProgram(renderer->cubemapInfo.irradianceFilterProgram);
 	}
+	if (renderer->objList) delete[] renderer->objList;
+	renderer->objList = nullptr;
 	delete renderer;
 }
 
@@ -3627,7 +3629,41 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
-	if (renderer->numObjs == 0) return;
+	if (renderer->numObjs == renderer->firstTransparentObject) return;
+
+	const glm::mat4 viewProj = renderer->currentCam->proj * renderer->currentCam->view;
+	const glm::mat4 invViewProj = glm::inverse(viewProj);
+	
+	// FILL OBJECTS DISTANCE FROM CAMERA
+	for (uint32_t i = renderer->firstTransparentObject; i < renderer->numObjs; i++)
+	{
+		const glm::vec3& min = renderer->objList[i].bound.min;
+		const glm::vec3& max = renderer->objList[i].bound.max;
+		glm::vec4 positions[8] = {
+			renderer->currentCam->view * glm::vec4(min.x, min.y, min.z, 1.0f),
+			renderer->currentCam->view * glm::vec4(max.x, min.y, min.z, 1.0f),
+			renderer->currentCam->view * glm::vec4(min.x, max.y, min.z, 1.0f),
+			renderer->currentCam->view * glm::vec4(max.x, max.y, min.z, 1.0f),
+			renderer->currentCam->view * glm::vec4(min.x, min.y, max.z, 1.0f),
+			renderer->currentCam->view * glm::vec4(max.x, min.y, max.z, 1.0f),
+			renderer->currentCam->view * glm::vec4(min.x, max.y, max.z, 1.0f),
+			renderer->currentCam->view * glm::vec4(max.x, max.y, max.z, 1.0f),
+		};
+		renderer->objList[i].zDepth = FLT_MAX;
+		for (uint32_t j = 0; j < 8; j++)
+		{
+			positions[j] /= positions[j].w;
+			renderer->objList[i].zDepth = glm::min(renderer->objList[i].zDepth, positions[j].z);
+		}
+	}
+
+	// SORT TRANSPARENT OBJECTS
+	std::sort(&renderer->objList[renderer->firstTransparentObject], &renderer->objList[renderer->numObjs], [](RenderObjectData& d1, RenderObjectData& d2)
+	{
+			return d2.zDepth > d1.zDepth;
+	});
+
+	const AABB frustum = GenerateAABB(invViewProj);
 
 	glUseProgram(renderer->pbrData.baseProgram);
 
@@ -3653,8 +3689,6 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
-
-	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
 	for (uint32_t i = renderer->firstTransparentObject; i < renderer->numObjs; i++)
 	{
