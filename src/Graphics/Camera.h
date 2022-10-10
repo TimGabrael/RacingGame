@@ -30,3 +30,6 @@ void CA_CreateOrthoTightFit(const CameraBase* relativeCam, CameraBase* output, c
 
 glm::vec3 CA_GetRight(const glm::vec3& front);
 glm::vec3 CA_YawPitchToFoward(float yaw, float pitch);
+
+
+glm::vec3 CA_GetMouseWorldSpace(const CameraBase* cam, const glm::vec2& mousePos, glm::vec3& mouseWorldSpace);

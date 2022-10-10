@@ -45,3 +45,6 @@ void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj);
 SceneObject** SC_GetAllSceneObjects(struct Scene* scene, uint32_t* num);
 
 void SC_Update(struct Scene* scene, float dt);
+
+
+SceneObject* SC_Raycast(struct Scene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance);

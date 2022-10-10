@@ -263,7 +263,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 								bufferWeights = reinterpret_cast<const float*>(&(gltfModel.buffers[weightView.buffer].data[weightAccessor.byteOffset + weightView.byteOffset]));
 								weightByteStride = weightAccessor.ByteStride(weightView) ? (weightAccessor.ByteStride(weightView) / sizeof(float)) : tinygltf::GetNumComponentsInType(TINYGLTF_TYPE_VEC4);
 							}
-
+							
 							hasSkin = (bufferJoints && bufferWeights);
 							for (size_t v = 0; v < posAccessor.count; v++) {
 								Vertex3D& vert = verts[curVertPos];

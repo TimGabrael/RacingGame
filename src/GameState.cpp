@@ -61,11 +61,11 @@ static void MousePositionCallback(GLFWwindow* window, double x, double y)
 	static double oldY = y;
 	if (g_gameState && g_gameState->manager)
 	{
-		double dx = x - oldX;
-		double dy = oldY - y;
+		double dx = x - g_gameState->mouseX;
+		double dy = g_gameState->mouseY - y;
 		g_gameState->manager->OnMousePositionChanged(x, y, dx, dy);
-		oldX = x;
-		oldY = y;
+		g_gameState->mouseX = x;
+		g_gameState->mouseY = y;
 	}
 }
 static void WindowFocusCallback(GLFWwindow* window, int focused)
@@ -125,6 +125,9 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	g_gameState->winY = 0;
 	g_gameState->winWidth = windowWidth;
 	g_gameState->winHeight = windowHeight;
+	g_gameState->mouseX = 0;
+	g_gameState->mouseY = 0;
+
 
 	glfwMakeContextCurrent(window);
 	glfwSetWindowAspectRatio(window, 16, 9);

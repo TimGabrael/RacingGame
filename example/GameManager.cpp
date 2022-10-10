@@ -143,10 +143,18 @@ void GameManager::RenderCallback(GameState* state)
 	static float updatetimer = 0.0f;
 	UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
 	updatetimer += 1.0f / 60.0f;
-	if (updatetimer > 5.0f) updatetimer = 0.0f;
+	if (updatetimer > 10.0f) updatetimer = 0.0f;
+
 
 	if (localPlayer)
 	{
+
+		glm::vec3 mouseWorldPos;
+		glm::vec3 mouseDir = CA_GetMouseWorldSpace(&localPlayer->camera.base, {state->mouseX / (float)state->winWidth, state->mouseY / (float)state->winHeight}, mouseWorldPos);
+
+		SceneObject* hitObj = SC_Raycast(state->scene, mouseWorldPos, mouseDir, 1000.0f);
+
+
 		uint32_t numSceneObjects = 0;
 		SceneObject** objs = SC_GetAllSceneObjects(state->scene, &numSceneObjects);
 
@@ -169,8 +177,10 @@ void GameManager::RenderCallback(GameState* state)
 		
 		RE_RenderOpaque(state->renderer);
 
-		RE_RenderOutline(state->renderer, foxSceneObject, foxSceneObject->model->nodes[0], {1.0f, 0.0f, 0.0f, 1.0f }, 0.02f);
-
+		if (hitObj)
+		{
+			RE_RenderOutline(state->renderer, hitObj, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
+		}
 		RE_RenderTransparent(state->renderer);
 	}
 

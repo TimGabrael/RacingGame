@@ -15,18 +15,17 @@ int main()
 	game->manager =  manager;
 	GM_AddPlayerToScene(manager, { 0.0f, 12.0f, 0.0f }, 90.0f, 0.0f);
 
-	SetConsumeMouse(true);
+	SetConsumeMouse(false);
 
 	manager->sponzaModel = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONCAVE);
 	manager->sponzaModel->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f)) * glm::inverse(manager->sponzaModel->nodes[0]->defMatrix);
 	manager->foxModel= AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BrainStem/glTF-Binary/BrainStem.glb", MODEL_LOAD_CONVEX);
-	manager->foxModel->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
-
+	manager->foxModel->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
 	PhysicsMaterial* material = PH_AddMaterial(game->physics, 0.5f, 0.5f, 0.5f);
 
 	PhysicsShape* sponzaShape = PH_AddConcaveShape(game->physics, manager->sponzaModel->concaveMesh, material, glm::vec3(0.1f));
-	PhysicsShape* foxShape = PH_AddConvexShape(game->physics, manager->foxModel->convexMesh, material, glm::vec3(2.0f));
+	PhysicsShape* foxShape = PH_AddConvexShape(game->physics, manager->foxModel->convexMesh, material, glm::vec3(5.0f));
 
 	Vertex3D verts[4] = {};
 	manager->debugModel = CreateModelFromVertices(verts, 0);
@@ -53,9 +52,9 @@ int main()
 
 	base.model = manager->foxModel;
 	base.anim = &manager->foxAnimInstance;
-	for (int i = 0; i < 1; i++)
+	for (int i = 0; i < 10; i++)
 	{
-		base.rigidBody = nullptr;// PH_AddDynamicRigidBody(game->physics, foxShape, glm::vec3(0.0f, 10.0f, 0.0f), def);
+		base.rigidBody = PH_AddDynamicRigidBody(game->physics, foxShape, glm::vec3(0.0f, 10.0f + 10 * i, 0.0f), def);
 		manager->foxSceneObject = SC_AddDynamicObject(game->scene, &base);
 	}
 

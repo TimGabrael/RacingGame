@@ -126,3 +126,18 @@ glm::vec3 CA_YawPitchToFoward(float yaw, float pitch)
 	front.z = sinf(glm::radians(yaw)) * cosf(glm::radians(pitch));
 	return front;
 }
+
+glm::vec3 CA_GetMouseWorldSpace(const CameraBase* cam, const glm::vec2& mousePos, glm::vec3& mouseWorldSpace)
+{
+	const glm::mat4 inv = glm::inverse(cam->proj * cam->view);
+	glm::vec4 near = glm::vec4(mousePos.x * 2.0f - 1.0f, -(mousePos.y * 2.0f - 1.0f), -1.0f, 1.0f);
+	glm::vec4 far = glm::vec4(mousePos.x * 2.0f - 1.0f, -(mousePos.y * 2.0f - 1.0f), 1.0f, 1.0f);
+
+	near = inv * near;
+	far = inv * far;
+	near /= near.w;
+	far /= far.w;
+	mouseWorldSpace = near;
+	glm::vec3 dir = glm::vec(far - near);
+	return glm::normalize(dir);
+}

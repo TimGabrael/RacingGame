@@ -3394,7 +3394,7 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 						}
 						else
 						{
-							cmd.transform = objList[i]->transform *objList[i]->model->baseTransform * curNode->defMatrix;
+							cmd.transform = objList[i]->transform * objList[i]->model->baseTransform * curNode->defMatrix;
 						}
 
 
@@ -3922,7 +3922,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 }
 
 
-void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const struct Joint* optionalNode, const glm::vec4& color, float thickness)
+void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const glm::vec4& color, float thickness)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
@@ -3967,26 +3967,25 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 	glBindVertexArray(obj->model->vao);
 	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 
-	if (optionalNode)
+	for (uint32_t nodeIdx = 0; nodeIdx < obj->model->numNodes; nodeIdx++)
 	{
+		Joint* curNode = obj->model->nodes[nodeIdx];
 		// JUST RENDER THE OBJECT AGAIN ONTOP
-		for (uint32_t i = 0; i < optionalNode->mesh->numPrimitives; i++)
+		for (uint32_t i = 0; i < curNode->mesh->numPrimitives; i++)
 		{
-			Primitive* prim = &optionalNode->mesh->primitives[i];
-			if (obj->anim && optionalNode->skinIndex < obj->anim->numSkins)
+			Primitive* prim = &curNode->mesh->primitives[i];
+			if (obj->anim && curNode->skinIndex < obj->anim->numSkins)
 			{
-				transform = obj->transform * obj->model->baseTransform * obj->anim->data[optionalNode->skinIndex].baseTransform;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[optionalNode->skinIndex].skinUniform);
+				transform = obj->transform * obj->model->baseTransform * obj->anim->data[curNode->skinIndex].baseTransform;
+				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[curNode->skinIndex].skinUniform);
 			}
 			else
 			{
-				transform = obj->transform * optionalNode->defMatrix;
+				transform = obj->transform * obj->model->baseTransform * curNode->defMatrix;
 				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 			}
-			transform = transform;
 			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
 
-			Mesh* m = optionalNode->mesh;
 			BindMaterial(renderer, prim->material);
 			GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
 			if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
@@ -4017,24 +4016,26 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 	glBindVertexArray(obj->model->vao);
 	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 	
-	if (optionalNode)
+	for (uint32_t nodeIdx = 0; nodeIdx < obj->model->numNodes; nodeIdx++)
 	{
-		for (uint32_t i = 0; i < optionalNode->mesh->numPrimitives; i++)
+		Joint* curNode = obj->model->nodes[nodeIdx];
+		for (uint32_t i = 0; i < curNode->mesh->numPrimitives; i++)
 		{
-			Primitive* prim = &optionalNode->mesh->primitives[i];
-			if (obj->anim && optionalNode->skinIndex < obj->anim->numSkins)
+			Primitive* prim = &curNode->mesh->primitives[i];
+			if (obj->anim && curNode->skinIndex < obj->anim->numSkins)
 			{
-				transform = obj->transform * obj->model->baseTransform *obj->anim->data[optionalNode->skinIndex].baseTransform;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.outlineUniforms.boneDataLoc, obj->anim->data[optionalNode->skinIndex].skinUniform);
+				transform = obj->transform * obj->model->baseTransform *obj->anim->data[curNode->skinIndex].baseTransform;
+				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.outlineUniforms.boneDataLoc, obj->anim->data[curNode->skinIndex].skinUniform);
 			}
 			else
 			{
-				transform = obj->transform * optionalNode->defMatrix;
+				transform = obj->transform * obj->model->baseTransform * curNode->defMatrix;
+				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 			}
 			transform = transform;
 			glUniformMatrix4fv(renderer->pbrData.outlineUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
 	
-			Mesh* m = optionalNode->mesh;
+			Mesh* m = curNode->mesh;
 			GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
 			if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 			{

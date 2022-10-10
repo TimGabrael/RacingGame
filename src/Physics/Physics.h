@@ -62,6 +62,7 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 
 void PH_AddShapeToRigidBody(RigidBody* body, PhysicsShape* shape);
 
+RigidBody* PH_RayCast(PhysicsScene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance);
 
 void PH_RemoveController(PhysicsController* controller);
 void PH_RemoveRigidBody(PhysicsScene* scene, RigidBody* body);
@@ -69,6 +70,8 @@ void PH_RemoveRigidBody(PhysicsScene* scene, RigidBody* body);
 
 
 void PH_SetTransformation(RigidBody* body, glm::mat4& m);
+void PH_SetRigidBodyUserData(RigidBody* body, void* userData);
+void* PH_GetRigidBodyUserData(RigidBody* body);
 
 
 

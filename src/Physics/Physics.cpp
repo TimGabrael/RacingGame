@@ -20,7 +20,26 @@
 
 
 using namespace physx;
+class MyRaycastCallback : public PxRaycastCallback
+{
+public:
+	MyRaycastCallback() : PxRaycastCallback(new PxRaycastHit[4], 4)
+	{
 
+	}
+	virtual ~MyRaycastCallback()
+	{
+		delete[] this->touches;
+		this->touches = nullptr;
+	}
+	virtual PxAgain processTouches(const PxRaycastHit* buffer, PxU32 nbHits)
+	{
+		for (uint32_t i = 0; i < nbHits; i++)
+		{
+		}
+		return false;
+	}
+};
 
 struct PhysicsScene
 {
@@ -32,6 +51,7 @@ struct PhysicsScene
 	PxFoundation* foundation = NULL;
 	PxCooking* cooking = NULL;
 	PxScene* scene = NULL;
+	MyRaycastCallback* raycastCallback;
 };
 
 
@@ -101,6 +121,7 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 	out->scene = out->physicsSDK->createScene(sceneDesc);
 	out->manager = PxCreateControllerManager(*out->scene);
 
+	out->raycastCallback = new MyRaycastCallback();
 
 	out->scene->setVisualizationParameter(PxVisualizationParameter::eSCALE, 1.0f);
 	out->scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, 1.0f);
@@ -239,11 +260,33 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 
 
 
-
 void PH_AddShapeToRigidBody(RigidBody* body, PhysicsShape* shape)
 {
 	((PxRigidActor*)body)->attachShape(*(PxShape*)shape);
 }
+
+
+
+RigidBody* PH_RayCast(PhysicsScene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance)
+{
+	bool res = scene->scene->raycast({ origin.x, origin.y, origin.z }, { dir.x, dir.y, dir.z }, distance, *scene->raycastCallback);
+	if (res)
+	{
+		PxRigidActor* closest = nullptr;
+		float distance = FLT_MAX;
+		for (uint32_t i = 0; i < scene->raycastCallback->nbTouches; i++)
+		{
+			if (scene->raycastCallback->touches[i].distance < distance)
+			{
+				distance = scene->raycastCallback->touches[i].distance;
+				closest = scene->raycastCallback->touches[i].actor;
+			}
+		}
+		return (RigidBody*)closest;
+	}
+	return nullptr;
+}
+
 
 void PH_RemoveController(PhysicsController* controller)
 {
@@ -260,7 +303,14 @@ void PH_SetTransformation(RigidBody* body, glm::mat4& m)
 	PxMat44 transform = PxMat44(((PxRigidActor*)body)->getGlobalPose());
 	memcpy(&m, &transform, sizeof(PxMat44));
 }
-
+void PH_SetRigidBodyUserData(RigidBody* body, void* userData)
+{
+	((PxRigidActor*)body)->userData = userData;
+}
+void* PH_GetRigidBodyUserData(RigidBody* body)
+{
+	return ((PxRigidActor*)body)->userData;
+}
 
 
 

@@ -1,5 +1,6 @@
 #include "Scene.h"
-
+#include "Physics/Physics.h"
+#include "GameState.h"
 #define NUM_OBJECTS_IN_LIST sizeof(uintptr_t) * 8
 
 struct SceneObjectList
@@ -165,6 +166,7 @@ SceneObject* SC_AddStaticObject(struct Scene* scene, const SceneObject* obj)
 	out->flags &= ~SCENE_OBJECT_FLAG_DYNAMIC;
 	out->flags |= SCENE_OBJECT_FLAG_VISIBLE;
 	scene->needRebuild = true;
+	if (out->rigidBody) PH_SetRigidBodyUserData(out->rigidBody, out);
 	return out;
 }
 void SC_RemoveStaticObject(struct Scene* scene, SceneObject* obj)
@@ -181,6 +183,7 @@ SceneObject* SC_AddDynamicObject(struct Scene* scene, const SceneObject* obj)
 	memcpy(out, obj, sizeof(SceneObject));
 	out->flags |= SCENE_OBJECT_FLAG_DYNAMIC | SCENE_OBJECT_FLAG_VISIBLE;
 	scene->needRebuild = true;
+	if (out->rigidBody) PH_SetRigidBodyUserData(out->rigidBody, out);
 	return out;
 }
 void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj)
@@ -255,4 +258,15 @@ void SC_Update(struct Scene* scene, float dt)
 	}
 	// rebuild in case any objects were created in the entity update function
 	SC_GetAllSceneObjects(scene, &num);
+}
+
+SceneObject* SC_Raycast(struct Scene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance)
+{
+	GameState* state = GetGameState();
+	RigidBody* hit = PH_RayCast(state->physics, origin, dir, distance);
+	if (hit)
+	{
+		return (SceneObject*)PH_GetRigidBodyUserData(hit);
+	}
+	return nullptr;
 }

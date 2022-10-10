@@ -40,6 +40,8 @@ struct GameState
 	uint32_t winHeight;
 	uint32_t swapChainInterval;
 	uint32_t numGamepads;
+	float mouseX;
+	float mouseY;
 	float accumulatedTime;
 	bool hasFocus;
 	bool isFullscreen;
