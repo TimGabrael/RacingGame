@@ -242,7 +242,7 @@ void RE_RenderTransparent(struct Renderer* renderer);
 
 
 
-void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const struct Joint* optionalNode, float scale);
+void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const struct Joint* optionalNode, const glm::vec4& color, float thickness);
 
 
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap);

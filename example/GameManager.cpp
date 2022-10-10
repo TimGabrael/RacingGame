@@ -169,14 +169,16 @@ void GameManager::RenderCallback(GameState* state)
 		
 		RE_RenderOpaque(state->renderer);
 
-		RE_RenderOutline(state->renderer, foxSceneObject, foxSceneObject->model->nodes[0], 1.1f);
+		RE_RenderOutline(state->renderer, foxSceneObject, foxSceneObject->model->nodes[0], {1.0f, 0.0f, 0.0f, 1.0f }, 0.02f);
 
 		RE_RenderTransparent(state->renderer);
 	}
 
 
 	RE_FinishAntialiasingData(&AAbuffer);
+
 	//RE_CopyAntialiasingDataToFBO(&AAbuffer, 0, state->winWidth, state->winHeight);
+	
 	// RENDER SSR WITH BLOOM
 	//RE_RenderScreenSpaceReflection(state->renderer, &SSRbuffer, AAbuffer.intermediateTexture,
 	//	PPbuffer.intermediateFbo, PPbuffer.width, PPbuffer.height);
