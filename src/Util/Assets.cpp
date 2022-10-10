@@ -63,17 +63,6 @@ AssetManager* AM_CreateAssetManager()
 		out->textures[DEFAULT_BLACK_TEXTURE] = defaultBlack;
 	}
 
-	{
-		AM_AddCubemapTexture(out, DEFAULT_CUBE_MAP,
-			"Assets/CitySkybox/top.jpg", 
-			"Assets/CitySkybox/bottom.jpg", 
-			"Assets/CitySkybox/left.jpg", 
-			"Assets/CitySkybox/right.jpg", 
-			"Assets/CitySkybox/front.jpg", 
-			"Assets/CitySkybox/back.jpg");
-	}
-
-
 	return out;
 }
 void AM_CleanUpAssetManager(AssetManager* assets)
@@ -384,6 +373,19 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				else
 				{
 					LOG("WARNING REVERSEING THE FACES OF A VERTEX ONLY MESH\n");
+				}
+			}
+			if (flags & MODEL_SET_ORIGIN_CENTER)
+			{
+				glm::vec3 center = { 0.0f, 0.0f, 0.0f };
+				for (uint32_t i = 0; i < curVertPos; i++)
+				{
+					center += verts[i].pos;
+				}
+				center /= (float)curVertPos;
+				for (uint32_t i = 0; i < curVertPos; i++)
+				{
+					verts[i].pos -= center;
 				}
 			}
 			GenerateModelVertexBuffer(&model->vao, &model->vertexBuffer, verts, curVertPos);
@@ -1214,56 +1216,36 @@ struct EnvironmentFileHeader
 	uint8_t numMipMaps;
 	uint16_t width;
 	uint16_t height;
+	uint16_t irrWidth;
+	uint16_t irrHeight;
 };
 void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName)
 {
-	glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
-
-	int w = 0;
-	int h = 0;
-	glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_WIDTH, &w);
-	glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_HEIGHT, &h);
-
-	
 
 	uint32_t dataSize = sizeof(EnvironmentFileHeader);
 	for (int i = 0; i < env->mipLevels; i++)
 	{
-		dataSize += (glm::max(w, 1) * glm::max(h, 1) * 4) * 2 * 6;
+		dataSize += (glm::max(env->width, 1u) * glm::max(env->height, 1u) * 4) * 6;
 	}
+	dataSize += env->irradianceMapWidth * env->irradianceMapHeight * 6;
+
 	uint8_t* fullData = new uint8_t[dataSize];
 
 	EnvironmentFileHeader* header = (EnvironmentFileHeader*)fullData;
 	header->numMipMaps = env->mipLevels;
-	header->width = w;
-	header->height = h;
+	header->width = env->width;
+	header->height = env->height;
+	header->irrWidth = env->irradianceMapWidth;
+	header->irrHeight = env->irradianceMapHeight;
 	uint8_t* curData = fullData + sizeof(EnvironmentFileHeader);
 
 	for (int i = 0; i < env->mipLevels; i++)
 	{
-		const uint32_t cw = glm::max(w >> i, 1);
-		const uint32_t ch = glm::max(h >> i, 1);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
+		const uint32_t cw = glm::max(env->width >> i, 1u);
+		const uint32_t ch = glm::max(env->height >> i, 1u);
 
 		int testW = 0;
 		int testH = 0;
-		glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, i, GL_TEXTURE_WIDTH, &testW);
-		glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, i, GL_TEXTURE_HEIGHT, &testH);
-		if (testW != cw)
-		{
-			LOG("(env->irradianceMap): ERROR LEVEL WIDTH DOES NOT EQUAL REAL WIDTH: %d != %d\n", testW, cw);
-		}
-		if (testH != ch)
-		{
-			LOG("(env->irradianceMap): ERROR LEVEL HEIGHT DOES NOT EQUAL REAL HEIGHT: %d != %d\n", testH, ch);
-		}
-
-		for (int j = 0; j < 6; j++)
-		{
-			glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, GL_UNSIGNED_BYTE, curData);
-			curData += 4 * cw * ch;
-		}
-		
 		
 		glBindTexture(GL_TEXTURE_CUBE_MAP, env->prefilteredMap);
 
@@ -1278,13 +1260,34 @@ void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName
 			LOG("(env->prefilteredMap): ERROR LEVEL HEIGHT DOES NOT EQUAL REAL HEIGHT: %d != %d\n", testH, ch);
 		}
 
-
 		for (int j = 0; j < 6; j++)
 		{
 			glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, GL_UNSIGNED_BYTE, curData);
 			curData += 4 * cw * ch;
 		}
 	}
+
+	int testW = 0;
+	int testH = 0;
+	glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
+	glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_WIDTH, &testW);
+	glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_HEIGHT, &testH);
+	if (testW != env->irradianceMapWidth)
+	{
+		LOG("(env->irradianceMap): ERROR LEVEL WIDTH DOES NOT EQUAL REAL WIDTH: %d != %d\n", testW, env->irradianceMapWidth);
+	}
+	if (testH != env->irradianceMapHeight)
+	{
+		LOG("(env->irradianceMap): ERROR LEVEL HEIGHT DOES NOT EQUAL REAL HEIGHT: %d != %d\n", testH, env->irradianceMapHeight);
+	}
+
+	for (int j = 0; j < 6; j++)
+	{
+		glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, GL_RGBA, GL_UNSIGNED_BYTE, curData);
+		curData += 4 * env->irradianceMapWidth * env->irradianceMapHeight;
+	}
+
+
 
 	uLongf dataLen = dataSize;
 	uint8_t* compressData = new uint8_t[dataSize];
@@ -1342,10 +1345,15 @@ bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName)
 		return false;
 	}
 
+
 	EnvironmentFileHeader* header = (EnvironmentFileHeader*)uncompressedData;
 	uint8_t* curData = uncompressedData + sizeof(EnvironmentFileHeader);
 
 	env->mipLevels = header->numMipMaps;
+	env->width = header->width;
+	env->height = header->height;
+	env->irradianceMapWidth = header->irrWidth;
+	env->irradianceMapHeight = header->irrHeight;
 
 	glGenTextures(1, &env->irradianceMap);
 	glGenTextures(1, &env->prefilteredMap);
@@ -1353,12 +1361,6 @@ bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName)
 	{
 		uint32_t cw = glm::max(header->width >> i, 1);
 		uint32_t ch = glm::max(header->height >> i, 1);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
-		for (unsigned int j = 0; j < 6; j++)
-		{
-			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, cw, ch, 0, GL_RGBA, GL_UNSIGNED_BYTE, curData);
-			curData += 4 * cw * ch;
-		}
 		glBindTexture(GL_TEXTURE_CUBE_MAP, env->prefilteredMap);
 		for (unsigned int j = 0; j < 6; j++)
 		{
@@ -1366,7 +1368,15 @@ bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName)
 			curData += 4 * cw * ch;
 		}
 	}
+	glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
+	for (unsigned int j = 0; j < 6; j++)
+	{
+		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, GL_RGBA, header->irrWidth, header->irrHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, curData);
+		curData += 4 * header->irrWidth * header->irrHeight;
+	}
 	
+	env->environmentMap = env->prefilteredMap;
+
 	delete[] uncompressedData;
 	return true;
 }

@@ -10,6 +10,8 @@ struct EnvironmentData
 	GLuint environmentMap;
 	GLuint prefilteredMap;
 	GLuint irradianceMap;
+	uint32_t irradianceMapWidth;
+	uint32_t irradianceMapHeight;
 	uint32_t width;
 	uint32_t height;
 	uint32_t mipLevels;
@@ -216,7 +218,7 @@ void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* lig
 
 
 // Creates the prefiltered-/irradiance-Map from the environmentMap or cleanes those two up
-void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env);
+void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env, uint32_t irrWidth, uint32_t irrHeight);
 void RE_CleanUpEnvironment(EnvironmentData* env);
 
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num);

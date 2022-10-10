@@ -7,13 +7,21 @@
 GameManager* GM_CreateGameManager(GameState* state)
 {
 	GameManager* out = new GameManager;
-	out->env.environmentMap = state->assets->textures[DEFAULT_CUBE_MAP]->uniform;
-	out->env.width = state->assets->textures[DEFAULT_CUBE_MAP]->width;
-	out->env.height = state->assets->textures[DEFAULT_CUBE_MAP]->height;
-	out->env.mipLevels = 1;
 
 	if (!AM_LoadEnvironment(&out->env, "Assets/Environment.menv"))
 	{
+		Texture* envMap = AM_AddCubemapTexture(state->assets, DEFAULT_CUBE_MAP,
+			"Assets/CitySkybox/top.jpg",
+			"Assets/CitySkybox/bottom.jpg",
+			"Assets/CitySkybox/left.jpg",
+			"Assets/CitySkybox/right.jpg",
+			"Assets/CitySkybox/front.jpg",
+			"Assets/CitySkybox/back.jpg");
+		out->env.environmentMap = envMap->uniform;
+		out->env.width = envMap->width;
+		out->env.height = envMap->height;
+		out->env.mipLevels = 1;
+		RE_CreateEnvironment(state->renderer, &out->env, 128, 128);
 		AM_StoreEnvironment(&out->env, "Assets/Environment.menv");
 	}
 
@@ -132,10 +140,10 @@ void GameManager::RenderCallback(GameState* state)
 	//UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
 
 
-	//static float updatetimer = 0.0f;
-	//UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
-	//updatetimer += 1.0f / 60.0f;
-	//if (updatetimer > 5.0f) updatetimer = 0.0f;
+	static float updatetimer = 0.0f;
+	UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
+	updatetimer += 1.0f / 60.0f;
+	if (updatetimer > 5.0f) updatetimer = 0.0f;
 
 	if (localPlayer)
 	{
@@ -160,6 +168,9 @@ void GameManager::RenderCallback(GameState* state)
 		RE_RenderCubeMap(state->renderer, env.environmentMap);
 		
 		RE_RenderOpaque(state->renderer);
+
+		RE_RenderOutline(state->renderer, foxSceneObject, foxSceneObject->model->nodes[0], 1.1f);
+
 		RE_RenderTransparent(state->renderer);
 	}
 
