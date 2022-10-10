@@ -431,7 +431,7 @@ void main()\n\
 			color += pbrInputs.NdotL * shadowVal * lights.spotLights[i].color.rgb * (diffuseContrib + specContrib);\n\
 		}\n\
 	}\n\
-\n\
+	\n\
 	color += getIBLContribution(pbrInputs, n, reflection);\n\
 \n\
 	const float u_OcclusionStrength = 1.0f;\n\
@@ -580,7 +580,23 @@ void main()\n\
 	outNormalDepth = vec4(n, gl_FragCoord.z);\n\
 	outMetallic = vec4(metallic);\n\
 }";
-
+static const char* solidColorPbrFragmentShader = "#version 330\n\
+in vec3 worldPos;\n\
+in vec3 fragNormal;\n\
+in vec2 fragUV1;\n\
+in vec2 fragUV2;\n\
+in vec4 fragColor;\n\
+\n\
+uniform mat4 model; \n\
+uniform mat4 view; \n\
+uniform mat4 projection; \n\
+uniform vec3 camPos; \n\
+\n\
+layout(location = 0) out vec4 outColor;\n\
+void main()\n\
+{\n\
+	outColor = vec4(1.0f);\n\
+}";
 
 
 
@@ -1362,6 +1378,14 @@ struct BaseSSRProgramUniforms
 	GLuint boneDataLoc;
 	GLuint materialDataLoc;
 };
+struct BaseSolidProgramUniforms
+{
+	GLuint modelLoc;
+	GLuint viewLoc;
+	GLuint projLoc;
+	GLuint camPosLoc;
+	GLuint boneDataLoc;
+};
 
 enum BASE_SHADER_TEXTURE
 {
@@ -1403,6 +1427,8 @@ struct PBRRenderInfo
 	BaseGeometryProgramUniforms geomUniforms;
 	GLuint ssrProgram;
 	BaseSSRProgramUniforms ssrUniforms;
+	GLuint solidProgram;
+	BaseSolidProgramUniforms solidUniforms;
 	GLuint defaultBoneData;
 	GLuint brdfLut;
 	GLuint defMaterial;
@@ -1918,6 +1944,17 @@ static BaseSSRProgramUniforms LoadBaseSSRProgramUniformLocationsFromProgram(GLui
 	glUniform1i(curTexture, BASE_SHADER_TEXTURE_METALLIC_ROUGHNESS);
 	return un;
 }
+static BaseSolidProgramUniforms LoadBaseSolidProgramUniformLocationsFromProgram(GLuint program)
+{
+	BaseSolidProgramUniforms un;
+	un.modelLoc = glGetUniformLocation(program, "model");
+	un.viewLoc = glGetUniformLocation(program, "view");
+	un.projLoc = glGetUniformLocation(program, "projection");
+	un.camPosLoc = glGetUniformLocation(program, "camPos");
+	un.boneDataLoc = glGetUniformBlockIndex(program, "BoneData");
+	glUniformBlockBinding(program, un.boneDataLoc, un.boneDataLoc);
+	return un;
+}
 static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 {
 	info->blur.program = CreateProgram(quadFilterVertexShader, blurFragmentShader);
@@ -2054,7 +2091,9 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 
 		renderer->pbrData.ssrProgram = CreateProgram(baseVertexShader, ssrPbrFragmentShader);
 		renderer->pbrData.ssrUniforms = LoadBaseSSRProgramUniformLocationsFromProgram(renderer->pbrData.ssrProgram);
-		
+
+		renderer->pbrData.solidProgram = CreateProgram(baseVertexShader, solidColorPbrFragmentShader);
+		renderer->pbrData.solidUniforms = LoadBaseSolidProgramUniformLocationsFromProgram(renderer->pbrData.solidProgram);
 
 	}
 	// CREATE SKYBOX SHADER DATA
@@ -2352,12 +2391,14 @@ void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uin
 
 		glGenTextures(1, &data->depth);
 		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, data->depth);
-		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_DEPTH_COMPONENT32F, width, height, GL_TRUE);
+		//glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_DEPTH_COMPONENT32F, width, height, GL_TRUE);
+		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, numSamples, GL_DEPTH24_STENCIL8, width, height, GL_TRUE);
 		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, data->depth, 0);
+		//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, data->depth, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, data->depth, 0);
 
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 			LOG("FAILED TO CREATE ANTIALIASING FRAMEBUFFER\n");
@@ -2379,12 +2420,14 @@ void RE_CreateAntialiasingData(AntialiasingRenderData* data, uint32_t width, uin
 
 		glGenTextures(1, &data->intermediateDepth);
 		glBindTexture(GL_TEXTURE_2D, data->intermediateDepth);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+		//glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
+		//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
 
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 			LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
@@ -2414,12 +2457,14 @@ void RE_FinishAntialiasingData(AntialiasingRenderData* data)
 
 			glGenTextures(1, &data->intermediateDepth);
 			glBindTexture(GL_TEXTURE_2D, data->intermediateDepth);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+			//glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, data->width, data->height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
+			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, data->intermediateDepth, 0);
 
 			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 				LOG("FAILED TO CREATE INTERMEDIATE FRAMEBUFFER\n");
@@ -3215,6 +3260,10 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 							d.animUniform = objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].skinUniform;
 						}
 					}
+					else
+					{
+						d.transform = d.transform * objList[i]->model->nodes[j]->defMatrix;
+					}
 					glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
 					glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
 					glm::vec4 positions[8] = {
@@ -3266,6 +3315,10 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 							d.transform = d.transform * objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].baseTransform;
 							d.animUniform = objList[i]->anim->data[objList[i]->model->joints->mesh->skinIdx].skinUniform;
 						}
+					}
+					else
+					{
+						d.transform = d.transform * objList[i]->model->nodes[j]->defMatrix;
 					}
 					glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
 					glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
@@ -3513,6 +3566,7 @@ void RE_RenderGeometry(struct Renderer* renderer)
 	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
 	if (renderer->numObjs == 0) return;
 
+	
 	glUseProgram(renderer->pbrData.geomProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
@@ -3697,7 +3751,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 		if (AABBOverlapp(frustum, obj->bound))
 		{
 			glBindVertexArray(obj->node->model->vao);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
+			if (obj->node->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->node->model->indexBuffer);
 			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->animUniform);
 			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
 
@@ -3719,6 +3773,29 @@ void RE_RenderTransparent(struct Renderer* renderer)
 
 
 }
+
+
+void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj)
+{
+	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	if (!obj->model) return;
+
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glDepthMask(GL_FALSE);
+
+	glUseProgram(renderer->pbrData.solidProgram);
+	
+	glUniform3fv(renderer->pbrData.solidUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->pbrData.solidUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->pbrData.solidUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+	glBindVertexArray(obj->model->vao);
+	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+
+
+}
+
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");

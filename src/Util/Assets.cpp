@@ -519,10 +519,12 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 
 
 			myMat.mode = Material::ALPHA_MODE::ALPHA_MODE_OPAQUE;
+			myMat.alphaCutoff = 0.0f;
 			if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end()) {
 				tinygltf::Parameter param = mat.additionalValues["alphaMode"];
 				if (param.string_value == "BLEND") {
 					myMat.mode = Material::ALPHA_MODE::ALPHA_MODE_BLEND;
+					myMat.alphaCutoff = 0.0f;
 				}
 				if (param.string_value == "MASK") {
 					myMat.alphaCutoff = 0.5f;
@@ -1067,23 +1069,30 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		for (uint32_t i = 0; i < model->numJoints; i++)
 		{
 			Joint& j = model->joints[i];
-			if (j.skin && j.mesh && j.skinIndex > -1)
+			if (j.mesh)
 			{
-				j.defMatrix = glm::translate(glm::mat4(1.0f), j.translation) * glm::mat4(j.rotation) * glm::scale(glm::mat4(1.0f), j.scale) * j.matrix;
-				glm::mat4 inverse = glm::inverse(j.defMatrix);
-				for (uint32_t idx = 0; idx < j.skin->numJoints; idx++)
+				if (j.skin && j.skinIndex > -1)
 				{
-					Joint* childJoint = j.skin->joints[idx];
-					glm::mat4 m = glm::translate(glm::mat4(1.0f), childJoint->translation) * glm::mat4(childJoint->rotation) * glm::scale(glm::mat4(1.0f), childJoint->scale) * childJoint->matrix;
-					Joint* parent = childJoint->parent;
-					while (parent)
+					j.defMatrix = glm::translate(glm::mat4(1.0f), j.translation) * glm::mat4(j.rotation) * glm::scale(glm::mat4(1.0f), j.scale) * j.matrix;
+					glm::mat4 inverse = glm::inverse(j.defMatrix);
+					for (uint32_t idx = 0; idx < j.skin->numJoints; idx++)
 					{
-						m = glm::translate(glm::mat4(1.0f), parent->translation) * glm::mat4(parent->rotation) * glm::scale(glm::mat4(1.0f), parent->scale) * parent->matrix * m;
-						parent = parent->parent;
+						Joint* childJoint = j.skin->joints[idx];
+						glm::mat4 m = glm::translate(glm::mat4(1.0f), childJoint->translation) * glm::mat4(childJoint->rotation) * glm::scale(glm::mat4(1.0f), childJoint->scale) * childJoint->matrix;
+						Joint* parent = childJoint->parent;
+						while (parent)
+						{
+							m = glm::translate(glm::mat4(1.0f), parent->translation) * glm::mat4(parent->rotation) * glm::scale(glm::mat4(1.0f), parent->scale) * parent->matrix * m;
+							parent = parent->parent;
+						}
+
+						glm::mat4 jointMat = inverse * m * j.skin->inverseBindMatrices[idx];
+						childJoint->defMatrix = jointMat;
 					}
-					
-					glm::mat4 jointMat = inverse * m * j.skin->inverseBindMatrices[idx];
-					childJoint->defMatrix = jointMat;
+				}
+				else
+				{
+					j.defMatrix = glm::translate(glm::mat4(1.0f), j.translation) * glm::mat4(j.rotation) * glm::scale(glm::mat4(1.0f), j.scale) * j.matrix;
 				}
 			}
 		}

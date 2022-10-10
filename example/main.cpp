@@ -51,6 +51,7 @@ int main()
 	memset(&manager->foxAnimInstance, 0, sizeof(AnimationInstanceData));
 	CreateBoneDataFromModel(manager->foxModel, &manager->foxAnimInstance);
 
+
 	//base.model = manager->foxModel;
 	//base.anim = &manager->foxAnimInstance;
 	//for (int i = 0; i < 1; i++)

@@ -166,7 +166,7 @@ void GameManager::RenderCallback(GameState* state)
 
 
 	RE_FinishAntialiasingData(&AAbuffer);
-
+	//RE_CopyAntialiasingDataToFBO(&AAbuffer, 0, state->winWidth, state->winHeight);
 	// RENDER SSR WITH BLOOM
 	//RE_RenderScreenSpaceReflection(state->renderer, &SSRbuffer, AAbuffer.intermediateTexture,
 	//	PPbuffer.intermediateFbo, PPbuffer.width, PPbuffer.height);

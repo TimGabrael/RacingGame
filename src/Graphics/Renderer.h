@@ -237,6 +237,12 @@ void RE_RenderGeometry(struct Renderer* renderer);
 
 void RE_RenderOpaque(struct Renderer* renderer);
 void RE_RenderTransparent(struct Renderer* renderer);
+
+
+
+void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj);
+
+
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap);
 
 
