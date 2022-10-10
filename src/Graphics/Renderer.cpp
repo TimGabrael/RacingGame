@@ -580,6 +580,52 @@ void main()\n\
 	outNormalDepth = vec4(n, gl_FragCoord.z);\n\
 	outMetallic = vec4(metallic);\n\
 }";
+static const char* outlinePbrVertexShader = "#version 330\n\
+layout(location = 0) in vec3 position; \n\
+layout(location = 1) in vec3 normal; \n\
+layout(location = 2) in vec2 uv1; \n\
+layout(location = 3) in vec2 uv2; \n\
+layout(location = 4) in vec4 joint; \n\
+layout(location = 5) in vec4 weights; \n\
+layout(location = 6) in vec4 color; \n\
+uniform mat4 model; \n\
+uniform mat4 view; \n\
+uniform mat4 projection; \n\
+uniform vec3 camPos; \n\
+#define MAX_NUM_JOINTS 128\n\
+layout (std140) uniform BoneData {\n\
+	mat4 jointMatrix[MAX_NUM_JOINTS];\n\
+	float jointCount;\n\
+} bones;\n\
+out vec3 worldPos;\n\
+out vec3 fragNormal;\n\
+out vec2 fragUV1;\n\
+out vec2 fragUV2;\n\
+out vec4 fragColor;\n\
+uniform float stepInNormal = 0.04;\n\
+void main(){\n\
+	vec4 locPos;\n\
+	if (bones.jointCount > 0.0) {\n\
+		mat4 boneMat =\n\
+			weights.x * bones.jointMatrix[int(joint.x)] +\n\
+			weights.y * bones.jointMatrix[int(joint.y)] +\n\
+			weights.z * bones.jointMatrix[int(joint.z)] +\n\
+			weights.w * bones.jointMatrix[int(joint.w)];\n\
+	\n\
+		locPos = model * boneMat * vec4(position, 1.0);\n\
+		fragNormal = normalize(transpose(inverse(mat3(model * boneMat))) * normal);\n\
+	}\n\
+	else {\n\
+		locPos = model * vec4(position, 1.0);\n\
+		fragNormal = normalize(transpose(inverse(mat3(model))) * normal);\n\
+	}\n\
+	locPos = stepInNormal * vec4(fragNormal, 0.0f) + locPos;\n\
+	worldPos = locPos.xyz / locPos.w;\n\
+	fragUV1 = uv1;\n\
+	fragUV2 = uv2;\n\
+	fragColor = color;\n\
+	gl_Position = projection * view * vec4(worldPos, 1.0);\n\
+}";
 static const char* solidColorPbrFragmentShader = "#version 330\n\
 in vec3 worldPos;\n\
 in vec3 fragNormal;\n\
@@ -595,8 +641,34 @@ uniform vec3 camPos; \n\
 layout(location = 0) out vec4 outColor;\n\
 void main()\n\
 {\n\
-	outColor = vec4(1.0f);\n\
+	outColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);\n\
 }";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -725,6 +797,44 @@ void main()\n\
 	vec3 N = normalize(outUVW);\n\
 	outColor = vec4(prefilterEnvMap(N, roughness), 1.0);\n\
 }";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2097,7 +2207,7 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 		renderer->pbrData.ssrProgram = CreateProgram(baseVertexShader, ssrPbrFragmentShader);
 		renderer->pbrData.ssrUniforms = LoadBaseSSRProgramUniformLocationsFromProgram(renderer->pbrData.ssrProgram);
 
-		renderer->pbrData.solidProgram = CreateProgram(baseVertexShader, solidColorPbrFragmentShader);
+		renderer->pbrData.solidProgram = CreateProgram(outlinePbrVertexShader, solidColorPbrFragmentShader);
 		renderer->pbrData.solidUniforms = LoadBaseSolidProgramUniformLocationsFromProgram(renderer->pbrData.solidProgram);
 
 	}
@@ -3810,23 +3920,92 @@ void RE_RenderTransparent(struct Renderer* renderer)
 void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const struct Joint* optionalNode, float scale)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (!obj->model) return;
+	glm::mat4 transform;
+
+	glEnable(GL_STENCIL_TEST);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+	glStencilMask(0xFF);
+
+	glClear(GL_STENCIL_BUFFER_BIT);
+
+	glStencilFunc(GL_ALWAYS, 1, 0xFF);
+
 
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
-	glDepthFunc(GL_LESS);
+	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
 
+	glUseProgram(renderer->pbrData.baseProgram);
+
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->prefilteredMap);
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->irradianceMap);
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
+	glBindTexture(GL_TEXTURE_2D, renderer->pbrData.brdfLut);
+
+	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SHADOW_MAP);
+	if (renderer->currentLightData->shadowGroup.texture) glBindTexture(GL_TEXTURE_2D, renderer->currentLightData->shadowGroup.texture);
+	else glBindTexture(GL_TEXTURE_2D, renderer->whiteTexture);
+
+	glUniform3fv(renderer->pbrData.baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->pbrData.baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->pbrData.baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+
+	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
+	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
+
+	glBindVertexArray(obj->model->vao);
+	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
+
+	// JUST RENDER THE OBJECT AGAIN ONTOP
+	for (uint32_t i = 0; i < optionalNode->mesh->numPrimitives; i++)
+	{
+		Primitive* prim = &optionalNode->mesh->primitives[i];
+		if (obj->anim && optionalNode->skinIndex < obj->anim->numSkins)
+		{
+			transform = obj->transform * obj->model->baseTransform * obj->anim->data[optionalNode->skinIndex].baseTransform;
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[optionalNode->skinIndex].skinUniform);
+		}
+		else
+		{
+			transform = obj->transform * optionalNode->defMatrix;
+			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+		}
+		transform = transform;
+		glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
+
+		Mesh* m = optionalNode->mesh;
+		BindMaterial(renderer, prim->material);
+		GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+		if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
+		{
+			glDrawArrays(renderMode, prim->startIdx, prim->numInd);
+		}
+		else
+		{
+			glDrawElements(renderMode, prim->numInd, GL_UNSIGNED_INT, (void*)(prim->startIdx * sizeof(uint32_t)));
+		}
+	}
+
+	glEnable(GL_DEPTH_TEST);
+	glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+	glStencilMask(0x00);
+	glDepthMask(GL_FALSE);
+	
 	glUseProgram(renderer->pbrData.solidProgram);
 	
 	glUniform3fv(renderer->pbrData.solidUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
 	glUniformMatrix4fv(renderer->pbrData.solidUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
 	glUniformMatrix4fv(renderer->pbrData.solidUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
-
+	
 	glBindVertexArray(obj->model->vao);
 	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-
-	glm::mat4 transform;
+	
 	if (optionalNode)
 	{
 		for (uint32_t i = 0; i < optionalNode->mesh->numPrimitives; i++)
@@ -3834,7 +4013,7 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 			Primitive* prim = &optionalNode->mesh->primitives[i];
 			if (obj->anim && optionalNode->skinIndex < obj->anim->numSkins)
 			{
-				transform = obj->transform * obj->model->baseTransform *obj->anim->data[optionalNode->skinIndex].baseTransform * glm::scale(glm::mat4(1.0f), glm::vec3(scale));
+				transform = obj->transform * obj->model->baseTransform *obj->anim->data[optionalNode->skinIndex].baseTransform;
 				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.solidUniforms.boneDataLoc, obj->anim->data[optionalNode->skinIndex].skinUniform);
 			}
 			else
@@ -3843,7 +4022,7 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 			}
 			transform = transform;
 			glUniformMatrix4fv(renderer->pbrData.solidUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
-
+	
 			Mesh* m = optionalNode->mesh;
 			GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
 			if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
@@ -3856,7 +4035,7 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 			}
 		}
 	}
-
+	glDisable(GL_STENCIL_TEST);
 }
 
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
