@@ -16,3 +16,7 @@
 [submodule "3rd-party/rectpack2D"]
 	path = 3rd-party/rectpack2D
 	url = https://github.com/TeamHypersomnia/rectpack2D.git
+[submodule "3rd-party/imgui"]
+	path = 3rd-party/imgui
+	url = https://github.com/ocornut/imgui.git
+	branch = docking

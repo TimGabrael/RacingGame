@@ -29,6 +29,7 @@ int main()
 
 	PhysicsShape* sponzaShape = PH_AddConcaveShape(game->physics, manager->sponzaModel->concaveMesh, material, glm::vec3(0.1f));
 	PhysicsShape* foxShape = PH_AddConvexShape(game->physics, manager->foxModel->convexMesh, material, glm::vec3(5.0f));
+	PhysicsShape* planeShape = PH_AddBoxShape(game->physics, material, glm::vec3(100.0f, 1.0f, 100.f));
 
 	Vertex3D verts[4] = {};
 	manager->debugModel = CreateModelFromVertices(verts, 0);
@@ -38,7 +39,7 @@ int main()
 	base.entity = nullptr;
 	base.anim = nullptr;
 	base.model = manager->sponzaModel;
-	base.rigidBody = PH_AddStaticRigidBody(game->physics, sponzaShape, glm::vec3(0.0f), def);
+	base.rigidBody = PH_AddStaticRigidBody(game->physics, planeShape, glm::vec3(0.0f), def);// PH_AddStaticRigidBody(game->physics, sponzaShape, glm::vec3(0.0f), def);
 	base.transform = glm::mat4(1.0f);
 	SC_AddStaticObject(game->scene, &base);
 

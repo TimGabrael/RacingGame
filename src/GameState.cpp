@@ -145,6 +145,16 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	glfwSwapInterval(g_gameState->swapChainInterval);
 	glEnable(GL_MULTISAMPLE);
 
+
+	// INITIALIZE IMGUI
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 330");
+
+
 	g_gameState->assets = AM_CreateAssetManager();
 	g_gameState->physics = PH_CreatePhysicsScene();
 	g_gameState->scene = SC_CreateScene(g_gameState->physics);

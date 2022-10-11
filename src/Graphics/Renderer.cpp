@@ -3700,8 +3700,41 @@ void RE_RenderOpaque(struct Renderer* renderer)
 		}
 		
 	}
+}
+void RE_RenderAdditionalOpaque(struct Renderer* renderer)
+{
+	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
+	if (renderer->numCmds == 0) return;
 
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glDepthFunc(GL_LEQUAL);
+	glDepthMask(GL_TRUE);
+	glBlendEquation(GL_FUNC_ADD);
+	glBlendFunc(GL_ONE, GL_ONE);
 
+	SceneRenderData data;
+	data.renderer = renderer;
+	data.env = renderer->currentEnvironmentData;
+	data.lightGroupUniform = renderer->currentLightData->uniform;
+	data.cam = renderer->currentCam;
+	data.shadowMapTexture = renderer->currentLightData->shadowGroup.texture;
+
+	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
+
+	for (uint32_t i = 0; i < renderer->firstTransparentCmd; i++)
+	{
+		RenderCommand* cmd = renderer->drawCmds[i];
+
+		if (AABBOverlapp(frustum, cmd->GetBound()))
+		{
+			cmd->DrawOpaque(&data);
+		}
+
+	}
 }
 void RE_RenderTransparent(struct Renderer* renderer)
 {
@@ -3757,6 +3790,7 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	glDepthMask(GL_FALSE);
 	glDepthFunc(GL_LEQUAL);
 	glEnable(GL_BLEND);
+	glBlendEquation(GL_FUNC_ADD);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	for (uint32_t i = renderer->firstTransparentCmd; i < renderer->numCmds; i++)

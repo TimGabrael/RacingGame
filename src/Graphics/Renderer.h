@@ -275,6 +275,7 @@ void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint3
 void RE_RenderGeometry(struct Renderer* renderer);
 
 void RE_RenderOpaque(struct Renderer* renderer);
+void RE_RenderAdditionalOpaque(struct Renderer* renderer);	// renders additional lights ontop of first render opaque
 void RE_RenderTransparent(struct Renderer* renderer);
 
 

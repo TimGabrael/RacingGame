@@ -47,13 +47,13 @@ GameManager* GM_CreateGameManager(GameState* state)
 	//spot->light.direction = { 0.0f, -1.0f, 0.0f };
 	//spot->light.cutOff = M_PI_4;
 	//spot->light.pos = { 0.0f, 30.0f, 0.0f };
-	//
+	
 	//PointLight* point = RELI_AddPointLight(out->defaultLightGroup);
 	//point->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->pos = { 0.0f, 30.0f, 0.0f, 0.0f };
-
+	
 	//PointShadowLight* point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
-	//point->light.color = { 3.0f, 3.0f, 3.0f, 1.0f };
+	//point->light.color = { 3.0f, 6.0f, 3.0f, 1.0f };
 	//point->light.pos = { 0.0f, 30.0f, 0.0f, 0.0f };
 
 	//point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
@@ -138,7 +138,8 @@ void GameManager::RenderCallback(GameState* state)
 	//debugLines.clear();
 	//PH_GetPhysicsVertices(state->physics, debugLines);
 	//UpdateModelFromVertices(&debugModel, debugLines.data(), debugLines.size());
-
+	
+	RELI_Update(defaultLightGroup, &localPlayer->camera.base);
 
 	static float updatetimer = 0.0f;
 	UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
@@ -176,6 +177,7 @@ void GameManager::RenderCallback(GameState* state)
 		
 		RE_RenderOpaque(state->renderer);
 		
+		
 		if (hitObj)
 		{
 			RE_RenderOutline(state->renderer, hitObj, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
@@ -203,11 +205,21 @@ void GameManager::RenderCallback(GameState* state)
 	RE_RenderPostProcessingBloom(state->renderer, &PPbuffer,
 		AAbuffer.intermediateTexture, AAbuffer.width, AAbuffer.height,
 		0, state->winWidth, state->winHeight);
+
+	LOG("HIER\n");
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	ImGui::ShowDemoWindow(nullptr);
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	LOG("END\n");
 }
 
 void GameManager::Update(float dt)
 {
-	RELI_Update(defaultLightGroup, &localPlayer->camera.base);
+	
 }
 
 void GameManager::OnWindowPositionChanged(int x, int y)
