@@ -3944,25 +3944,13 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
 
-	glUseProgram(renderer->pbrData.baseProgram);
+	glUseProgram(renderer->pbrData.geomProgram);
 
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->prefilteredMap);
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->irradianceMap);
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
-	glBindTexture(GL_TEXTURE_2D, renderer->pbrData.brdfLut);
 
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SHADOW_MAP);
-	if (renderer->currentLightData->shadowGroup.texture) glBindTexture(GL_TEXTURE_2D, renderer->currentLightData->shadowGroup.texture);
-	else glBindTexture(GL_TEXTURE_2D, renderer->whiteTexture);
+	glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
+	glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
+	glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
 
-	glUniform3fv(renderer->pbrData.baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->pbrData.baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->pbrData.baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
-
-	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
-	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
 
 	glBindVertexArray(obj->model->vao);
 	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
@@ -3977,16 +3965,16 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 			if (obj->anim && curNode->skinIndex < obj->anim->numSkins)
 			{
 				transform = obj->transform * obj->model->baseTransform * obj->anim->data[curNode->skinIndex].baseTransform;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->anim->data[curNode->skinIndex].skinUniform);
+				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[curNode->skinIndex].skinUniform);
 			}
 			else
 			{
 				transform = obj->transform * obj->model->baseTransform * curNode->defMatrix;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
+				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 			}
-			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
+			glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
 
-			BindMaterial(renderer, prim->material);
+			BindMaterialGeometry(renderer, prim->material);
 			GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
 			if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 			{
@@ -3999,10 +3987,8 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 		}
 	}
 
-	glEnable(GL_DEPTH_TEST);
 	glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
 	glStencilMask(0x00);
-	glDepthMask(GL_FALSE);
 	
 	glUseProgram(renderer->pbrData.outlineProgram);
 	
