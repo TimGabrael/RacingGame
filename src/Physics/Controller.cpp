@@ -93,7 +93,6 @@ void FreecamFPSController::SetCamera(struct PerspectiveCamera* cam)
 {
 	cam->base.pos = pos;
 	CA_UpdatePerspectiveCamera(cam, forwardDir);
-	
 }
 void FreecamFPSController::HandleMouseMovement(int dx, int dy)
 {

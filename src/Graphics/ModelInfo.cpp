@@ -149,15 +149,16 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 	if (model->numAnimations <= animIdx) { LOG("WARNING TRYING TO UPDATE INVALID ANIMATION\n"); return; }
 	if (model->numSkins <= skinIdx) { LOG("WARNING TRYING TO UPDATE ANIMATION OF INVALID SKIN\n"); return; }
 	if (animInstance->numSkins <= skinIdx) { LOG("WARNING TRYING TO UPDATE ANIMATION INSTANCE WITH MISMATCHING ANIMATION INFO\n"); return; }
-	
+
 	Animation& anim = model->animations[animIdx];
+	
 	Skin& skin = model->skins[skinIdx];
 	bool updated = false;
 	for (uint32_t i = 0; i < anim.numChannels; i++) 
 	{
 		AnimationChannel& channel = anim.channels[i];
 		AnimationSampler& sampler = anim.samplers[channel.samplerIdx];
-
+		
 		for (uint32_t j = 0; j < sampler.numInOut - 1; j++) 
 		{
 			if ((time >= sampler.inputs[j]) && (time <= sampler.inputs[j + 1]))

@@ -1,9 +1,37 @@
 #pragma once
 #include "GLIncludes.h"
 #include "Camera.h"
+#include "ModelInfo.h"
 #define MAX_NUM_JOINTS 128
 #define MAX_NUM_LIGHTS 20
 #define MAX_BLOOM_MIPMAPS 8
+
+struct SceneRenderData
+{
+	const CameraBase* cam;
+	const struct EnvironmentData* env;
+	GLuint lightGroupUniform;
+	GLuint shadowMapTexture;
+};
+
+struct RenderCommand
+{
+	virtual void DrawGeom() = 0;
+	virtual void DrawOpaque() = 0;
+	virtual void DrawTransparent() = 0;
+	virtual void DrawSSR() = 0;
+	virtual const AABB& GetBound() = 0;
+	virtual uint32_t GetSize() = 0;
+	virtual float GetZDepth() = 0;
+	virtual void SetZDepth(float zDepth) = 0;
+};
+
+struct Renderable
+{
+	virtual void FillRenderCommands(RenderCommand** cmdList) = 0;
+	virtual uint32_t GetNumRenderCommands() = 0;
+	virtual const AABB& GetBound() = 0;
+};
 
 struct EnvironmentData
 {

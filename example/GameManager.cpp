@@ -119,6 +119,7 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		player->controller.yaw = yaw;
 		player->controller.pitch = pitch;
 		player->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
+		player->controller.rightDir = CA_GetRight(player->controller.forwardDir);
 		game->localPlayer = player;
 	}
 	game->localPlayer->controller.velocity = 20.0f;
@@ -154,7 +155,6 @@ void GameManager::RenderCallback(GameState* state)
 
 		SceneObject* hitObj = SC_Raycast(state->scene, mouseWorldPos, mouseDir, 1000.0f);
 
-
 		uint32_t numSceneObjects = 0;
 		SceneObject** objs = SC_GetAllSceneObjects(state->scene, &numSceneObjects);
 
@@ -176,7 +176,7 @@ void GameManager::RenderCallback(GameState* state)
 		RE_RenderCubeMap(state->renderer, env.environmentMap);
 		
 		RE_RenderOpaque(state->renderer);
-
+		
 		if (hitObj)
 		{
 			RE_RenderOutline(state->renderer, hitObj, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
