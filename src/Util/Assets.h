@@ -34,6 +34,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags);
 struct Texture* AM_AddTexture(AssetManager* m, const char* file);
 struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const char* top, const char* bottom, const char* left, const char* right, const char* front, const char* back);
 
+void AM_DeleteModel(struct Model* model);
 
 
 void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName);

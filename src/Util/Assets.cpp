@@ -1211,6 +1211,88 @@ struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const ch
 
 
 
+
+
+
+
+
+void AM_DeleteModel(struct Model* model)
+{
+	if (model->animations) delete[] model->animations;
+	if (model->indexBuffer) glDeleteBuffers(1, &model->indexBuffer);
+	if (model->joints)
+	{
+		for (uint32_t i = 0; i < model->numJoints; i++)
+		{
+			if (model->joints[i].children)
+			{
+				delete[] model->joints[i].children;
+				model->joints[i].children = nullptr;
+			}
+		}
+		delete[] model->joints;
+	}
+	if (model->nodes) delete[] model->nodes;
+	if (model->materials) delete[] model->materials;
+	if (model->meshes)
+	{
+		for (uint32_t i = 0; i < model->numMeshes; i++)
+		{
+			if(model->meshes[i].primitives) delete[] model->meshes[i].primitives;
+			model->meshes[i].primitives = nullptr;
+		}
+		delete[] model->meshes;
+	}
+	if (model->skins)
+	{
+		for (uint32_t i = 0; i < model->numSkins; i++)
+		{
+			if(model->skins[i].joints) delete[] model->skins[i].joints;
+			model->skins[i].joints = nullptr;
+			if (model->skins[i].inverseBindMatrices) delete[] model->skins[i].inverseBindMatrices;
+			model->skins[i].inverseBindMatrices = nullptr;
+		}
+		delete[] model->skins;
+	}
+
+	// MAYBE EACH MODEL SHOULD DELETE THEIR TEXTURES, BUT FOR NOW THE ASSET MANAGER KEEPS THEM
+	if (model->textures)
+	{
+		delete[] model->textures;
+	}
+
+	if(model->vao) glDeleteVertexArrays(1, &model->vao);
+	if(model->vertexBuffer) glDeleteBuffers(1, &model->vertexBuffer);
+
+	model->vao = 0;
+	model->vertexBuffer = 0;
+	model->indexBuffer = 0;
+	model->textures = nullptr;
+	model->meshes = nullptr;
+	model->skins = nullptr;
+	model->joints = nullptr;
+	model->nodes = nullptr;
+	model->materials = nullptr;
+	model->animations = nullptr;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 struct EnvironmentFileHeader
 {
 	uint8_t numMipMaps;
