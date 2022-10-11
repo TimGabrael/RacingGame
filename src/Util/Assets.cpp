@@ -1439,18 +1439,38 @@ bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName)
 
 	glGenTextures(1, &env->irradianceMap);
 	glGenTextures(1, &env->prefilteredMap);
+	
+	
+	glBindTexture(GL_TEXTURE_CUBE_MAP, env->prefilteredMap);
+
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
 	for (int i = 0; i < env->mipLevels; i++)
 	{
 		uint32_t cw = glm::max(header->width >> i, 1);
 		uint32_t ch = glm::max(header->height >> i, 1);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, env->prefilteredMap);
+
 		for (unsigned int j = 0; j < 6; j++)
 		{
 			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, i, GL_RGBA, cw, ch, 0, GL_RGBA, GL_UNSIGNED_BYTE, curData);
 			curData += 4 * cw * ch;
 		}
 	}
+
+
+
 	glBindTexture(GL_TEXTURE_CUBE_MAP, env->irradianceMap);
+
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
 	for (unsigned int j = 0; j < 6; j++)
 	{
 		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, GL_RGBA, header->irrWidth, header->irrHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, curData);

@@ -17,7 +17,6 @@ struct Scene
 	uint32_t numStaticObjects;
 	uint32_t numDynamicObjects;
 	PhysicsScene* physics;
-
 	SceneObject** cachedList;
 	uint32_t cachedListCapacity;
 	bool needRebuild;
@@ -167,10 +166,12 @@ SceneObject* SC_AddStaticObject(struct Scene* scene, const SceneObject* obj)
 	out->flags |= SCENE_OBJECT_FLAG_VISIBLE;
 	scene->needRebuild = true;
 	if (out->rigidBody) PH_SetRigidBodyUserData(out->rigidBody, out);
+	if (out->model) CreateRenderableFromModel(out->model, out->anim, out->transform, &out->renderable);
 	return out;
 }
 void SC_RemoveStaticObject(struct Scene* scene, SceneObject* obj)
 {
+	CleanUpRenderable(&obj->renderable);
 	FreeObjectFromList(&scene->staticObjects, obj);
 	scene->numStaticObjects = scene->numStaticObjects - 1;
 	scene->needRebuild = true;
@@ -184,10 +185,12 @@ SceneObject* SC_AddDynamicObject(struct Scene* scene, const SceneObject* obj)
 	out->flags |= SCENE_OBJECT_FLAG_DYNAMIC | SCENE_OBJECT_FLAG_VISIBLE;
 	scene->needRebuild = true;
 	if (out->rigidBody) PH_SetRigidBodyUserData(out->rigidBody, out);
+	if (out->model) CreateRenderableFromModel(out->model, out->anim, out->transform, &out->renderable);
 	return out;
 }
 void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj)
 {
+	CleanUpRenderable(&obj->renderable);
 	FreeObjectFromList(&scene->dynamicObjects, obj);
 	scene->numDynamicObjects = scene->numDynamicObjects - 1;
 	scene->needRebuild = true;
@@ -258,6 +261,22 @@ void SC_Update(struct Scene* scene, float dt)
 	}
 	// rebuild in case any objects were created in the entity update function
 	SC_GetAllSceneObjects(scene, &num);
+}
+void SC_PrepareRender(struct Scene* scene)
+{
+	uint32_t num = 0;
+	SceneObject** obj = SC_GetAllSceneObjects(scene, &num);
+	for (int i = 0; i < num; i++)
+	{
+		if (obj[i]->rigidBody)
+		{
+			PH_SetTransformation(obj[i]->rigidBody, obj[i]->transform);
+		}
+		if (obj[i]->model)
+		{
+			UpdateRenderableFromModel(obj[i]->model, obj[i]->anim, obj[i]->transform, &obj[i]->renderable);
+		}
+	}
 }
 
 SceneObject* SC_Raycast(struct Scene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance)

@@ -261,15 +261,7 @@ void UpateGameState()
 		
 		if (g_gameState->winWidth > 0 && g_gameState->winHeight > 0)
 		{
-			uint32_t num = 0;
-			SceneObject** obj = SC_GetAllSceneObjects(g_gameState->scene, &num);
-			for (int i = 0; i < num; i++)
-			{
-				if (obj[i]->rigidBody)
-				{
-					PH_SetTransformation(obj[i]->rigidBody, obj[i]->transform);
-				}
-			}
+			SC_PrepareRender(g_gameState->scene);
 
 
 			glEnable(GL_DEPTH_TEST);

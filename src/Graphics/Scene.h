@@ -1,7 +1,7 @@
 #pragma once
 #include "GLIncludes.h"
 #include "../Util/Math.h"
-
+#include "Renderer.h"
 
 enum SCENE_OBJECT_FLAG
 {
@@ -19,10 +19,10 @@ struct Entity
 struct SceneObject
 {
 	struct Model* model;
-	struct Material* material;
 	struct Entity* entity;
 	struct RigidBody* rigidBody;
 	struct AnimationInstanceData* anim;
+	Renderable renderable;
 	glm::mat4 transform;
 	uint32_t flags;
 };
@@ -45,6 +45,7 @@ void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj);
 SceneObject** SC_GetAllSceneObjects(struct Scene* scene, uint32_t* num);
 
 void SC_Update(struct Scene* scene, float dt);
+void SC_PrepareRender(struct Scene* scene);
 
 
 SceneObject* SC_Raycast(struct Scene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance);

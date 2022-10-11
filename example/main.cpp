@@ -8,6 +8,7 @@
 
 
 
+
 int main()
 {
 
@@ -35,12 +36,12 @@ int main()
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 	SceneObject base;
 	base.entity = nullptr;
-	base.material = nullptr;
 	base.anim = nullptr;
 	base.model = manager->sponzaModel;
 	base.rigidBody = PH_AddStaticRigidBody(game->physics, sponzaShape, glm::vec3(0.0f), def);
 	base.transform = glm::mat4(1.0f);
 	SC_AddStaticObject(game->scene, &base);
+
 
 	base.rigidBody = nullptr;
 	base.model = &manager->debugModel;

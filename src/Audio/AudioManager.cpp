@@ -177,6 +177,7 @@ struct AudioManager* AU_CreateAudioManager()
 	memset(&out->stored, 0, sizeof(AudioFileList));
 
 	out->nfdriver->setPlaying(true);
+	return out;
 }
 void AU_ShutdownAudioManager(struct AudioManager* manager)
 {

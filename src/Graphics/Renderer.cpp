@@ -1255,8 +1255,32 @@ void main(void)\n\
 
 
 
-
-
+uint32_t Renderable::FillRenderCommandsOpaque(RenderCommand** cmdList)
+{
+	uint32_t addedCount = 0;
+	for (uint32_t i = 0; i < this->numCmds; i++)
+	{
+		if (!cmds->IsTransparent())
+		{
+			cmdList[i] = (RenderCommand*)((uintptr_t)cmds + cmds->GetSize() * i);
+			addedCount++;
+		}
+	}
+	return addedCount;
+}
+uint32_t Renderable::FillRenderCommandsTransparent(RenderCommand** cmdList)
+{
+	uint32_t addedCount = 0;
+	for (uint32_t i = 0; i < this->numCmds; i++)
+	{
+		if (cmds->IsTransparent())
+		{
+			cmdList[i] = (RenderCommand*)((uintptr_t)cmds + cmds->GetSize() * i);
+			addedCount++;
+		}
+	}
+	return addedCount;
+}
 
 
 
@@ -1470,6 +1494,17 @@ struct BaseProgramUniforms
 	GLuint prefilteredCubeMipLevelsLoc;
 	GLuint scaleIBLAmbientLoc;
 	GLuint lightDataLoc;
+	struct BoundData
+	{
+		GLuint bBone = 0;
+		GLuint bMaterial = 0;
+		GLuint bPrefilter = 0;
+		GLuint bIrradiance = 0;
+		GLuint bBrdfLut = 0;
+		GLuint bShadow = 0;
+		GLuint bLight = 0;
+		Material* bMat = nullptr;
+	}bound;
 };
 struct BaseGeometryProgramUniforms
 {
@@ -1479,6 +1514,12 @@ struct BaseGeometryProgramUniforms
 	GLuint camPosLoc;
 	GLuint boneDataLoc;
 	GLuint materialDataLoc;
+	struct BoundData
+	{
+		GLuint bBone = 0;
+		GLuint bMaterial = 0;
+		Material* bMat = nullptr;
+	}bound;
 };
 struct BaseSSRProgramUniforms
 {
@@ -1488,6 +1529,12 @@ struct BaseSSRProgramUniforms
 	GLuint camPosLoc;
 	GLuint boneDataLoc;
 	GLuint materialDataLoc;
+	struct BoundData
+	{
+		GLuint bBone = 0;
+		GLuint bMaterial = 0;
+		Material* bMat = nullptr;
+	}bound;
 };
 struct BaseOutlineProgramUniforms
 {
@@ -1498,6 +1545,10 @@ struct BaseOutlineProgramUniforms
 	GLuint boneDataLoc;
 	GLuint thicknessLoc;
 	GLuint colorLoc;
+	struct BoundData
+	{
+		GLuint bBone = 0;
+	}bound;
 };
 
 enum BASE_SHADER_TEXTURE
@@ -1695,18 +1746,13 @@ struct LightGroup
 	GLuint uniform;
 };
 
-struct RenderDrawCommand
+
+struct RendererBindInfo
 {
-	GLuint vao;
-	GLuint indexBuffer;
-	GLuint animUniform;
-	uint32_t startIdx;
-	uint32_t numIdx;
-	uint32_t flags;
-	float zDepth;
-	AABB bound;
-	glm::mat4 transform;
-	Material* material;
+	GLuint curProgram;
+	GLuint curBoundVao;
+	GLuint curBoundIbo;
+
 };
 
 struct Renderer
@@ -1725,7 +1771,9 @@ struct Renderer
 	uint32_t cmdlistCapacity;
 	uint32_t numCmds;
 	uint32_t firstTransparentCmd;
-	RenderDrawCommand* drawCmds;
+	RenderCommand** drawCmds;
+
+	RendererBindInfo bindInfo;
 };
 
 
@@ -1890,6 +1938,8 @@ static void CheckShadowGroupAndDeleteIfEmpty(LightGroup* g)
 
 static void BindMaterial(Renderer* r, Material* mat)
 {
+	if (r->pbrData.baseUniforms.bound.bMat == mat) return;
+	r->pbrData.baseUniforms.bound.bMat = mat;
 	if (mat)
 	{
 		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.baseUniforms.materialDataLoc, mat->uniform);
@@ -1927,6 +1977,8 @@ static void BindMaterial(Renderer* r, Material* mat)
 }
 static void BindMaterialGeometry(Renderer* r, Material* mat)
 {
+	if (r->pbrData.geomUniforms.bound.bMat == mat) return;
+	r->pbrData.geomUniforms.bound.bMat = mat;
 	if (mat)
 	{
 		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.geomUniforms.materialDataLoc, mat->uniform);
@@ -1943,6 +1995,8 @@ static void BindMaterialGeometry(Renderer* r, Material* mat)
 }
 static void BindMaterialSSR(Renderer* r, Material* mat)
 {
+	if (r->pbrData.ssrUniforms.bound.bMat == mat) return;
+	r->pbrData.ssrUniforms.bound.bMat = mat;
 	if (mat)
 	{
 		glBindBufferBase(GL_UNIFORM_BUFFER, r->pbrData.ssrUniforms.materialDataLoc, mat->uniform);
@@ -3329,168 +3383,58 @@ static AABB GenerateAABB(const glm::mat4& invViewProj)
 
 void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num)
 {
+	renderer->bindInfo.curBoundIbo = 0;
+	renderer->bindInfo.curBoundVao = 0;
+	renderer->bindInfo.curProgram = 0;
+
+	renderer->pbrData.geomUniforms.bound.bBone = 0;
+	renderer->pbrData.geomUniforms.bound.bMaterial = 0;
+	renderer->pbrData.geomUniforms.bound.bMat = 0;
+
+	memset(&renderer->pbrData.baseUniforms.bound, 0, sizeof(renderer->pbrData.baseUniforms.bound));
+
 	uint32_t numCommands = 0;
 	for (uint32_t i = 0; i < num; i++)
 	{
 		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
 		{
-			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
-			{
-				for (uint32_t k = 0; k < objList[i]->model->nodes[j]->mesh->numPrimitives; k++)
-				{
-					if (!(objList[i]->model->nodes[j]->mesh->primitives[k].flags & PRIMITIVE_FLAG_UNSUPPORTED))
-					{
-						numCommands++;
-					}
-				}
-			}
+			numCommands += objList[i]->renderable.numCmds;
 		}
 	}
 	if (renderer->cmdlistCapacity <= numCommands)
 	{
 		renderer->cmdlistCapacity = numCommands + 100;
 		if (renderer->drawCmds) delete[] renderer->drawCmds;
-		renderer->drawCmds = new RenderDrawCommand[renderer->cmdlistCapacity];
+		renderer->drawCmds = new RenderCommand*[renderer->cmdlistCapacity];
 	}
 	renderer->numCmds = numCommands;
 	renderer->firstTransparentCmd = 0;
+
+	RenderCommand** curCmdList = renderer->drawCmds;
+	numCommands = 0;
 	// FILL OPAQUE OBJECTS
 	for (uint32_t i = 0; i < num; i++)
 	{
 		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
 		{
-			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
-			{
-				Joint* curNode = objList[i]->model->nodes[j];
-				for (uint32_t k = 0; k < curNode->mesh->numPrimitives; k++)
-				{
-					RenderDrawCommand& cmd = renderer->drawCmds[renderer->firstTransparentCmd];
-
-					Primitive* prim = &curNode->mesh->primitives[k];
-					if (prim->flags & PRIMITIVE_FLAG_UNSUPPORTED) continue;
-
-					if (!(prim->material && prim->material->mode == Material::ALPHA_MODE_BLEND))
-					{
-						cmd.vao = curNode->model->vao;
-						cmd.indexBuffer = curNode->model->indexBuffer;
-						cmd.flags = prim->flags;
-						cmd.material = prim->material;
-						cmd.numIdx = prim->numInd;
-						cmd.startIdx = prim->startIdx;
-
-						if (objList[i]->model->animations && objList[i]->anim)
-						{
-							if (curNode->skinIndex < objList[i]->anim->numSkins)
-							{
-								cmd.transform = objList[i]->transform * objList[i]->model->baseTransform * objList[i]->anim->data[curNode->skinIndex].baseTransform;
-								cmd.animUniform = objList[i]->anim->data[curNode->skinIndex].skinUniform;
-							}
-						}
-						else
-						{
-							cmd.transform = objList[i]->transform * objList[i]->model->baseTransform * curNode->defMatrix;
-						}
-
-
-						glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
-						glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
-						glm::vec4 positions[8] = {
-							cmd.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
-							cmd.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
-						};
-						min = glm::vec3(FLT_MAX);
-						max = glm::vec3(-FLT_MAX);
-						for (int posIdx = 0; posIdx < 8; posIdx++)
-						{
-							positions[posIdx] /= positions[posIdx].w;
-							min = glm::min(min, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
-							max = glm::max(max, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
-						}
-						cmd.bound = { min, max };
-						renderer->firstTransparentCmd++;
-					}
-
-				}
-
-			}
+			uint32_t added = objList[i]->renderable.FillRenderCommandsOpaque(curCmdList);
+			curCmdList += added;
+			numCommands += added;
+			renderer->firstTransparentCmd += added;
 		}
 	}
-
 	uint32_t curOffset = renderer->firstTransparentCmd;
 	// FILL TRANSPARENT OBJECTS
 	for (uint32_t i = 0; i < num; i++)
 	{
 		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
 		{
-			for (uint32_t j = 0; j < objList[i]->model->numNodes; j++)
-			{
-				Joint* curNode = objList[i]->model->nodes[j];
-				for (uint32_t k = 0; k < curNode->mesh->numPrimitives; k++)
-				{
-					RenderDrawCommand& cmd = renderer->drawCmds[curOffset];
-
-					Primitive* prim = &curNode->mesh->primitives[k];
-					if (prim->flags & PRIMITIVE_FLAG_UNSUPPORTED) continue;
-
-
-					if (prim->material && prim->material->mode == Material::ALPHA_MODE_BLEND)
-					{
-						cmd.vao = curNode->model->vao;
-						cmd.indexBuffer = curNode->model->indexBuffer;
-						cmd.flags = prim->flags;
-						cmd.material = prim->material;
-						cmd.numIdx = prim->numInd;
-						cmd.startIdx = prim->startIdx;
-
-						if (objList[i]->model->animations && objList[i]->anim)
-						{
-							if (curNode->skinIndex < objList[i]->anim->numSkins)
-							{
-								cmd.transform = objList[i]->model->baseTransform * objList[i]->anim->data[curNode->skinIndex].baseTransform;
-								cmd.animUniform = objList[i]->anim->data[curNode->skinIndex].skinUniform;
-							}
-						}
-						else
-						{
-							cmd.transform = objList[i]->model->baseTransform * curNode->defMatrix;
-						}
-
-
-						glm::vec3 min = objList[i]->model->nodes[j]->mesh->bound.min;
-						glm::vec3 max = objList[i]->model->nodes[j]->mesh->bound.max;
-						glm::vec4 positions[8] = {
-							cmd.transform * glm::vec4(min.x, min.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, min.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(min.x, max.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, max.y, min.z, 1.0f),
-							cmd.transform * glm::vec4(min.x, min.y, max.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, min.y, max.z, 1.0f),
-							cmd.transform * glm::vec4(min.x, max.y, max.z, 1.0f),
-							cmd.transform * glm::vec4(max.x, max.y, max.z, 1.0f),
-						};
-						min = glm::vec3(FLT_MAX);
-						max = glm::vec3(-FLT_MAX);
-						for (int posIdx = 0; posIdx < 8; posIdx++)
-						{
-							positions[posIdx] /= positions[posIdx].w;
-							min = glm::min(min, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
-							max = glm::max(max, glm::vec3(positions[posIdx].x, positions[posIdx].y, positions[posIdx].z));
-						}
-						cmd.bound = { min, max };
-						curOffset++;
-					}
-
-				}
-
-			}
+			uint32_t added = objList[i]->renderable.FillRenderCommandsTransparent(curCmdList);
+			curCmdList += added;
+			numCommands += added;
 		}
 	}
+	renderer->numCmds = numCommands;
 }
 
 void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBase)
@@ -3509,7 +3453,7 @@ void RE_SetLightData(struct Renderer* renderer, LightGroup* group)
 void RE_RenderShadows(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	LightGroup* g = renderer->currentLightData;
 	if (!g->shadowGroup.fbo) return;
@@ -3517,7 +3461,6 @@ void RE_RenderShadows(struct Renderer* renderer)
 	glEnable(GL_POLYGON_OFFSET_FILL);
 	glPolygonOffset(2.0f, 4.0f);
 
-	glUseProgram(renderer->pbrData.geomProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LESS);
@@ -3526,38 +3469,29 @@ void RE_RenderShadows(struct Renderer* renderer)
 	glBindFramebuffer(GL_FRAMEBUFFER, g->shadowGroup.fbo);
 	glClearDepthf(1.0f);
 	glClear(GL_DEPTH_BUFFER_BIT);
-	{
-		glm::mat4 mat(1.0f);
-		glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&mat);
-	}
+	
+	CameraBase curLightCam;
+	curLightCam.view = glm::mat4(1.0f);
+
+	SceneRenderData data;
+	data.renderer = renderer;
+	data.env = renderer->currentEnvironmentData;
+	data.lightGroupUniform = renderer->currentLightData->uniform;
+	data.cam = &curLightCam;
+	data.shadowMapTexture = 0;
+
+
+
 	static const auto stdRender = [&](const AABB& frustum)
 	{
 		for (uint32_t i = 0; i < renderer->numCmds; i++)
 		{
-			RenderDrawCommand* obj = &renderer->drawCmds[i];
+			RenderCommand* obj = renderer->drawCmds[i];
 			
-			if (AABBOverlapp(frustum, obj->bound))
+			if (AABBOverlapp(frustum, obj->GetBound()))
 			{
-				glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
-				glBindVertexArray(obj->vao);
-				if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
-				
-
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->animUniform);
-
-				BindMaterialGeometry(renderer, obj->material);
-				GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-				if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
-				{
-					glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
-				}
-				else
-				{
-					glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
-				}
-				
+				obj->DrawShadow(&data);
 			}
-			
 		}
 	};
 	for (int i = 0; i < g->numDirLights; i++)
@@ -3568,11 +3502,10 @@ void RE_RenderShadows(struct Renderer* renderer)
 			if (l.light.light.projIdx < 0) continue;
 
 			glViewport(l.map[0].x, l.map[0].y, l.map[0].w, l.map[0].h);
-			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.pos);
-			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
+			curLightCam.pos = l.light.pos;
+			curLightCam.proj = g->shadowGroup.projections[l.light.light.projIdx].proj;
 
 			const glm::mat4 inv = glm::inverse(g->shadowGroup.projections[l.light.light.projIdx].proj);
-
 			stdRender(GenerateAABB(inv));
 		}
 	}
@@ -3582,16 +3515,15 @@ void RE_RenderShadows(struct Renderer* renderer)
 		{
 			const InternalPointLight& l = *g->points[i];
 			if (l.light.light.projIdx < 0) continue;
-			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.light.pos);
+
+			curLightCam.pos = l.light.light.pos;
 
 			for (int j = 0; j < 6; j++)
 			{
 				glViewport(l.map[j].x, l.map[j].y, l.map[j].w, l.map[j].h);
-				
-				glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx + j].proj);
+				curLightCam.proj = g->shadowGroup.projections[l.light.light.projIdx + j].proj;
 
 				const glm::mat4 inv = glm::inverse(g->shadowGroup.projections[l.light.light.projIdx + j].proj);
-
 				stdRender(GenerateAABB(inv));
 			}
 
@@ -3605,11 +3537,10 @@ void RE_RenderShadows(struct Renderer* renderer)
 			if (l.light.light.projIdx < 0) continue;
 
 			glViewport(l.mapped.x, l.mapped.y, l.mapped.w, l.mapped.h);
-			
-			glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&l.light.light.pos);
-			glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&g->shadowGroup.projections[l.light.light.projIdx].proj);
-			const glm::mat4 inv = glm::inverse(g->shadowGroup.projections[l.light.light.projIdx].proj);
+			curLightCam.pos = l.light.light.pos;
+			curLightCam.proj = g->shadowGroup.projections[l.light.light.projIdx].proj;
 
+			const glm::mat4 inv = glm::inverse(g->shadowGroup.projections[l.light.light.projIdx].proj);
 			stdRender(GenerateAABB(inv));
 		}
 	}
@@ -3707,112 +3638,65 @@ void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint3
 void RE_RenderGeometry(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
 	if (renderer->numCmds == 0) return;
 
 	
-	glUseProgram(renderer->pbrData.geomProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_TRUE);
 
 
-	glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
-
 	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
+	SceneRenderData data;
+	data.renderer = renderer;
+	data.env = renderer->currentEnvironmentData;
+	data.lightGroupUniform = 0;
+	data.cam = renderer->currentCam;
+	data.shadowMapTexture = 0;
 
 	for (uint32_t i = 0; i < renderer->firstTransparentCmd; i++)
 	{
-		RenderDrawCommand* obj = &renderer->drawCmds[i];
+		RenderCommand* cmd = renderer->drawCmds[i];
 		
-		if (AABBOverlapp(frustum, obj->bound))
+		if (AABBOverlapp(frustum, cmd->GetBound()))
 		{
-			glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
-			glBindVertexArray(obj->vao);
-			if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
-			
-			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->animUniform);
-			
-			BindMaterialGeometry(renderer, obj->material);
-			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
-			{
-				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
-			}
-			else
-			{
-				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
-			}
-			
+			cmd->DrawGeom(&data);
 		}
-		
 	}
 }
 
 void RE_RenderOpaque(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numCmds == 0) return;
 	
-	glUseProgram(renderer->pbrData.baseProgram);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_TRUE);
-
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->prefilteredMap);
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, renderer->currentEnvironmentData->irradianceMap);
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
-	glBindTexture(GL_TEXTURE_2D, renderer->pbrData.brdfLut);
-
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SHADOW_MAP);
-	if (renderer->currentLightData->shadowGroup.texture) glBindTexture(GL_TEXTURE_2D, renderer->currentLightData->shadowGroup.texture);
-	else glBindTexture(GL_TEXTURE_2D, renderer->whiteTexture);
-
-	glUniform3fv(renderer->pbrData.baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->pbrData.baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->pbrData.baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
-
-	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
-	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
-
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
 	
+	SceneRenderData data;
+	data.renderer = renderer;
+	data.env = renderer->currentEnvironmentData;
+	data.lightGroupUniform = renderer->currentLightData->uniform;
+	data.cam = renderer->currentCam;
+	data.shadowMapTexture = renderer->currentLightData->shadowGroup.texture;
+
 	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
 	for (uint32_t i = 0; i < renderer->firstTransparentCmd; i++)
 	{
-		RenderDrawCommand* obj = &renderer->drawCmds[i];
+		RenderCommand* cmd = renderer->drawCmds[i];
 
-		if (AABBOverlapp(frustum, obj->bound))
+		if (AABBOverlapp(frustum, cmd->GetBound()))
 		{
-			glBindVertexArray(obj->vao);
-			if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
-			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
-			
-
-			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->animUniform);
-			
-			BindMaterial(renderer, obj->material);
-			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
-			{
-				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
-			}
-			else
-			{
-				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
-			}
+			cmd->DrawOpaque(&data);
 		}
 		
 	}
@@ -3822,7 +3706,7 @@ void RE_RenderOpaque(struct Renderer* renderer)
 void RE_RenderTransparent(struct Renderer* renderer)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numCmds == renderer->firstTransparentCmd) return;
@@ -3833,8 +3717,8 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	// FILL OBJECTS DISTANCE FROM CAMERA
 	for (uint32_t i = renderer->firstTransparentCmd; i < renderer->numCmds; i++)
 	{
-		const glm::vec3& min = renderer->drawCmds[i].bound.min;
-		const glm::vec3& max = renderer->drawCmds[i].bound.max;
+		const glm::vec3& min = renderer->drawCmds[i]->GetBound().min;
+		const glm::vec3& max = renderer->drawCmds[i]->GetBound().max;
 		glm::vec4 positions[8] = {
 			renderer->currentCam->view * glm::vec4(min.x, min.y, min.z, 1.0f),
 			renderer->currentCam->view * glm::vec4(max.x, min.y, min.z, 1.0f),
@@ -3845,23 +3729,29 @@ void RE_RenderTransparent(struct Renderer* renderer)
 			renderer->currentCam->view * glm::vec4(min.x, max.y, max.z, 1.0f),
 			renderer->currentCam->view * glm::vec4(max.x, max.y, max.z, 1.0f),
 		};
-		renderer->drawCmds[i].zDepth = FLT_MAX;
+		float zDepth = FLT_MAX;
 		for (uint32_t j = 0; j < 8; j++)
 		{
 			positions[j] /= positions[j].w;
-			renderer->drawCmds[i].zDepth = glm::min(renderer->drawCmds[i].zDepth, positions[j].z);
+			zDepth = glm::min(zDepth, positions[j].z);
 		}
+		renderer->drawCmds[i]->SetZDepth(zDepth);
 	}
 
 	// SORT TRANSPARENT OBJECTS
-	std::sort(&renderer->drawCmds[renderer->firstTransparentCmd], &renderer->drawCmds[renderer->numCmds], [](RenderDrawCommand& d1, RenderDrawCommand& d2)
+	std::sort(&renderer->drawCmds[renderer->firstTransparentCmd], &renderer->drawCmds[renderer->numCmds], [](RenderCommand* d1, RenderCommand* d2)
 	{
-			return d2.zDepth > d1.zDepth;
+			return d2->GetZDepth() > d1->GetZDepth();
 	});
 
 	const AABB frustum = GenerateAABB(invViewProj);
 
-	glUseProgram(renderer->pbrData.baseProgram);
+	SceneRenderData data;
+	data.renderer = renderer;
+	data.env = renderer->currentEnvironmentData;
+	data.lightGroupUniform = renderer->currentLightData->uniform;
+	data.cam = renderer->currentCam;
+	data.shadowMapTexture = renderer->currentLightData->shadowGroup.texture;
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_FALSE);
@@ -3869,49 +3759,15 @@ void RE_RenderTransparent(struct Renderer* renderer)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
-	glBindTexture(GL_TEXTURE_2D, renderer->currentEnvironmentData->environmentMap);
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
-	glBindTexture(GL_TEXTURE_2D, renderer->currentEnvironmentData->irradianceMap);
-	glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
-	glBindTexture(GL_TEXTURE_2D, renderer->pbrData.brdfLut);
-
-
-	glUniform3fv(renderer->pbrData.baseUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->pbrData.baseUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->pbrData.baseUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
-
-	glUniform1f(renderer->pbrData.baseUniforms.prefilteredCubeMipLevelsLoc, renderer->currentEnvironmentData->mipLevels);
-	glUniform1f(renderer->pbrData.baseUniforms.scaleIBLAmbientLoc, 1.0f);
-
-	glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.lightDataLoc, renderer->currentLightData->uniform);
-
 	for (uint32_t i = renderer->firstTransparentCmd; i < renderer->numCmds; i++)
 	{
-		RenderDrawCommand* obj = &renderer->drawCmds[i];
+		RenderCommand* cmd = renderer->drawCmds[i];
 		
-		if (AABBOverlapp(frustum, obj->bound))
+		if (AABBOverlapp(frustum, cmd->GetBound()))
 		{
-			glBindVertexArray(obj->vao);
-			if (obj->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
-			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, obj->animUniform);
-			glUniformMatrix4fv(renderer->pbrData.baseUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
-
-			BindMaterial(renderer, obj->material);
-			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
-			{
-				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
-			}
-			else
-			{
-				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
-			}
-			
+			cmd->DrawTransparent(&data);
 		}
-		
 	}
-
 
 }
 
@@ -3921,7 +3777,7 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
-	if (!obj->model) return;
+	if (!obj->model || obj->renderable.numCmds == 0) return;
 	glm::mat4 transform;
 
 	glEnable(GL_STENCIL_TEST);
@@ -3938,54 +3794,25 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
 
-	glUseProgram(renderer->pbrData.geomProgram);
+	SceneRenderData data;
+	data.renderer = renderer;
+	data.env = renderer->currentEnvironmentData;
+	data.lightGroupUniform = renderer->currentLightData->uniform;
+	data.cam = renderer->currentCam;
+	data.shadowMapTexture = renderer->currentLightData->shadowGroup.texture;
 
-
-	glUniform3fv(renderer->pbrData.geomUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->pbrData.geomUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->pbrData.geomUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
-
-
-	glBindVertexArray(obj->model->vao);
-	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-
-	for (uint32_t nodeIdx = 0; nodeIdx < obj->model->numNodes; nodeIdx++)
+	for (uint32_t i = 0; i < obj->renderable.numCmds; i++)
 	{
-		Joint* curNode = obj->model->nodes[nodeIdx];
-		// JUST RENDER THE OBJECT AGAIN ONTOP
-		for (uint32_t i = 0; i < curNode->mesh->numPrimitives; i++)
-		{
-			Primitive* prim = &curNode->mesh->primitives[i];
-			if (obj->anim && curNode->skinIndex < obj->anim->numSkins)
-			{
-				transform = obj->transform * obj->model->baseTransform * obj->anim->data[curNode->skinIndex].baseTransform;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, obj->anim->data[curNode->skinIndex].skinUniform);
-			}
-			else
-			{
-				transform = obj->transform * obj->model->baseTransform * curNode->defMatrix;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.geomUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-			}
-			glUniformMatrix4fv(renderer->pbrData.geomUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
-
-			BindMaterialGeometry(renderer, prim->material);
-			GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
-			{
-				glDrawArrays(renderMode, prim->startIdx, prim->numInd);
-			}
-			else
-			{
-				glDrawElements(renderMode, prim->numInd, GL_UNSIGNED_INT, (void*)(prim->startIdx * sizeof(uint32_t)));
-			}
-		}
+		RenderCommand* cmd = (RenderCommand*)((uintptr_t)obj->renderable.cmds + obj->renderable.cmds->GetSize() * i);
+		cmd->DrawGeom(&data);
 	}
 
 	glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
 	glStencilMask(0x00);
 	
 	glUseProgram(renderer->pbrData.outlineProgram);
-	
+	renderer->bindInfo.curProgram = renderer->pbrData.outlineProgram;
+
 	glUniform3fv(renderer->pbrData.outlineUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
 	glUniformMatrix4fv(renderer->pbrData.outlineUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
 	glUniformMatrix4fv(renderer->pbrData.outlineUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
@@ -3996,6 +3823,8 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 	glBindVertexArray(obj->model->vao);
 	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
 	
+
+
 	for (uint32_t nodeIdx = 0; nodeIdx < obj->model->numNodes; nodeIdx++)
 	{
 		Joint* curNode = obj->model->nodes[nodeIdx];
@@ -4090,7 +3919,7 @@ void RE_EndScene(struct Renderer* renderer)
 void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert((renderer->numObjs != 0 && renderer->objList != nullptr) || renderer->numObjs == 0, "Need to Call Begin Scene Before Rendering");
+	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
 	glDisable(GL_BLEND);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
@@ -4101,36 +3930,24 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClearDepthf(1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glUseProgram(renderer->pbrData.ssrProgram);
 
-	glUniform3fv(renderer->pbrData.ssrUniforms.camPosLoc, 1, (const GLfloat*)&renderer->currentCam->pos);
-	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.viewLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->view);
-	glUniformMatrix4fv(renderer->pbrData.ssrUniforms.projLoc, 1, GL_FALSE, (const GLfloat*)&renderer->currentCam->proj);
+	SceneRenderData data;
+	data.renderer = renderer;
+	data.env = renderer->currentEnvironmentData;
+	data.lightGroupUniform = 0;
+	data.cam = renderer->currentCam;
+	data.shadowMapTexture = 0;
+
 
 	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
 
 	for (uint32_t i = 0; i < renderer->numCmds; i++)
 	{
-		RenderDrawCommand* obj = &renderer->drawCmds[i];
+		RenderCommand* cmd = renderer->drawCmds[i];
 		
-		if (AABBOverlapp(frustum, obj->bound))
+		if (AABBOverlapp(frustum, cmd->GetBound()))
 		{
-			glBindVertexArray(obj->vao);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->indexBuffer);
-			glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.ssrUniforms.boneDataLoc, obj->animUniform);
-			glUniformMatrix4fv(renderer->pbrData.ssrUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&obj->transform);
-			
-			BindMaterialSSR(renderer, obj->material);
-			GLenum renderMode = (obj->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (obj->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
-			{
-				glDrawArrays(renderMode, obj->startIdx, obj->numIdx);
-			}
-			else
-			{
-				glDrawElements(renderMode, obj->numIdx, GL_UNSIGNED_INT, (void*)(obj->startIdx * sizeof(uint32_t)));
-			}
-			
+			cmd->DrawSSR(&data);
 		}
 		
 	}
@@ -4306,5 +4123,287 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 		glUniform1f(renderer->ppInfo.dualCopy.exposureLoc, ppData->exposure);
 		glUniform1f(renderer->ppInfo.dualCopy.gammaLoc, ppData->gamma);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void PBRRenderCommand::DrawShadow(SceneRenderData* data)
+{
+	if(renderFlags & PBR_RENDER_FLAGS::PBR_RENDER_SHADOW)
+		DrawGeom(data);
+}
+void PBRRenderCommand::DrawGeom(SceneRenderData* data)
+{
+	if (!(renderFlags & PBR_RENDER_GEOMETRY)) return;
+	BaseGeometryProgramUniforms& un = data->renderer->pbrData.geomUniforms;
+	if (data->renderer->bindInfo.curProgram != data->renderer->pbrData.geomProgram) {
+		glUseProgram(data->renderer->pbrData.geomProgram);
+		data->renderer->bindInfo.curProgram = data->renderer->pbrData.geomProgram;
+		data->renderer->bindInfo.curBoundVao = 0;
+		data->renderer->bindInfo.curBoundIbo = 0;
+	}
+	glUniform3fv(un.camPosLoc, 1, (const GLfloat*)&data->cam->pos);
+	glUniformMatrix4fv(un.projLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->proj);
+
+	glUniformMatrix4fv(un.viewLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->view);
+	glUniformMatrix4fv(un.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
+	if (data->renderer->bindInfo.curBoundVao != vao) 
+	{
+		glBindVertexArray(vao);
+		data->renderer->bindInfo.curBoundVao = vao;
+	}
+	if (indexBuffer && data->renderer->bindInfo.curBoundIbo != indexBuffer) 
+	{
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+		data->renderer->bindInfo.curBoundIbo = indexBuffer;
+	}
+	if (animUniform) {
+		if (un.bound.bBone != animUniform)
+		{
+			glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, animUniform);
+			un.bound.bBone = animUniform;
+		}
+	}
+	else if(un.bound.bBone != data->renderer->pbrData.defaultBoneData) 
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, data->renderer->pbrData.defaultBoneData);
+		un.bound.bBone = data->renderer->pbrData.defaultBoneData;
+	}
+
+	BindMaterialGeometry(data->renderer, material);
+	GLenum renderMode = (primFlags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+	if (primFlags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
+	{
+		glDrawArrays(renderMode, startIdx, numIdx);
+	}
+	else
+	{
+		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
+	}
+}
+void PBRRenderCommand::DrawOpaque(SceneRenderData* data)
+{
+	if (!(renderFlags & PBR_RENDER_OPAQUE)) { return; }
+	BaseProgramUniforms& un = data->renderer->pbrData.baseUniforms;
+
+	
+	if (data->renderer->bindInfo.curProgram != data->renderer->pbrData.baseProgram)
+	{
+		glUseProgram(data->renderer->pbrData.baseProgram);
+		data->renderer->bindInfo.curProgram = data->renderer->pbrData.baseProgram;
+		data->renderer->bindInfo.curBoundVao = 0;
+		data->renderer->bindInfo.curBoundIbo = 0;
+	}
+	if (un.bound.bPrefilter != data->env->prefilteredMap)
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, data->env->prefilteredMap);
+		un.bound.bPrefilter = data->env->prefilteredMap;
+	}
+	if (un.bound.bIrradiance != data->env->irradianceMap)
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, data->env->irradianceMap);
+		un.bound.bIrradiance = data->env->irradianceMap;
+	}
+	if (un.bound.bBrdfLut != data->renderer->pbrData.brdfLut)
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
+		glBindTexture(GL_TEXTURE_2D, data->renderer->pbrData.brdfLut);
+		un.bound.bBrdfLut = data->renderer->pbrData.brdfLut;
+	}
+	if (data->shadowMapTexture)
+	{
+		if (un.bound.bShadow != data->shadowMapTexture)
+		{
+			glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SHADOW_MAP);
+			glBindTexture(GL_TEXTURE_2D, data->shadowMapTexture);
+			un.bound.bShadow = data->shadowMapTexture;
+		}
+	}
+	else if(un.bound.bShadow != data->renderer->whiteTexture)
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SHADOW_MAP);
+		glBindTexture(GL_TEXTURE_2D, data->renderer->whiteTexture);
+		un.bound.bShadow = data->renderer->whiteTexture;
+	}
+	glUniform3fv(un.camPosLoc, 1, (const GLfloat*)&data->cam->pos);
+	glUniformMatrix4fv(un.viewLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->view);
+	glUniformMatrix4fv(un.projLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->proj);
+	
+	glUniform1f(un.prefilteredCubeMipLevelsLoc, data->env->mipLevels);
+	glUniform1f(un.scaleIBLAmbientLoc, 1.0f);
+	if (un.bound.bLight != data->lightGroupUniform)
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, un.lightDataLoc, data->lightGroupUniform);
+		un.bound.bLight = data->lightGroupUniform;
+	}
+
+	if (data->renderer->bindInfo.curBoundVao != vao) {
+		glBindVertexArray(vao);
+		data->renderer->bindInfo.curBoundVao = vao;
+	}
+	if (indexBuffer && data->renderer->bindInfo.curBoundIbo != indexBuffer) {
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+		data->renderer->bindInfo.curBoundIbo = indexBuffer;
+	}
+	glUniformMatrix4fv(un.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
+	
+	if (animUniform)
+	{
+		if (un.bound.bBone != animUniform)
+		{
+			glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, animUniform);
+			un.bound.bBone = animUniform;
+		}
+	}
+	else if (un.bound.bBone != data->renderer->pbrData.defaultBoneData)
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, data->renderer->pbrData.defaultBoneData);
+		un.bound.bBone = data->renderer->pbrData.defaultBoneData;
+	}
+	
+	BindMaterial(data->renderer, material);
+	GLenum renderMode = (primFlags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+	if (primFlags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
+	{
+		glDrawArrays(renderMode, startIdx, numIdx);
+	}
+	else
+	{
+		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
+	}
+}
+void PBRRenderCommand::DrawTransparent(SceneRenderData* data)
+{
+	if (!(renderFlags & PBR_RENDER_TRANSPARENT)) return;
+	BaseProgramUniforms& un = data->renderer->pbrData.baseUniforms;
+	if (data->renderer->bindInfo.curProgram != data->renderer->pbrData.baseProgram)
+	{
+		glUseProgram(data->renderer->pbrData.baseProgram);
+		data->renderer->bindInfo.curProgram = data->renderer->pbrData.baseProgram;
+	}
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	if (un.bound.bPrefilter != data->env->prefilteredMap)
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_PREFILTERED_MAP);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, data->env->prefilteredMap);
+		un.bound.bPrefilter = data->env->prefilteredMap;
+	}
+	if (un.bound.bIrradiance != data->env->irradianceMap)
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_SAMPLER_IRRADIANCE);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, data->env->irradianceMap);
+		un.bound.bIrradiance = data->env->irradianceMap;
+	}
+	if (un.bound.bBrdfLut != data->renderer->pbrData.brdfLut)
+	{
+		glActiveTexture(GL_TEXTURE0 + BASE_SHADER_TEXTURE_BRDFLUT);
+		glBindTexture(GL_TEXTURE_2D, data->renderer->pbrData.brdfLut);
+		un.bound.bBrdfLut = data->renderer->pbrData.brdfLut;
+	}
+
+	glUniform3fv(un.camPosLoc, 1, (const GLfloat*)&data->cam->pos);
+	glUniformMatrix4fv(un.projLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->proj);
+
+	glUniformMatrix4fv(un.viewLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->view);
+	glUniformMatrix4fv(un.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
+
+	if (data->renderer->bindInfo.curBoundVao != vao) {
+		glBindVertexArray(vao);
+		data->renderer->bindInfo.curBoundVao = vao;
+	}
+	if (indexBuffer && data->renderer->bindInfo.curBoundIbo != indexBuffer) {
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+		data->renderer->bindInfo.curBoundIbo = indexBuffer;
+	}
+
+	if (animUniform)
+	{
+		if (un.bound.bBone != animUniform)
+		{
+			glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, animUniform);
+			un.bound.bBone = animUniform;
+		}
+	}
+	else if (un.bound.bBone != data->renderer->pbrData.defaultBoneData) {
+		glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, data->renderer->pbrData.defaultBoneData);
+		un.bound.bBone = data->renderer->pbrData.defaultBoneData;
+	}
+
+	BindMaterial(data->renderer, material);
+	GLenum renderMode = (primFlags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+	if (primFlags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
+	{
+		glDrawArrays(renderMode, startIdx, numIdx);
+	}
+	else
+	{
+		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
+	}
+}
+void PBRRenderCommand::DrawSSR(SceneRenderData* data)
+{
+	if (!(renderFlags & PBR_RENDER_SSR)) return;
+	BaseSSRProgramUniforms& un = data->renderer->pbrData.ssrUniforms;
+	if (data->renderer->bindInfo.curProgram != data->renderer->pbrData.ssrProgram)
+	{
+		glUseProgram(data->renderer->pbrData.ssrProgram);
+		data->renderer->bindInfo.curProgram = data->renderer->pbrData.ssrProgram;
+		data->renderer->bindInfo.curBoundVao = 0;
+		data->renderer->bindInfo.curBoundIbo = 0;
+	}
+	glUniform3fv(un.camPosLoc, 1, (const GLfloat*)&data->cam->pos);
+	glUniformMatrix4fv(un.viewLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->view);
+	glUniformMatrix4fv(un.projLoc, 1, GL_FALSE, (const GLfloat*)&data->cam->proj);
+
+	if (data->renderer->bindInfo.curBoundVao != vao) {
+		glBindVertexArray(vao);
+		data->renderer->bindInfo.curBoundVao = vao;
+	}
+	if (indexBuffer && data->renderer->bindInfo.curBoundIbo != indexBuffer) {
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+		data->renderer->bindInfo.curBoundIbo = indexBuffer;
+	}
+	if (animUniform)
+	{
+		if (un.bound.bBone != animUniform)
+		{
+			glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, animUniform);
+			un.bound.bBone = animUniform;
+		}
+	}
+	else if(un.bound.bBone != data->renderer->pbrData.defaultBoneData)
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, data->renderer->pbrData.defaultBoneData);
+		un.bound.bBone = data->renderer->pbrData.defaultBoneData;
+	}
+
+	glUniformMatrix4fv(un.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
+	BindMaterialSSR(data->renderer, material);
+	GLenum renderMode = (primFlags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+	if (primFlags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
+	{
+		glDrawArrays(renderMode, startIdx, numIdx);
+	}
+	else
+	{
+		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
 	}
 }

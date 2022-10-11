@@ -98,7 +98,6 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 	{
 		SceneObject obj;
 		obj.flags = 0;	// for now
-		obj.material = nullptr;
 		obj.model = nullptr;
 		obj.rigidBody = nullptr;
 		Player* player = new Player;
@@ -162,15 +161,15 @@ void GameManager::RenderCallback(GameState* state)
 		RE_SetCameraBase(state->renderer, &localPlayer->camera.base);
 		RE_SetEnvironmentData(state->renderer, &env);
 		RE_SetLightData(state->renderer, defaultLightGroup);
-
+		
 		RE_RenderShadows(state->renderer);
-
+		
 		glBindFramebuffer(GL_FRAMEBUFFER, AAbuffer.fbo);
 		glClearColor(0.2f, 0.2f, 0.6f, 1.0f);
 		glClearDepthf(1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glViewport(0, 0, AAbuffer.width, AAbuffer.height);
-
+		
 		RE_RenderGeometry(state->renderer);
 		
 		RE_RenderCubeMap(state->renderer, env.environmentMap);
@@ -182,6 +181,7 @@ void GameManager::RenderCallback(GameState* state)
 			RE_RenderOutline(state->renderer, hitObj, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
 		}
 		RE_RenderTransparent(state->renderer);
+		RE_EndScene(state->renderer);
 	}
 
 

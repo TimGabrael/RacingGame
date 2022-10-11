@@ -8,6 +8,7 @@
 
 struct SceneRenderData
 {
+	struct Renderer* renderer;
 	const CameraBase* cam;
 	const struct EnvironmentData* env;
 	GLuint lightGroupUniform;
@@ -16,10 +17,14 @@ struct SceneRenderData
 
 struct RenderCommand
 {
-	virtual void DrawGeom() = 0;
-	virtual void DrawOpaque() = 0;
-	virtual void DrawTransparent() = 0;
-	virtual void DrawSSR() = 0;
+	virtual void DrawShadow(SceneRenderData* data) = 0;
+	virtual void DrawGeom(SceneRenderData* data) = 0;
+	virtual void DrawOpaque(SceneRenderData* data) = 0;
+	virtual void DrawTransparent(SceneRenderData* data) = 0;
+	virtual void DrawSSR(SceneRenderData* data) = 0;
+
+	virtual bool IsTransparent() = 0;
+
 	virtual const AABB& GetBound() = 0;
 	virtual uint32_t GetSize() = 0;
 	virtual float GetZDepth() = 0;
@@ -28,10 +33,14 @@ struct RenderCommand
 
 struct Renderable
 {
-	virtual void FillRenderCommands(RenderCommand** cmdList) = 0;
-	virtual uint32_t GetNumRenderCommands() = 0;
-	virtual const AABB& GetBound() = 0;
+	RenderCommand* cmds;
+	uint32_t numCmds;
+	AABB bound;
+	uint32_t FillRenderCommandsOpaque(RenderCommand** cmdList);			// returns num added to list
+	uint32_t FillRenderCommandsTransparent(RenderCommand** cmdList);	// returns num added to list
+
 };
+
 
 struct EnvironmentData
 {
@@ -292,3 +301,51 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 
 
 void RE_EndScene(struct Renderer* renderer);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+struct PBRRenderCommand : public RenderCommand
+{
+	enum PBR_RENDER_FLAGS
+	{
+		PBR_RENDER_SHADOW = 1,
+		PBR_RENDER_GEOMETRY = 2,
+		PBR_RENDER_OPAQUE = 4,
+		PBR_RENDER_TRANSPARENT = 8,
+		PBR_RENDER_SSR = 16,
+	};
+	GLuint vao = 0;
+	GLuint indexBuffer = 0;
+	GLuint animUniform = 0;
+	uint32_t startIdx = 0;
+	uint32_t numIdx = 0;
+	uint32_t primFlags = 0;
+	AABB bound = { };
+	glm::mat4 transform = glm::mat4(1.0f);
+	Material* material = 0;
+	float zDepth = 0;
+	uint32_t renderFlags = 0;
+	virtual void DrawShadow(SceneRenderData* data) override;
+	virtual void DrawGeom(SceneRenderData* data) override;
+	virtual void DrawOpaque(SceneRenderData* data) override;
+	virtual void DrawTransparent(SceneRenderData* data) override;
+	virtual void DrawSSR(SceneRenderData* data) override;
+
+	virtual bool IsTransparent() { return (renderFlags & PBR_RENDER_TRANSPARENT); }
+
+	virtual const AABB& GetBound() { return bound; };
+	virtual uint32_t GetSize() { return sizeof(PBRRenderCommand); };
+	virtual float GetZDepth() { return zDepth; };
+	virtual void SetZDepth(float zDepth) { this->zDepth = zDepth; };
+};
