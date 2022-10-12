@@ -8,7 +8,6 @@
 
 
 
-
 int main()
 {
 
@@ -36,8 +35,7 @@ int main()
 	
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 	SceneObject base;
-	base.entity = nullptr;
-	base.anim = nullptr;
+	memset(&base, 0, sizeof(SceneObject));
 	base.model = manager->sponzaModel;
 	base.rigidBody = PH_AddStaticRigidBody(game->physics, planeShape, glm::vec3(0.0f), def);// PH_AddStaticRigidBody(game->physics, sponzaShape, glm::vec3(0.0f), def);
 	base.transform = glm::mat4(1.0f);
@@ -47,12 +45,12 @@ int main()
 	base.rigidBody = nullptr;
 	base.model = &manager->debugModel;
 	//SC_AddStaticObject(game->scene, &base);
-
-
+	
+	
 	// TEST ANIM INSTANCE DATA
 	memset(&manager->foxAnimInstance, 0, sizeof(AnimationInstanceData));
 	CreateBoneDataFromModel(manager->foxModel, &manager->foxAnimInstance);
-
+	
 
 	base.model = manager->foxModel;
 	base.anim = &manager->foxAnimInstance;

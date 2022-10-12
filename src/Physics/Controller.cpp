@@ -83,7 +83,11 @@ void FreecamFPSController::Update(float dt)
 {
 	GenerateFPSUserInputFromKeys(movement);
 	UpdateFPSUserInput(movement, forwardDir, rightDir, &yaw, &pitch);
-	glm::vec3 vel = GenerateVelocityFromFPSUserInput(movement, forwardDir, rightDir, velocity, sprintModifier);
+	glm::vec3 vel = glm::vec3(0.0f);
+	if (movement.forward != 0.0f || movement.right != 0.0f)
+	{
+		vel = glm::normalize(movement.forward * forwardDir  + movement.right * rightDir) * velocity;
+	}
 	if (movement.jumpDown) vel.y = velocity;
 	if (movement.crouchDown) vel.y -= velocity;
 	if (movement.sprintDown) vel.y *= sprintModifier;

@@ -183,7 +183,6 @@ void GameManager::RenderCallback(GameState* state)
 			RE_RenderOutline(state->renderer, hitObj, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
 		}
 		RE_RenderTransparent(state->renderer);
-		RE_EndScene(state->renderer);
 	}
 
 
@@ -199,22 +198,25 @@ void GameManager::RenderCallback(GameState* state)
 	//	0, state->winWidth, state->winHeight);
 
 	// RENDER SSR
-	//RE_RenderScreenSpaceReflection(state->renderer, &SSRbuffer, AAbuffer.intermediateTexture, 0, state->winWidth, state->winHeight);
+	//RE_RenderScreenSpaceReflection(state->renderer, &SSRbuffer, AAbuffer.intermediateTexture, PPbuffer.intermediateFbo, PPbuffer.width, PPbuffer.height);
+	//RE_RenderPostProcessingToneMap(state->renderer, &PPbuffer, PPbuffer.intermediateTexture, 0, state->winWidth, state->winHeight);
 
 	// RENDER BLOOM
 	RE_RenderPostProcessingBloom(state->renderer, &PPbuffer,
 		AAbuffer.intermediateTexture, AAbuffer.width, AAbuffer.height,
 		0, state->winWidth, state->winHeight);
 
-	LOG("HIER\n");
+	RE_EndScene(state->renderer);
+
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
+	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_::ImGuiDockNodeFlags_PassthruCentralNode);
+
 	ImGui::ShowDemoWindow(nullptr);
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-	LOG("END\n");
 }
 
 void GameManager::Update(float dt)

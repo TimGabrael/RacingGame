@@ -52,7 +52,8 @@ static void MouseButtonCallback(GLFWwindow* window, int button, int action, int 
 {
 	if (g_gameState && g_gameState->manager)
 	{
-		g_gameState->manager->OnMouseButton(button, action, mods);
+		if(!ImGui::GetIO().WantCaptureMouse)
+			g_gameState->manager->OnMouseButton(button, action, mods);
 	}
 }
 static void MousePositionCallback(GLFWwindow* window, double x, double y)
@@ -63,7 +64,10 @@ static void MousePositionCallback(GLFWwindow* window, double x, double y)
 	{
 		double dx = x - g_gameState->mouseX;
 		double dy = g_gameState->mouseY - y;
-		g_gameState->manager->OnMousePositionChanged(x, y, dx, dy);
+
+		if (!ImGui::GetIO().WantCaptureMouse)
+			g_gameState->manager->OnMousePositionChanged(x, y, dx, dy);
+		
 		g_gameState->mouseX = x;
 		g_gameState->mouseY = y;
 	}
@@ -150,9 +154,14 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	ImGui::StyleColorsDark();
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 330");
+	ImGuiStyle& style = ImGui::GetStyle();
+	style.Colors[ImGuiCol_WindowBg].w = 0.4f;
 
 
 	g_gameState->assets = AM_CreateAssetManager();
@@ -201,25 +210,26 @@ void SetFullscreen(GameState* state, int monitorIdx, int* width, int* height)
 	GLFWmonitor** monitors = glfwGetMonitors(&numMonitors);
 	if (numMonitors <= monitorIdx) return;
 
+	const GLFWvidmode* mode = glfwGetVideoMode(monitors[monitorIdx]);
 
 	g_gameState->isFullscreen = true;
 	g_gameState->accumulatedTime = 0.0f;
 	if (width && height)
 	{
-		glfwSetWindowMonitor(state->window, monitors[monitorIdx], 0, 0, *width, *height, 0);
+		glfwSetWindowMonitor(state->window, monitors[monitorIdx], 0, 0, *width, *height, mode->refreshRate);
 	}
 	else
 	{
 		int xPos, yPos, w, h;
 		glfwGetMonitorWorkarea(monitors[monitorIdx], &xPos, &yPos, &w, &h);
-		glfwSetWindowMonitor(state->window, monitors[monitorIdx], xPos, yPos, w, h, 0);
+		glfwSetWindowMonitor(state->window, monitors[monitorIdx], xPos, yPos, w, h, mode->refreshRate);
 	}
 }
 void SetWindowed(GameState* state, int width, int height)
 {
 	g_gameState->isFullscreen = false;
 	g_gameState->accumulatedTime = 0.0f;
-	glfwSetWindowMonitor(state->window, nullptr, 0, 0, width, height, 0);
+	glfwSetWindowMonitor(state->window, nullptr, 0, 32, width, height, 0);
 }
 
 void SetConsumeMouse(bool consume)
@@ -235,10 +245,12 @@ void SetConsumeMouse(bool consume)
 }
 bool GetKey(int key)
 {
+	if (ImGui::GetIO().WantCaptureKeyboard) return false;
 	return glfwGetKey(g_gameState->window, key);
 }
 bool GetMouseButton(int button)
 {
+	if (ImGui::GetIO().WantCaptureMouse) return false;
 	return glfwGetMouseButton(g_gameState->window, button);
 }
 

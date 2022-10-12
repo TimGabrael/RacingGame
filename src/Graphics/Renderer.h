@@ -295,8 +295,12 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 // THIS DOESN'T REALLY WORK, BUT MAYBE THE UNIFORM DATA NEEDS TO BE CONFIGURED BETTER
 void RE_RenderScreenSpaceAmbientOcclusion_Experimental(struct Renderer* renderer, GLuint srcColorTexture, GLuint srcDepthTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
 
+
+// TONEMAPS DIRECTLY AFTERWARDS
 void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
 
+
+void RE_RenderPostProcessingToneMap(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight);
 
 
 

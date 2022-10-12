@@ -1004,7 +1004,7 @@ uniform mat4 proj;\n\
 uniform mat4 invProj;\n\
 uniform mat4 view;\n\
 uniform mat4 invView;\n\
-uniform float rayStep = 2.0f;\n\
+uniform float rayStep = 0.1f;\n\
 uniform int iterationCount = 100;\n\
 uniform float distanceBias = 0.03f;\n\
 uniform bool enableSSR = true;\n\
@@ -3959,6 +3959,7 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_TRUE);
 
+
 	glBindFramebuffer(GL_FRAMEBUFFER, ssrData->fbo);
 	glViewport(0, 0, ssrData->width, ssrData->height);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -3967,14 +3968,13 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 
 	SceneRenderData data;
 	data.renderer = renderer;
-	data.env = renderer->currentEnvironmentData;
+	data.env = nullptr;
 	data.lightGroupUniform = 0;
 	data.cam = renderer->currentCam;
 	data.shadowMapTexture = 0;
 
 
 	const AABB frustum = GenerateAABB(glm::inverse(renderer->currentCam->proj * renderer->currentCam->view));
-
 	for (uint32_t i = 0; i < renderer->numCmds; i++)
 	{
 		RenderCommand* cmd = renderer->drawCmds[i];
@@ -3983,7 +3983,6 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 		{
 			cmd->DrawSSR(&data);
 		}
-		
 	}
 
 	glm::mat4 invView = glm::inverse(renderer->currentCam->view);
@@ -4010,21 +4009,21 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 	glBindTexture(GL_TEXTURE_2D, ssrData->depthTexture);
 
 	const PostProcessingRenderInfo::ScreenSpaceReflection& ssr = renderer->ppInfo.ssr;
-	// uniform mat4 proj; \n\
-	// uniform mat4 invProj; \n\
-	// uniform mat4 view; \n\
-	// uniform mat4 invView; \n\
-	// uniform float rayStep = 0.2f; \n\
-	// uniform int iterationCount = 100; \n\
-	// uniform float distanceBias = 0.05f; \n\
-	// uniform bool enableSSR = false; \n\
-	// uniform int sampleCount = 4; \n\
-	// uniform bool isSamplingEnabled = false; \n\
-	// uniform bool isExponentialStepEnabled = false; \n\
-	// uniform bool isAdaptiveStepEnabled = true; \n\
-	// uniform bool isBinarySearchEnabled = true; \n\
-	// uniform bool debugDraw = false; \n\
-	// uniform float samplingCoefficient;
+	//uniform mat4 proj; \n\
+	//uniform mat4 invProj; \n\
+	//uniform mat4 view; \n\
+	//uniform mat4 invView; \n\
+	//uniform float rayStep = 0.1f; \n\
+	//uniform int iterationCount = 100; \n\
+	//uniform float distanceBias = 0.03f; \n\
+	//uniform bool enableSSR = true; \n\
+	//uniform int sampleCount = 4; \n\
+	//uniform bool isSamplingEnabled = false; \n\
+	//uniform bool isExponentialStepEnabled = false; \n\
+	//uniform bool isAdaptiveStepEnabled = false; \n\
+	//uniform bool isBinarySearchEnabled = true; \n\
+	//uniform bool debugDraw = false; \n\
+	//uniform float samplingCoefficient = 0.001f; \n\
 
 	glUniformMatrix4fv(ssr.projLoc, 1, GL_FALSE, (GLfloat*)&renderer->currentCam->proj);
 	glUniformMatrix4fv(ssr.invProjLoc, 1, GL_FALSE, (GLfloat*)&invProj);
@@ -4141,7 +4140,7 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 		}
 	}
 
-	{	// COPY FINAL IMAGE TO OUTPUT FBO
+	{	// COPY FINAL IMAGE TO OUTPUT FBO AND TONEMAP
 		glDisable(GL_BLEND);
 		glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
 		glViewport(0, 0, targetWidth, targetHeight);
@@ -4159,7 +4158,24 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 	}
 }
+void RE_RenderPostProcessingToneMap(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
+{
+	glDisable(GL_BLEND);
+	glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
+	glViewport(0, 0, targetWidth, targetHeight);
+	glUseProgram(renderer->ppInfo.dualCopy.program);
 
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, renderer->blackTexture);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, srcTexture);
+
+	glUniform1f(renderer->ppInfo.dualCopy.mipLevel1Loc, 0);
+	glUniform1f(renderer->ppInfo.dualCopy.mipLevel2Loc, 0);
+	glUniform1f(renderer->ppInfo.dualCopy.exposureLoc, ppData->exposure);
+	glUniform1f(renderer->ppInfo.dualCopy.gammaLoc, ppData->gamma);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+}
 
 
 
