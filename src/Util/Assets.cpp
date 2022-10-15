@@ -1419,9 +1419,99 @@ bool AM_AtlasAddSubRawData(struct AtlasBuildData* data, uint32_t* rawData, uint3
 	}
 }
 
-void AM_StoreTextureAtlas(struct AtlasBuildData* data)
+struct TextureAtlasSerializedHeader
+{
+	uint32_t width;
+	uint32_t height;
+	uint32_t numRects;
+	uint32_t numMetrics;
+};
+struct TextureAltasSerializedFontMetrics
+{
+	uint32_t numGlyphs;
+	uint32_t firstCharacter;
+	uint32_t atlasIdx;
+	float ascent;
+	float descent;
+	float lineGap;
+	float size;
+};
+
+void AM_StoreTextureAtlas(const char* file, struct AtlasBuildData* data, FontMetrics** metrics, uint32_t numFontMetrics)
 {
 
+	uint32_t fullDataSize = sizeof(TextureAtlasSerializedHeader) + data->curWidth * data->curHeight * sizeof(uint32_t) + sizeof(rect_type) * data->rects.size();
+	for (uint32_t i = 0; i < numFontMetrics; i++)
+	{
+		fullDataSize += (sizeof(FontMetrics) - 8) + sizeof(Glyph) * metrics[i]->numGlyphs;
+	}
+	uint8_t* fullData = new uint8_t[fullDataSize];
+
+	uint8_t* curFill = fullData;
+	TextureAtlasSerializedHeader* header = (TextureAtlasSerializedHeader*)fullData; curFill += sizeof(TextureAtlasSerializedHeader);
+	header->width = data->curWidth;
+	header->height = data->curHeight;
+	header->numMetrics = numFontMetrics;
+	header->numRects = data->rects.size();
+
+	memcpy(curFill, data->data, sizeof(uint32_t) * data->curWidth * data->curHeight);
+	curFill += sizeof(uint32_t) * data->curWidth * data->curHeight;
+
+	for (uint32_t i = 0; i < header->numRects; i++)
+	{
+		memcpy(curFill, &data->rects[i], sizeof(rect_type));
+		curFill += sizeof(rect_type);
+	}
+
+
+	for (uint32_t i = 0; i < numFontMetrics; i++)
+	{
+		TextureAltasSerializedFontMetrics* f = (TextureAltasSerializedFontMetrics*)curFill;
+
+		f->ascent = metrics[i]->ascent;
+		f->atlasIdx = metrics[i]->atlasIdx;
+		f->descent = metrics[i]->descent;
+		f->firstCharacter = metrics[i]->firstCharacter;
+		f->lineGap = metrics[i]->lineGap;
+		f->numGlyphs = metrics[i]->numGlyphs;
+		f->size = metrics[i]->size;
+
+		curFill += sizeof(TextureAltasSerializedFontMetrics);
+		for (uint32_t j = 0; j < metrics[i]->numGlyphs; j++)
+		{
+			Glyph& glyph = metrics[i]->glyphs[j];
+			Glyph* g = (Glyph*)curFill;
+			*g = glyph;
+			curFill += sizeof(Glyph);
+		}
+	}
+
+
+
+	
+	uLongf dataLen = fullDataSize;
+	uint8_t* compressData = new uint8_t[fullDataSize];
+	if (compress(compressData, &dataLen, fullData, fullDataSize) != Z_OK)
+	{
+		delete[] compressData;
+		delete[] fullData;
+		return;
+	}
+
+	FILE* f = NULL;
+	fopen_s(&f, file, "wb");
+	if (!f)
+	{
+		delete[] compressData;
+		delete[] fullData;
+		return;
+	}
+	fwrite(&fullDataSize, sizeof(uint32_t), 1, f);
+	fwrite(compressData, dataLen, 1, f);
+	fclose(f);
+
+	delete[] compressData;
+	delete[] fullData;
 }
 AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear)
 {
@@ -1448,6 +1538,7 @@ AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
 
+
 	atlas->numBounds = data->rects.size();
 	atlas->bounds = new AtlasTexture::UVBound[atlas->numBounds];
 	memset(atlas->bounds, 0, sizeof(AtlasTexture::UVBound) * atlas->numBounds);
@@ -1464,7 +1555,112 @@ AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear)
 
 	return atlas;
 }
+struct AtlasTexture* AM_LoadTextureAtlas(const char* file, FontMetrics** metrics, uint32_t* numFontMetrics, bool linear)
+{
+	uint8_t* fullData = nullptr;
+	{
+		FILE* f = NULL;
+		fopen_s(&f, file, "rb");
+		if (!f)
+		{
+			return nullptr;
+		}
 
+		fseek(f, 0, SEEK_END);
+		int sz = ftell(f);
+		fseek(f, 0, SEEK_SET);
+
+		uint8_t* fileData = new uint8_t[sz];
+		fread(fileData, sz, 1, f);
+		fclose(f);
+
+		const uint32_t uncompressedSize = *(uint32_t*)fileData;
+		uint8_t* curFileData = fileData + sizeof(uint32_t);
+
+		fullData = new uint8_t[uncompressedSize];
+
+		uLongf outSize = uncompressedSize;
+		int res = uncompress(fullData, &outSize, curFileData, sz - sizeof(uint32_t));
+		delete[] fileData;
+	}
+	uint8_t* curRead = fullData;
+	AtlasTexture* out = new AtlasTexture;
+
+	TextureAtlasSerializedHeader* header = (TextureAtlasSerializedHeader*)fullData; curRead += sizeof(TextureAtlasSerializedHeader);
+
+	out->numBounds = header->numRects;
+	out->texture.width = header->width;
+	out->texture.height = header->height;
+	out->texture.type = GL_TEXTURE_2D;
+
+
+	glGenTextures(1, &out->texture.uniform);
+	glBindTexture(GL_TEXTURE_2D, out->texture.uniform);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->width, header->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, curRead);
+	if (linear)
+	{
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	}
+	else
+	{
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	}
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	curRead += sizeof(uint32_t) * header->width * header->height;
+
+
+	out->bounds = new AtlasTexture::UVBound[header->numRects];
+	memset(out->bounds, 0, sizeof(AtlasTexture::UVBound) * header->numRects);
+	for (uint32_t i = 0; i < header->numRects; i++)
+	{
+		rect_type* cur = (rect_type*)curRead;
+
+		out->bounds[i].start = { (float)cur->x / (float)out->texture.width, (float)cur->y / (float)out->texture.height };
+		out->bounds[i].end = { (float)(cur->x + cur->w) / (float)out->texture.width, (float)(cur->y + cur->h) / (float)out->texture.height };
+
+		curRead += sizeof(rect_type);
+	}
+
+
+	if (numFontMetrics && metrics)
+	{
+		*numFontMetrics = header->numMetrics;
+		*metrics = new FontMetrics[header->numMetrics];
+		memset(*metrics, 0, sizeof(FontMetrics) * header->numMetrics);
+		for (uint32_t i = 0; i < header->numMetrics; i++)
+		{
+			TextureAltasSerializedFontMetrics* f = (TextureAltasSerializedFontMetrics*)curRead;
+
+			(*metrics)[i].ascent = f->ascent;
+			(*metrics)[i].atlasIdx = f->atlasIdx;
+			(*metrics)[i].descent = f->descent;
+			(*metrics)[i].firstCharacter = f->firstCharacter;
+			(*metrics)[i].lineGap = f->lineGap;
+			(*metrics)[i].numGlyphs = f->numGlyphs;
+			(*metrics)[i].size = f->size;
+
+
+			(*metrics)[i].glyphs = new Glyph[(*metrics)[i].numGlyphs];
+			memset((*metrics)[i].glyphs, 0, sizeof(Glyph) * (*metrics)[i].numGlyphs);
+			curRead += sizeof(TextureAltasSerializedFontMetrics);
+			for (uint32_t j = 0; j < (*metrics)[i].numGlyphs; j++)
+			{
+				Glyph& glyph = (*metrics)[i].glyphs[j];
+				Glyph* g = (Glyph*)curRead;
+				glyph = *g;
+				curRead += sizeof(Glyph);
+			}
+		}
+	}
+
+
+	delete[] fullData;
+	return out;
+}
 
 
 

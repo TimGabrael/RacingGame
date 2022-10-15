@@ -78,8 +78,9 @@ FontMetrics* AM_AtlasAddGlyphRangeFromFile(struct AtlasBuildData* data, const ch
 bool AM_AtlasAddRawData(struct AtlasBuildData* data, uint32_t* rawData, uint32_t width, uint32_t height);
 bool AM_AtlasAddSubRawData(struct AtlasBuildData* data, uint32_t* rawData, uint32_t startX, uint32_t startY, uint32_t endX, uint32_t endY, uint32_t rawWidth);
 
-void AM_StoreTextureAtlas(struct AtlasBuildData* data);
+void AM_StoreTextureAtlas(const char* file, struct AtlasBuildData* data, FontMetrics** metrics, uint32_t numFontMetrics);
 AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear);
+AtlasTexture* AM_LoadTextureAtlas(const char* file, FontMetrics** metrics, uint32_t* numFontMetrics, bool linear);
 
 
 

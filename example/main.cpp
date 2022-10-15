@@ -16,10 +16,15 @@ int main()
 	game->manager =  manager;
 	GM_AddPlayerToScene(manager, { 0.0f, 12.0f, 0.0f }, 90.0f, 0.0f);
 
-	AtlasBuildData* build = AM_BeginAtlasTexture();
-	manager->metrics = AM_AtlasAddGlyphRangeFromFile(build, "Assets/consola.ttf", 'A', 'z' + 1, 13.0f);
-	manager->atlas = AM_EndTextureAtlas(build, false);
-
+	uint32_t numMetrics = 0;
+	manager->atlas = AM_LoadTextureAtlas("Assets/atlas.atl", &manager->metrics, &numMetrics, false);
+	if (!manager->atlas)
+	{
+		AtlasBuildData* build = AM_BeginAtlasTexture();
+		manager->metrics = AM_AtlasAddGlyphRangeFromFile(build, "Assets/consola.ttf", 'A', 'z' + 1, 13.0f);
+		AM_StoreTextureAtlas("Assets/atlas.atl", build, &manager->metrics, 1);
+		manager->atlas = AM_EndTextureAtlas(build, false);
+	}
 	SetConsumeMouse(false);
 
 	manager->sponzaModel = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONCAVE);
