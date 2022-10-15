@@ -1423,7 +1423,7 @@ void AM_StoreTextureAtlas(struct AtlasBuildData* data)
 {
 
 }
-AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data)
+AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear)
 {
 	AtlasTexture* atlas = new AtlasTexture;
 	memset(atlas, 0, sizeof(AtlasTexture));
@@ -1434,12 +1434,19 @@ AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data)
 	glGenTextures(1, &atlas->texture.uniform);
 	glBindTexture(GL_TEXTURE_2D, atlas->texture.uniform);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, data->curWidth, data->curHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, data->data);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	if (linear)
+	{
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	}
+	else
+	{
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	}
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-	glGenerateMipmap(GL_TEXTURE_2D);
 
 	atlas->numBounds = data->rects.size();
 	atlas->bounds = new AtlasTexture::UVBound[atlas->numBounds];
@@ -1450,6 +1457,9 @@ AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data)
 		atlas->bounds[i].start = { (float)r.x / (float)atlas->texture.width, (float)r.y / (float)atlas->texture.height };
 		atlas->bounds[i].end = { (float)(r.x + r.w) / (float)atlas->texture.width, (float)(r.y + r.h) / (float)atlas->texture.height };
 	}
+
+	if (data->copyData) delete[] data->copyData;
+	delete[] data->data;
 	delete data;
 
 	return atlas;

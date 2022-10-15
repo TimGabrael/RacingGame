@@ -17,8 +17,8 @@ int main()
 	GM_AddPlayerToScene(manager, { 0.0f, 12.0f, 0.0f }, 90.0f, 0.0f);
 
 	AtlasBuildData* build = AM_BeginAtlasTexture();
-	manager->metrics = AM_AtlasAddGlyphRangeFromFile(build, "Assets/consola.ttf", 'A', 'z' + 1, 14.0f);
-	manager->atlas = AM_EndTextureAtlas(build);
+	manager->metrics = AM_AtlasAddGlyphRangeFromFile(build, "Assets/consola.ttf", 'A', 'z' + 1, 13.0f);
+	manager->atlas = AM_EndTextureAtlas(build, false);
 
 	SetConsumeMouse(false);
 

@@ -79,7 +79,7 @@ bool AM_AtlasAddRawData(struct AtlasBuildData* data, uint32_t* rawData, uint32_t
 bool AM_AtlasAddSubRawData(struct AtlasBuildData* data, uint32_t* rawData, uint32_t startX, uint32_t startY, uint32_t endX, uint32_t endY, uint32_t rawWidth);
 
 void AM_StoreTextureAtlas(struct AtlasBuildData* data);
-AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data);
+AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear);
 
 
 
