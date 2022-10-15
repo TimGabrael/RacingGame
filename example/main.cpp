@@ -6,7 +6,7 @@
 #include "Physics/Physics.h"
 #include "GameManager.h"
 
-
+#include "finders_interface.h"
 
 int main()
 {
@@ -15,6 +15,10 @@ int main()
 	GameManager* manager =  GM_CreateGameManager(game);
 	game->manager =  manager;
 	GM_AddPlayerToScene(manager, { 0.0f, 12.0f, 0.0f }, 90.0f, 0.0f);
+
+	AtlasBuildData* build = AM_BeginAtlasTexture();
+	manager->metrics = AM_AtlasAddGlyphRangeFromFile(build, "Assets/consola.ttf", 'A', 'z' + 1, 14.0f);
+	manager->atlas = AM_EndTextureAtlas(build);
 
 	SetConsumeMouse(false);
 
@@ -45,6 +49,7 @@ int main()
 	base.rigidBody = nullptr;
 	base.model = &manager->debugModel;
 	//SC_AddStaticObject(game->scene, &base);
+
 	
 	
 	// TEST ANIM INSTANCE DATA

@@ -131,6 +131,7 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 
 }
 
+void DrawString(AtlasTexture* atlas, FontMetrics* metrics, const glm::vec2& start, const char* text);
 
 static std::vector<Vertex3D> debugLines;
 void GameManager::RenderCallback(GameState* state)
@@ -215,9 +216,39 @@ void GameManager::RenderCallback(GameState* state)
 	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_::ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::ShowDemoWindow(nullptr);
+
+	DrawString(atlas, metrics, { 100.0f, 100.0f }, "So Funktioniert Leider Alles Obwohl ich das Advance nicht verwende HILFE");
+
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
+
+void DrawString(AtlasTexture* atlas, FontMetrics* metrics, const glm::vec2& start, const char* text)
+{
+	glm::vec2 curPos = start;
+	const int len = strnlen(text, 1000);
+	const float unkownAdvance = roundf(metrics->size * 2.0f / 4.0f);
+	ImDrawList* list = ImGui::GetForegroundDrawList();
+	for (int i = 0; i < len; i++)
+	{
+		char c = text[i];
+		if (c == ' ') { curPos.x += unkownAdvance; continue; }
+		uint32_t idx = c - metrics->firstCharacter;
+		if (idx < metrics->numGlyphs)
+		{
+			Glyph& g = metrics->glyphs[idx];
+			
+			const ImVec2 tl = { roundf(g.leftSideBearing + curPos.x),  roundf(metrics->ascent + g.yStart + curPos.y) };
+			const ImVec2 br = { roundf(tl.x + g.width), roundf(tl.y + g.height) };
+
+			auto bound = atlas->bounds[metrics->atlasIdx + idx];
+			list->AddImage((ImTextureID)atlas->texture.uniform, tl, br, { bound.start.x, bound.start.y }, { bound.end.x, bound.end.y });
+
+			curPos.x += g.advance;
+		}
+	}
+}
+
 
 void GameManager::Update(float dt)
 {
