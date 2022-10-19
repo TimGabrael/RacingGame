@@ -2200,9 +2200,9 @@ static void LoadPostProcessingRenderInfo(PostProcessingRenderInfo* info)
 	info->ssao.radiusLoc = glGetUniformLocation(info->ssao.program, "radius");
 
 	glUseProgram(info->ssao.program);
-	idx = glGetUniformLocation(info->ssr.program, "textureColor");
+	idx = glGetUniformLocation(info->ssao.program, "textureColor");
 	glUniform1i(idx, 0);
-	idx = glGetUniformLocation(info->ssr.program, "textureDepth");
+	idx = glGetUniformLocation(info->ssao.program, "textureDepth");
 	glUniform1i(idx, 1);
 
 }

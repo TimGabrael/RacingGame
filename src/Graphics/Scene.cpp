@@ -24,7 +24,7 @@ struct Scene
 
 static void FreeObject(SceneObject* obj)
 {
-	// TODO: FREE THE MEMORY ALLOCATED BY THE ENTITY!
+	if (obj->entity) delete obj->entity;
 }
 
 
