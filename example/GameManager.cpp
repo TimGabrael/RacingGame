@@ -126,7 +126,7 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 void DrawString(AtlasTexture* atlas, FontMetrics* metrics, const glm::vec2& start, const char* text);
 
 static std::vector<Vertex3D> debugLines;
-void GameManager::RenderCallback(GameState* state)
+void GameManager::RenderCallback(GameState* state, float dt)
 {
 	//debugLines.clear();
 	//PH_GetPhysicsVertices(state->physics, debugLines);
@@ -136,7 +136,7 @@ void GameManager::RenderCallback(GameState* state)
 
 	static float updatetimer = 0.0f;
 	UpdateBoneDataFromModel(foxModel, 0, 0, &foxAnimInstance, updatetimer);
-	updatetimer += 1.0f / 60.0f;
+	updatetimer += dt;
 	if (updatetimer > 10.0f) updatetimer = 0.0f;
 
 
@@ -206,7 +206,7 @@ void GameManager::RenderCallback(GameState* state)
 
 	ImGui::ShowDemoWindow(nullptr);
 
-	DrawString(atlas, metrics, { 100.0f, 100.0f }, "So Funktioniert Leider Alles Obwohl ich das Advance nicht verwende HILFE");
+	DrawString(atlas, metrics, { 100.0f, 100.0f }, "So Funktionierts");
 
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -265,6 +265,7 @@ void GameManager::OnWindowResize(int width, int height)
 
 void GameManager::OnKey(int key, int scancode, int action, int mods)
 {
+	
 }
 
 void GameManager::OnMouseButton(int button, int action, int mods)

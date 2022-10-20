@@ -14,7 +14,7 @@
 
 struct BaseGameManager
 {
-	virtual void RenderCallback(struct GameState* state) = 0;
+	virtual void RenderCallback(struct GameState* state, float dt) = 0;
 	virtual void Update(float dt) = 0;
 
 	virtual void PreUpdate(float dt) {};
@@ -45,6 +45,7 @@ struct GameState
 	float mouseX;
 	float mouseY;
 	float accumulatedTime;
+	float tickMultiplier;
 	bool hasFocus;
 	bool isFullscreen;
 	bool isMouseCaptured;

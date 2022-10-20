@@ -3825,6 +3825,7 @@ void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 	glDisable(GL_BLEND);
 
 	glUseProgram(renderer->cubemapInfo.program);
+	
 
 	glm::mat4 viewProj = renderer->currentCam->proj * renderer->currentCam->view;
 	glUniformMatrix4fv(renderer->cubemapInfo.viewProjLoc, 1, GL_FALSE, (const GLfloat*)&viewProj);

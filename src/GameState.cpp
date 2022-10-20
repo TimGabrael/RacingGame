@@ -131,7 +131,7 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	g_gameState->winHeight = windowHeight;
 	g_gameState->mouseX = 0;
 	g_gameState->mouseY = 0;
-
+	g_gameState->tickMultiplier = 1.0f;
 
 	glfwMakeContextCurrent(window);
 	glfwSetWindowAspectRatio(window, 16, 9);
@@ -266,7 +266,7 @@ void UpateGameState()
 		static double timer = glfwGetTime();
 		double curTime = glfwGetTime();
 
-		float dt = curTime - timer;
+		float dt = (curTime - timer) * g_gameState->tickMultiplier;
 		timer = curTime;
 		g_gameState->accumulatedTime += dt;
 
@@ -291,7 +291,7 @@ void UpateGameState()
 			glFrontFace(GL_CCW);
 			glDepthMask(GL_TRUE);
 
-			g_gameState->manager->RenderCallback(g_gameState);
+			g_gameState->manager->RenderCallback(g_gameState, dt);
 
 			glfwSwapBuffers(g_gameState->window);
 		}

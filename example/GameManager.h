@@ -5,7 +5,7 @@
 
 struct GameManager : public BaseGameManager
 {
-	virtual void RenderCallback(GameState* state) override;
+	virtual void RenderCallback(GameState* state, float dt) override;
 	virtual void Update(float dt) override;
 
 

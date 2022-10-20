@@ -19,13 +19,12 @@ struct Player : public Entity
 #endif // !FREE_CAM
 
 	PerspectiveCamera camera;
-	physx::PxRigidActor* body;
 };
 
 struct FoxEntity : public Entity
 {
 	FoxEntity(Model* m, AnimationInstanceData* data);
-	virtual ~FoxEntity() override = default;
+	virtual ~FoxEntity() override;
 	virtual void Update(float dt) override {};
 	virtual void UpdateFrame(float dt);
 	Model* model;
@@ -37,7 +36,7 @@ struct FoxEntity : public Entity
 struct SponzaEntity : public Entity
 {
 	SponzaEntity(Model* m);
-	virtual ~SponzaEntity() override = default;
+	virtual ~SponzaEntity() override;
 	virtual void Update(float dt) override {};
 	virtual void UpdateFrame(float dt);
 	physx::PxRigidActor* body;

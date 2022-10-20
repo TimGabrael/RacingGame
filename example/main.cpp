@@ -55,7 +55,7 @@ int main()
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
 	SponzaEntity* ent = new SponzaEntity(manager->sponzaModel);
-	ent->body = game->physics->AddStaticBody(planeShape, glm::vec3(0.0f), def);
+	ent->body = game->physics->AddStaticBody(sponzaShape, glm::vec3(0.0f), def);
 	ent->renderable = new PBRRenderable(manager->sponzaModel, nullptr, glm::mat4(1.0f));
 	ent->model = manager->sponzaModel;
 	
@@ -71,7 +71,7 @@ int main()
 		manager->fox->renderable = new PBRRenderable(manager->foxModel, &manager->foxAnimInstance, glm::mat4(1.0f));
 		manager->fox->body->userData = manager->fox;
 	}
-
+	
 	UpateGameState();
 
 	return 0;
