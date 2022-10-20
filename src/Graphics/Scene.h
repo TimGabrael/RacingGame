@@ -38,6 +38,3 @@ struct Renderable** SC_GetAllRenderables(struct Scene* scene, size_t* num);
 
 void SC_Update(struct Scene* scene, float dt);
 void SC_UpdateFrame(struct Scene* scene, float dt);
-
-
-Entity* SC_Raycast(const glm::vec3& origin, const glm::vec3& dir, float distance);

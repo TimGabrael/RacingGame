@@ -401,7 +401,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			GameState* game = GetGameState();
 			if (flags & MODEL_LOAD_CONVEX)
 			{
-				model->convexMesh = PH_AddPhysicsConvexMesh(game->physics, verts, curVertPos, sizeof(Vertex3D));
+				model->convexMesh = game->physics->AddConvexMesh(verts, curVertPos, sizeof(Vertex3D));
 			}
 			if (flags & MODEL_LOAD_CONCAVE)
 			{
@@ -414,7 +414,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					}
 					curIndPos = curVertPos;
 				}
-				model->concaveMesh = PH_AddPhysicsConcaveMesh(game->physics, verts, curVertPos, sizeof(Vertex3D), inds, curIndPos);
+				model->concaveMesh = game->physics->AddConcaveMesh(verts, curVertPos, sizeof(Vertex3D), inds, curIndPos);
 			}
 
 
@@ -965,11 +965,11 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			GameState* game = GetGameState();
 			if (flags & MODEL_LOAD_CONVEX)
 			{
-				model->convexMesh = PH_AddPhysicsConvexMesh(game->physics, verts, numVerts, sizeof(Vertex3D));
+				model->convexMesh = game->physics->AddConvexMesh(verts, numVerts, sizeof(Vertex3D));
 			}
 			if (flags & MODEL_LOAD_CONCAVE)
 			{
-				model->concaveMesh = PH_AddPhysicsConcaveMesh(game->physics, verts, numVerts, sizeof(Vertex3D), inds, numInds);
+				model->concaveMesh = game->physics->AddConcaveMesh(verts, numVerts, sizeof(Vertex3D), inds, numInds);
 			}
 
 			delete[] verts;

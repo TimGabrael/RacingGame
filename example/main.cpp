@@ -33,19 +33,29 @@ int main()
 	manager->foxModel= AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BrainStem/glTF-Binary/BrainStem.glb", MODEL_LOAD_CONVEX);
 	manager->foxModel->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
-	PhysicsMaterial* material = PH_AddMaterial(game->physics, 0.5f, 0.5f, 0.5f);
+	physx::PxMaterial* material = game->physics->physicsSDK->createMaterial(0.5f, 0.5f, 0.5f);
 
-	PhysicsShape* sponzaShape = PH_AddConcaveShape(game->physics, manager->sponzaModel->concaveMesh, material, glm::vec3(0.1f));
-	PhysicsShape* foxShape = PH_AddConvexShape(game->physics, manager->foxModel->convexMesh, material, glm::vec3(5.0f));
-	PhysicsShape* planeShape = PH_AddBoxShape(game->physics, material, glm::vec3(100.0f, 1.0f, 100.f));
+	physx::PxShape* sponzaShape = nullptr;
+	physx::PxShape* foxShape = nullptr;
+	physx::PxShape* planeShape = nullptr;
 
+	{
+		physx::PxTriangleMeshGeometry geomTriangle(manager->sponzaModel->concaveMesh, physx::PxMeshScale(physx::PxVec3(0.1f, 0.1f, 0.1f)));
+		sponzaShape = game->physics->physicsSDK->createShape(geomTriangle, *material);
+
+		physx::PxConvexMeshGeometry geomConvex(manager->foxModel->convexMesh, physx::PxMeshScale(physx::PxVec3(5.0f, 5.0f, 5.0f)));
+		foxShape = game->physics->physicsSDK->createShape(geomConvex, *material);
+
+		physx::PxBoxGeometry geomBox(100.0f, 1.0f, 100.f);
+		planeShape = game->physics->physicsSDK->createShape(geomBox, *material);
+	}
 	Vertex3D verts[4] = {};
 	manager->debugModel = CreateModelFromVertices(verts, 0);
 	
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
 	SponzaEntity* ent = new SponzaEntity(manager->sponzaModel);
-	ent->body = PH_AddStaticRigidBody(game->physics, planeShape, glm::vec3(0.0f), def);
+	ent->body = game->physics->AddStaticBody(planeShape, glm::vec3(0.0f), def);
 	ent->renderable = new PBRRenderable(manager->sponzaModel, nullptr, glm::mat4(1.0f));
 	ent->model = manager->sponzaModel;
 	
@@ -57,8 +67,9 @@ int main()
 	for (int i = 0; i < 10; i++)
 	{
 		manager->fox = new FoxEntity(manager->foxModel, &manager->foxAnimInstance);
-		manager->fox->body = PH_AddDynamicRigidBody(game->physics, foxShape, glm::vec3(0.0f, 10.0f + 10 * i, 0.0f), def);
+		manager->fox->body = game->physics->AddDynamicBody(foxShape, glm::vec3(0.0f, 10.0f + 10 * i, 0.0f), def);
 		manager->fox->renderable = new PBRRenderable(manager->foxModel, &manager->foxAnimInstance, glm::mat4(1.0f));
+		manager->fox->body->userData = manager->fox;
 	}
 
 	UpateGameState();

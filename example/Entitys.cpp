@@ -6,11 +6,12 @@
 
 Player::Player()
 {
-
+	body = nullptr;
 }
 Player::~Player()
 {
 	// CLEANUP THE RIGIDBODY OR SOMETHING
+	
 }
 void Player::Update(float dt)
 {
@@ -30,20 +31,27 @@ FoxEntity::FoxEntity(Model* m, AnimationInstanceData* data)
 {
 	this->model = m;
 	this->anim = data;
+	renderable = nullptr;
+	body = nullptr;
 }
 void FoxEntity::UpdateFrame(float dt)
 {
 	glm::mat4 mat;
-	PH_SetTransformation(body, mat);
+
+	physx::PxMat44 m = physx::PxMat44(body->getGlobalPose());
+	memcpy(&mat, &m, sizeof(glm::mat4));
 	renderable->Update(model, anim, mat);
 }
 SponzaEntity::SponzaEntity(Model* m)
 {
 	this->model = m;
+	body = nullptr;
+	renderable = nullptr;
 }
 void SponzaEntity::UpdateFrame(float dt)
 {
 	glm::mat4 mat;
-	PH_SetTransformation(body, mat);
+	physx::PxMat44 m = physx::PxMat44(body->getGlobalPose());
+	memcpy(&mat, &m, sizeof(glm::mat4));
 	renderable->Update(model, nullptr, mat);
 }

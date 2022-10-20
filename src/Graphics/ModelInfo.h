@@ -1,5 +1,7 @@
 #pragma once
 #include "GLIncludes.h"
+#define PX_PHYSX_CHARACTER_STATIC_LIB
+#include <PxPhysicsAPI.h> 
 
 enum PRIMITIVE_FLAG
 {
@@ -141,8 +143,8 @@ struct Mesh
 };
 struct Model
 {
-	struct PhysicsConvexMesh* convexMesh;
-	struct PhysicsConcaveMesh* concaveMesh;
+	physx::PxConvexMesh* convexMesh;
+	physx::PxTriangleMesh* concaveMesh;
 
 	Material* materials;
 	Animation* animations;

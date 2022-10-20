@@ -3,20 +3,55 @@
 #include <vector>
 #include "../Graphics/ModelInfo.h"
 
-struct RigidBody;
-struct PhysicsScene;
-struct PhysicsMaterial;
-struct PhysicsConvexMesh;
-struct PhysicsConcaveMesh;
-struct PhysicsShape;
 
-struct PhysicsController
+#include <extensions/PxExtensionsAPI.h>
+#include <extensions/PxDefaultErrorCallback.h>
+#include <extensions/PxDefaultAllocator.h> 
+#include <extensions/PxDefaultSimulationFilterShader.h>
+#include <extensions/PxDefaultCpuDispatcher.h>
+#include <extensions/PxShapeExt.h>
+#include <foundation/PxMat33.h> 
+#include <extensions/PxSimpleFactory.h>
+#include <extensions/PxTriangleMeshExt.h>
+#include <extensions/PxConvexMeshExt.h>
+#include <vehicle/PxVehicleSDK.h>
+#include <foundation/PxQuat.h>
+#include "vehicle/PxVehicleUtil.h"
+
+#include "../Util/Utility.h"
+
+struct PhysicsScene
 {
-	void Move(const glm::vec3& mov);
-	glm::vec3 GetPos();
-	glm::vec3 GetVelocity();
-	RigidBody* GetRigidBody();
-	bool IsOnGround();
+	physx::PxPhysics* physicsSDK = NULL;
+	physx::PxDefaultErrorCallback defaultErrorCallback;
+	physx::PxDefaultAllocator defaultAllocatorCallback;
+	physx::PxSimulationFilterShader defaultFilterShader = physx::PxDefaultSimulationFilterShader;
+	physx::PxControllerManager* manager = NULL;
+	physx::PxFoundation* foundation = NULL;
+	physx::PxCooking* cooking = NULL;
+	physx::PxScene* scene = NULL;
+	struct MyRaycastCallback* raycastCallback;
+
+
+	physx::PxConvexMesh* AddConvexMesh(const void* verts, uint32_t numVerts, uint32_t vertStride);
+	physx::PxTriangleMesh* AddConcaveMesh(const void* verts, uint32_t numVerts, uint32_t vertStride, const uint32_t* inds, uint32_t numInds);
+
+	
+	
+	physx::PxController* AddStdCapsuleController(physx::PxMaterial* material, const glm::vec3& pos, float height, float radius);
+
+	physx::PxRigidActor* AddStaticBody(physx::PxShape* shape, const glm::vec3& pos, const glm::quat& rot);
+	physx::PxRigidActor* AddDynamicBody(physx::PxShape* shape, const glm::vec3& pos, const glm::quat& rot, float density = 1.0f);
+	
+	
+	
+	
+	physx::PxRigidActor* RayCast(const glm::vec3& origin, const glm::vec3& dir, float distance);
+
+
+	
+
+
 };
 
 struct VehicleDesc
@@ -25,13 +60,13 @@ struct VehicleDesc
 	glm::vec3 chassisDims;
 	glm::vec3 chassisMOI;
 	glm::vec3 chassisCMOffset;
-	PhysicsMaterial* chassisMaterial;
+	physx::PxMaterial* chassisMaterial;
 
 	float wheelMass;
 	float wheelWidth;
 	float wheelRadius;
 	float wheelMOI;
-	PhysicsMaterial* wheelMaterial;
+	physx::PxMaterial* wheelMaterial;
 	uint32_t numWheels;
 };
 
@@ -40,40 +75,8 @@ void PH_CleanUpPhysicsScene(PhysicsScene* scene);
 
 void PH_Update(PhysicsScene* scene, float dt);
 
-
-PhysicsMaterial* PH_AddMaterial(PhysicsScene* scene, float staticFriction, float dynamicFriction, float restitution);
-
-PhysicsConvexMesh* PH_AddPhysicsConvexMesh(PhysicsScene* scene, const void* verts, uint32_t numVerts, uint32_t vertStride);
-PhysicsConcaveMesh* PH_AddPhysicsConcaveMesh(PhysicsScene* scene, const void* verts, uint32_t numVerts, uint32_t vertStride, const uint32_t* inds, uint32_t numInds);
-
-
-PhysicsShape* PH_AddConvexShape(PhysicsScene* scene, PhysicsConvexMesh* mesh, const PhysicsMaterial* material, const glm::vec3& scale);
-PhysicsShape* PH_AddConcaveShape(PhysicsScene* scene, PhysicsConcaveMesh* mesh, const PhysicsMaterial* material, const glm::vec3& scale);
-
-PhysicsShape* PH_AddBoxShape(PhysicsScene* scene, const PhysicsMaterial* material, const glm::vec3& halfExtent);
-
-
-RigidBody* PH_AddStaticRigidBody(PhysicsScene* scene, PhysicsShape* shape, const glm::vec3& pos, const glm::quat& rot);
-RigidBody* PH_AddDynamicRigidBody(PhysicsScene* scene, PhysicsShape* shape, const glm::vec3& pos, const glm::quat& rot);
-
-PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMaterial* material, const glm::vec3& pos, float height, float radius);
-
-
-
-void PH_AddShapeToRigidBody(RigidBody* body, PhysicsShape* shape);
-
-RigidBody* PH_RayCast(PhysicsScene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance);
-
-void PH_RemoveController(PhysicsController* controller);
-void PH_RemoveRigidBody(PhysicsScene* scene, RigidBody* body);
-
-
-
-void PH_SetTransformation(RigidBody* body, glm::mat4& m);
-void PH_SetRigidBodyUserData(RigidBody* body, void* userData);
-void* PH_GetRigidBodyUserData(RigidBody* body);
-
-
-
+glm::vec3 PH_ControllerGetPosition(physx::PxController* controller);
+glm::vec3 PH_ControllerGetVelocity(physx::PxController* controller);
+bool PH_ControllerIsOnGround(physx::PxController* controller);
 
 void PH_GetPhysicsVertices(PhysicsScene* scene, std::vector<Vertex3D>& verts);

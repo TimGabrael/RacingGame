@@ -21,7 +21,7 @@ struct DefaultFPSController
 
 	void HandleMouseMovement(int dx, int dy);
 
-	PhysicsController* controller;
+	physx::PxController* controller;
 	FPSUserInput movement;
 	glm::vec3 forwardDir;
 	glm::vec3 rightDir;

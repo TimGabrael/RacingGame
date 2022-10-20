@@ -143,15 +143,3 @@ void SC_UpdateFrame(struct Scene* scene, float dt)
 	}
 	SC_RemoveInvalid(scene);
 }
-
-
-Entity* SC_Raycast(const glm::vec3& origin, const glm::vec3& dir, float distance)
-{
-	GameState* state = GetGameState();
-	RigidBody* hit = PH_RayCast(state->physics, origin, dir, distance);
-	if (hit)
-	{
-		return (Entity*)PH_GetRigidBodyUserData(hit);
-	}
-	return nullptr;
-}

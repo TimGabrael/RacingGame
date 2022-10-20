@@ -100,11 +100,10 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		
 		CA_InitPerspectiveCamera(&player->camera, pos, 90.0f, state->winWidth, state->winHeight);
 
-		PhysicsMaterial* mat = PH_AddMaterial(state->physics, 1.0f, 1.0f, 1.0f);
 
 #ifndef FREE_CAM
-		player->controller.controller = PH_AddCapsuleController(state->physics, mat, pos, 10.0f, 2.0f);
-		player->sceneObject->rigidBody = player->controller.controller->GetRigidBody();
+		physx::PxMaterial* mat = state->physics->physicsSDK->createMaterial(1.0f, 1.0f, 1.0f);
+		player->controller.controller = state->physics->AddStdCapsuleController(mat, pos, 10.0f, 2.0f);
 #else
 
 #endif
@@ -147,7 +146,7 @@ void GameManager::RenderCallback(GameState* state)
 		glm::vec3 mouseWorldPos;
 		glm::vec3 mouseDir = CA_GetMouseWorldSpace(&localPlayer->camera.base, {state->mouseX / (float)state->winWidth, state->mouseY / (float)state->winHeight}, mouseWorldPos);
 
-		Entity* hitObj = SC_Raycast(mouseWorldPos, mouseDir, 1000.0f);
+		physx::PxRigidActor* hitObj = state->physics->RayCast(mouseWorldPos, mouseDir, 1000.0f);
 
 		RE_BeginScene(state->renderer, state->scene);
 		RE_SetCameraBase(state->renderer, &localPlayer->camera.base);
@@ -169,9 +168,9 @@ void GameManager::RenderCallback(GameState* state)
 		RE_RenderOpaque(state->renderer);
 		
 		
-		//if (hitObj)
+		if (hitObj && hitObj->userData)
 		{
-			RE_RenderOutline(state->renderer, fox->renderable, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
+			RE_RenderOutline(state->renderer, ((FoxEntity*)hitObj->userData)->renderable, {2.0f, 0.0f, 0.0f, 1.0f}, 0.1f);
 		}
 		RE_RenderTransparent(state->renderer);
 	}

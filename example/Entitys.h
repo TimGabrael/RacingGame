@@ -4,7 +4,7 @@
 #include "Graphics/Scene.h"
 
 
-#define FREE_CAM
+//#define FREE_CAM
 struct Player : public Entity
 {
 	Player();
@@ -19,7 +19,7 @@ struct Player : public Entity
 #endif // !FREE_CAM
 
 	PerspectiveCamera camera;
-	RigidBody* rigidBody;
+	physx::PxRigidActor* body;
 };
 
 struct FoxEntity : public Entity
@@ -29,7 +29,7 @@ struct FoxEntity : public Entity
 	virtual void Update(float dt) override {};
 	virtual void UpdateFrame(float dt);
 	Model* model;
-	RigidBody* body;
+	physx::PxRigidActor* body;
 	AnimationInstanceData* anim;
 	PBRRenderable* renderable;
 };
@@ -40,7 +40,7 @@ struct SponzaEntity : public Entity
 	virtual ~SponzaEntity() override = default;
 	virtual void Update(float dt) override {};
 	virtual void UpdateFrame(float dt);
-	RigidBody* body;
+	physx::PxRigidActor* body;
 	Model* model;
 	PBRRenderable* renderable;
 	

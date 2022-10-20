@@ -51,18 +51,24 @@ static void UpdateFPSUserInput(FPSUserInput& movement, glm::vec3& front, glm::ve
 void DefaultFPSController::Update(float dt)
 {
 	GenerateFPSUserInputFromKeys(movement);
-	glm::vec3 curVel = (controller->GetVelocity() - glm::vec3(0.0f, 9.81f, 0.0f) * 0.5f);
+	physx::PxVec3 cVel = controller->getActor()->getLinearVelocity();
+	glm::vec3 curVel = (glm::vec3(cVel.x, cVel.y, cVel.z) - glm::vec3(0.0f, 9.81f, 0.0f) * 0.5f);
 	curVel.x = 0.0f; curVel.z = 0.0f;
 	UpdateFPSUserInput(movement, forwardDir, rightDir, &yaw, &pitch);
 	glm::vec3 vel = (GenerateVelocityFromFPSUserInput(movement, forwardDir, rightDir, velocity, sprintModifier) + curVel) * dt;
-	if (controller->IsOnGround() && movement.jumpDown) {
+	if (PH_ControllerIsOnGround(controller) && movement.jumpDown) {
 		vel.y = 1.5f;
 	}
-	controller->Move(vel);
+
+	physx::PxControllerFilters filters;
+	filters.mFilterCallback = NULL;
+	filters.mCCTFilterCallback = NULL;
+	filters.mFilterData = NULL;
+	controller->move({ vel.x, vel.y, vel.z}, 0.01f, dt, filters);
 }
 void DefaultFPSController::SetCamera(PerspectiveCamera* cam, float camOffsetY)
 {
-	cam->base.pos = controller->GetPos() + glm::vec3(0.0f, camOffsetY, 0.0f);
+	cam->base.pos = PH_ControllerGetPosition(controller) + glm::vec3(0.0f, camOffsetY, 0.0f);
 	CA_UpdatePerspectiveCamera(cam, forwardDir);
 }
 void DefaultFPSController::HandleMouseMovement(int dx, int dy)

@@ -1,23 +1,5 @@
 #include "Physics.h"
 
-#define PX_PHYSX_CHARACTER_STATIC_LIB
-#include <PxPhysicsAPI.h> 
-#include <extensions/PxExtensionsAPI.h>
-#include <extensions/PxDefaultErrorCallback.h>
-#include <extensions/PxDefaultAllocator.h> 
-#include <extensions/PxDefaultSimulationFilterShader.h>
-#include <extensions/PxDefaultCpuDispatcher.h>
-#include <extensions/PxShapeExt.h>
-#include <foundation/PxMat33.h> 
-#include <extensions/PxSimpleFactory.h>
-#include <extensions/PxTriangleMeshExt.h>
-#include <extensions/PxConvexMeshExt.h>
-#include <vehicle/PxVehicleSDK.h>
-#include <foundation/PxQuat.h>
-#include "vehicle/PxVehicleUtil.h"
-
-#include "../Util/Utility.h"
-
 
 using namespace physx;
 class MyRaycastCallback : public PxRaycastCallback
@@ -41,57 +23,8 @@ public:
 	}
 };
 
-struct PhysicsScene
-{
-	PxPhysics* physicsSDK = NULL;
-	PxDefaultErrorCallback defaultErrorCallback;
-	PxDefaultAllocator defaultAllocatorCallback;
-	PxSimulationFilterShader defaultFilterShader = PxDefaultSimulationFilterShader;
-	PxControllerManager* manager = NULL;
-	PxFoundation* foundation = NULL;
-	PxCooking* cooking = NULL;
-	PxScene* scene = NULL;
-	MyRaycastCallback* raycastCallback;
-};
 
-
-
-void PhysicsController::Move(const glm::vec3& mov)
-{
-	PxController* c = (PxController*)this;
-	PxControllerFilters filters;
-	filters.mFilterCallback = NULL;
-	filters.mCCTFilterCallback = NULL;
-	filters.mFilterData = NULL;
-	c->move({ mov.x, mov.y, mov.z }, 0.01f, 1.0f / 60.0f, filters);
-}
-glm::vec3 PhysicsController::GetPos()
-{
-	PxController* c = (PxController*)this;
-	const PxExtendedVec3& pos = c->getPosition();
-	return {pos.x, pos.y, pos.z};
-}
-glm::vec3 PhysicsController::GetVelocity()
-{
-	PxController* c = (PxController*)this;
-	const PxVec3& vel = c->getActor()->getLinearVelocity();
-	return { vel.x, vel.y, vel.z };
-}
-RigidBody* PhysicsController::GetRigidBody()
-{
-	PxController* c = (PxController*)this;
-	return (RigidBody*)c->getActor();
-}
-bool PhysicsController::IsOnGround()
-{
-	PxController* c = (PxController*)this;
-	PxControllerState state;
-	c->getState(state);
-	return state.touchedShape;
-}
-
-
-struct PhysicsScene* PH_CreatePhysicsScene()
+PhysicsScene* PH_CreatePhysicsScene()
 {
 	PhysicsScene* out = new PhysicsScene;
 
@@ -129,8 +62,11 @@ struct PhysicsScene* PH_CreatePhysicsScene()
 	return out;
 }
 
-void PH_CleanUpPhysicsScene(struct PhysicsScene* scene)
+void PH_CleanUpPhysicsScene(PhysicsScene* scene)
 {
+	delete scene->raycastCallback;
+	scene->manager->release();
+	scene->cooking->release();
 	scene->scene->release();
 	scene->physicsSDK->release();
 }
@@ -141,31 +77,26 @@ void PH_Update(PhysicsScene* scene, float dt)
 	scene->scene->fetchResults(true);
 }
 
-
-struct PhysicsMaterial* PH_AddMaterial(PhysicsScene* scene, float staticFriction, float dynamicFriction, float restitution)
-{
-	return (PhysicsMaterial*)scene->physicsSDK->createMaterial(staticFriction, dynamicFriction, restitution);
-}
-
-struct PhysicsConvexMesh* PH_AddPhysicsConvexMesh(PhysicsScene* scene, const void* verts, uint32_t numVerts, uint32_t vertStride)
+physx::PxConvexMesh* PhysicsScene::AddConvexMesh(const void* verts, uint32_t numVerts, uint32_t vertStride)
 {
 	PxConvexMeshDesc desc;
 	desc.points.data = verts;
 	desc.points.count = numVerts;
 	desc.points.stride = vertStride;
 	desc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
-	
+
 	PxDefaultMemoryOutputStream buf;
-	if (!scene->cooking->cookConvexMesh(desc, buf))
+	if (!cooking->cookConvexMesh(desc, buf))
 	{
 		LOG("FAILED TO COOK CONVEX MESH\n");
 		return nullptr;
 	}
 	PxDefaultMemoryInputData input(buf.getData(), buf.getSize());
-	PxConvexMesh* convexMesh = scene->physicsSDK->createConvexMesh(input);
-	return (PhysicsConvexMesh*)convexMesh;
+	PxConvexMesh* convexMesh = physicsSDK->createConvexMesh(input);
+	return convexMesh;
+
 }
-struct PhysicsConcaveMesh* PH_AddPhysicsConcaveMesh(PhysicsScene* scene, const void* verts, uint32_t numVerts, uint32_t vertStride, const uint32_t* inds, uint32_t numInds)
+physx::PxTriangleMesh* PhysicsScene::AddConcaveMesh(const void* verts, uint32_t numVerts, uint32_t vertStride, const uint32_t* inds, uint32_t numInds)
 {
 	PxTriangleMeshDesc desc;
 	desc.points.data = verts;
@@ -176,57 +107,17 @@ struct PhysicsConcaveMesh* PH_AddPhysicsConcaveMesh(PhysicsScene* scene, const v
 	desc.triangles.data = inds;
 
 	PxDefaultMemoryOutputStream buf;
-	if (!scene->cooking->cookTriangleMesh(desc, buf))
+	if (!cooking->cookTriangleMesh(desc, buf))
 	{
 		LOG("FAILED TO COOK CONCAVE MESH\n");
 		return nullptr;
 	}
 
 	PxDefaultMemoryInputData input(buf.getData(), buf.getSize());
-	PxTriangleMesh* concaveMesh = scene->physicsSDK->createTriangleMesh(input);
-	return (PhysicsConcaveMesh*)concaveMesh;
+	PxTriangleMesh* concaveMesh = physicsSDK->createTriangleMesh(input);
+	return concaveMesh;
 }
-
-
-PhysicsShape* PH_AddConvexShape(PhysicsScene* scene, PhysicsConvexMesh* mesh, const PhysicsMaterial* material, const glm::vec3& scale)
-{
-	PxConvexMeshGeometry geom((PxConvexMesh*)mesh, PxMeshScale(PxVec3(scale.x, scale.y, scale.z)));
-	return (PhysicsShape*)scene->physicsSDK->createShape(geom, *(PxMaterial*)material);
-}
-PhysicsShape* PH_AddConcaveShape(PhysicsScene* scene, PhysicsConcaveMesh* mesh, const PhysicsMaterial* material, const glm::vec3& scale)
-{
-	PxTriangleMeshGeometry geom((PxTriangleMesh*)mesh, PxMeshScale(PxVec3(scale.x, scale.y, scale.z)));
-	PxShape* shape = scene->physicsSDK->createShape(geom, *(PxMaterial*)material);
-	return (PhysicsShape*)shape;
-}
-PhysicsShape* PH_AddBoxShape(PhysicsScene* scene, const PhysicsMaterial* material, const glm::vec3& halfExtent)
-{
-	PxBoxGeometry geom(halfExtent.x, halfExtent.y, halfExtent.z);
-	PxShape* shape = scene->physicsSDK->createShape(geom, *(PxMaterial*)material);
-	return (PhysicsShape*)shape;
-}
-
-RigidBody* PH_AddStaticRigidBody(struct PhysicsScene* scene, PhysicsShape* shape, const glm::vec3& pos, const glm::quat& rot)
-{
-	PxTransform pose = PxTransform(PxVec3(pos.x, pos.y, pos.z), PxQuat(rot.x, rot.y, rot.z, rot.w));
-	PxRigidStatic* body = scene->physicsSDK->createRigidStatic(pose);
-	body->attachShape(*(PxShape*)shape);
-	scene->scene->addActor(*body);
-	return (RigidBody*)body;
-}
-RigidBody* PH_AddDynamicRigidBody(struct PhysicsScene* scene, PhysicsShape* shape, const glm::vec3& pos, const glm::quat& rot)
-{
-	PxTransform pose = PxTransform(PxVec3(pos.x, pos.y, pos.z), PxQuat(rot.x, rot.y, rot.z, rot.w));
-	PxRigidDynamic* body = scene->physicsSDK->createRigidDynamic(pose);
-	body->attachShape(*(PxShape*)shape);
-	scene->scene->addActor(*body);
-	PxRigidBodyExt::updateMassAndInertia(*body, 1.0f);
-	body->wakeUp();
-
-	return (RigidBody*)body;
-}
-
-PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMaterial* material, const glm::vec3& pos, float height, float radius)
+physx::PxController* PhysicsScene::AddStdCapsuleController(physx::PxMaterial* material, const glm::vec3& pos, float height, float radius)
 {
 	PxCapsuleControllerDesc desc;
 	desc.behaviorCallback = NULL;
@@ -235,7 +126,7 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 	desc.density = 10.0f;
 	desc.height = height;
 	desc.invisibleWallHeight = 0.0f;
-	desc.material = (PxMaterial*)material;
+	desc.material = material;
 	desc.maxJumpHeight = 2.0f;
 	//desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
 	desc.nonWalkableMode = PxControllerNonWalkableMode::ePREVENT_CLIMBING;
@@ -249,72 +140,65 @@ PhysicsController* PH_AddCapsuleController(PhysicsScene* scene, const PhysicsMat
 	desc.upDirection = { 0.0f, 1.0f, 0.0f };
 	desc.userData = nullptr;
 	desc.volumeGrowth = 1.5f;
-	PxController* controller = scene->manager->createController(desc);
+	PxController* controller = manager->createController(desc);
 	controller->invalidateCache();
-	
-	
-	return (PhysicsController*)controller;
+
+	return controller;
 }
-
-
-
-
-
-void PH_AddShapeToRigidBody(RigidBody* body, PhysicsShape* shape)
+physx::PxRigidActor* PhysicsScene::AddStaticBody(physx::PxShape* shape, const glm::vec3& pos, const glm::quat& rot)
 {
-	((PxRigidActor*)body)->attachShape(*(PxShape*)shape);
+	PxTransform pose = PxTransform(PxVec3(pos.x, pos.y, pos.z), PxQuat(rot.x, rot.y, rot.z, rot.w));
+	PxRigidStatic* body = physicsSDK->createRigidStatic(pose);
+	body->attachShape(*(PxShape*)shape);
+	scene->addActor(*body);
+	return body;
 }
-
-
-
-RigidBody* PH_RayCast(PhysicsScene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance)
+physx::PxRigidActor* PhysicsScene::AddDynamicBody(physx::PxShape* shape, const glm::vec3& pos, const glm::quat& rot, float density)
 {
-	bool res = scene->scene->raycast({ origin.x, origin.y, origin.z }, { dir.x, dir.y, dir.z }, distance, *scene->raycastCallback);
+	PxTransform pose = PxTransform(PxVec3(pos.x, pos.y, pos.z), PxQuat(rot.x, rot.y, rot.z, rot.w));
+	PxRigidDynamic* body = physicsSDK->createRigidDynamic(pose);
+	body->attachShape(*(PxShape*)shape);
+	scene->addActor(*body);
+	PxRigidBodyExt::updateMassAndInertia(*body, density);
+	body->wakeUp();
+	return body;
+}
+physx::PxRigidActor* PhysicsScene::RayCast(const glm::vec3& origin, const glm::vec3& dir, float distance)
+{
+	bool res = scene->raycast({ origin.x, origin.y, origin.z }, { dir.x, dir.y, dir.z }, distance, *raycastCallback);
 	if (res)
 	{
 		PxRigidActor* closest = nullptr;
 		float distance = FLT_MAX;
-		for (uint32_t i = 0; i < scene->raycastCallback->nbTouches; i++)
+		for (uint32_t i = 0; i < raycastCallback->nbTouches; i++)
 		{
-			if (scene->raycastCallback->touches[i].distance < distance)
+			if (raycastCallback->touches[i].distance < distance)
 			{
-				distance = scene->raycastCallback->touches[i].distance;
-				closest = scene->raycastCallback->touches[i].actor;
+				distance = raycastCallback->touches[i].distance;
+				closest = raycastCallback->touches[i].actor;
 			}
 		}
-		return (RigidBody*)closest;
+		return closest;
 	}
 	return nullptr;
 }
 
-
-void PH_RemoveController(PhysicsController* controller)
+glm::vec3 PH_ControllerGetPosition(physx::PxController* controller)
 {
-	PxController* c = (PxController*)controller;
-	c->release();
+	const PxExtendedVec3& pos = controller->getPosition();
+	return {pos.x, pos.y, pos.z};
 }
-void PH_RemoveRigidBody(struct PhysicsScene* scene, RigidBody* body)
+glm::vec3 PH_ControllerGetVelocity(physx::PxController* controller)
 {
-	scene->scene->removeActor(*(PxRigidActor*)body);
+	const PxVec3& vel = controller->getActor()->getLinearVelocity();
+	return { vel.x, vel.y, vel.z };
 }
-
-void PH_SetTransformation(RigidBody* body, glm::mat4& m)
+bool PH_ControllerIsOnGround(physx::PxController* controller)
 {
-	PxMat44 transform = PxMat44(((PxRigidActor*)body)->getGlobalPose());
-	memcpy(&m, &transform, sizeof(PxMat44));
+	PxControllerState state;
+	controller->getState(state);
+	return state.touchedShape;
 }
-void PH_SetRigidBodyUserData(RigidBody* body, void* userData)
-{
-	((PxRigidActor*)body)->userData = userData;
-}
-void* PH_GetRigidBodyUserData(RigidBody* body)
-{
-	return ((PxRigidActor*)body)->userData;
-}
-
-
-
-
 
 
 void PH_GetPhysicsVertices(PhysicsScene* scene, std::vector<Vertex3D>& verts)
