@@ -11,41 +11,33 @@ enum SCENE_OBJECT_FLAG
 
 struct Entity
 {
-	virtual ~Entity() = default;
+	Entity();
+	virtual ~Entity();
 	virtual void Update(float dt) = 0;
+	virtual void UpdateFrame(float dt) = 0;
 };
 
 
-struct SceneObject
-{
-	struct Model* model;
-	struct Entity* entity;
-	struct RigidBody* rigidBody;
-	struct AnimationInstanceData* anim;
-	Renderable renderable;
-	glm::mat4 transform;
-	uint32_t flags;
-};
-
-
-struct Scene* SC_CreateScene(struct PhysicsScene* ph);
+struct Scene* SC_CreateScene();
 void SC_CleanUpScene(struct Scene* scene);
 
 
 void SC_RemoveAll(struct Scene* scene);
 
-SceneObject* SC_AddStaticObject(struct Scene* scene, const SceneObject* obj);
-void SC_RemoveStaticObject(struct Scene* scene, SceneObject* obj);
+void SC_AddEntity(struct Scene* scene, Entity* ent);
+void SC_RemoveEntity(struct Scene* scene, Entity* ent);
 
-SceneObject* SC_AddDynamicObject(struct Scene* scene, const SceneObject* obj);
-void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj);
+void SC_AddRenderable(struct Scene* scene, struct Renderable* r);
+void SC_RemoveRenderable(struct Scene* scene, struct Renderable* r);
 
 
+Entity** SC_GetAllEntitys(struct Scene* scene, size_t* num);
+struct Renderable** SC_GetAllRenderables(struct Scene* scene, size_t* num);
 
-SceneObject** SC_GetAllSceneObjects(struct Scene* scene, uint32_t* num);
+
 
 void SC_Update(struct Scene* scene, float dt);
-void SC_PrepareRender(struct Scene* scene);
+void SC_UpdateFrame(struct Scene* scene, float dt);
 
 
-SceneObject* SC_Raycast(struct Scene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance);
+Entity* SC_Raycast(const glm::vec3& origin, const glm::vec3& dir, float distance);

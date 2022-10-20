@@ -166,7 +166,7 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 
 	g_gameState->assets = AM_CreateAssetManager();
 	g_gameState->physics = PH_CreatePhysicsScene();
-	g_gameState->scene = SC_CreateScene(g_gameState->physics);
+	g_gameState->scene = SC_CreateScene();
 	g_gameState->renderer = RE_CreateRenderer(g_gameState->assets);
 	g_gameState->audio = AU_CreateAudioManager();
 
@@ -283,8 +283,7 @@ void UpateGameState()
 		
 		if (g_gameState->winWidth > 0 && g_gameState->winHeight > 0)
 		{
-			SC_PrepareRender(g_gameState->scene);
-
+			SC_UpdateFrame(g_gameState->scene, dt);
 
 			glEnable(GL_DEPTH_TEST);
 			glEnable(GL_CULL_FACE);

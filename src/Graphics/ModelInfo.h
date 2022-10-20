@@ -195,11 +195,6 @@ void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim);
 void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skinIdx, AnimationInstanceData* anim, float time);
 
 
-void CreateRenderableFromModel(const Model* model, AnimationInstanceData* optionalAnim, const glm::mat4& transform, struct Renderable* renderable);
-void UpdateRenderableFromModel(const Model* model, AnimationInstanceData* optionalAnim, const glm::mat4& transform, struct Renderable* renderable);
-void CleanUpRenderable(Renderable* renderable);
-
-
 
 
 

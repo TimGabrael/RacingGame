@@ -1,45 +1,8 @@
 #pragma once
-#include "GLIncludes.h"
-#include "Camera.h"
-#include "ModelInfo.h"
+#include "Renderable.h"
 #define MAX_NUM_JOINTS 128
 #define MAX_NUM_LIGHTS 20
 #define MAX_BLOOM_MIPMAPS 8
-
-struct SceneRenderData
-{
-	struct Renderer* renderer;
-	const CameraBase* cam;
-	const struct EnvironmentData* env;
-	GLuint lightGroupUniform;
-	GLuint shadowMapTexture;
-};
-
-struct RenderCommand
-{
-	virtual void DrawShadow(SceneRenderData* data) = 0;
-	virtual void DrawGeom(SceneRenderData* data) = 0;
-	virtual void DrawOpaque(SceneRenderData* data) = 0;
-	virtual void DrawTransparent(SceneRenderData* data) = 0;
-	virtual void DrawSSR(SceneRenderData* data) = 0;
-
-	virtual bool IsTransparent() = 0;
-
-	virtual const AABB& GetBound() = 0;
-	virtual uint32_t GetSize() = 0;
-	virtual float GetZDepth() = 0;
-	virtual void SetZDepth(float zDepth) = 0;
-};
-
-struct Renderable
-{
-	RenderCommand* cmds;
-	uint32_t numCmds;
-	AABB bound;
-	uint32_t FillRenderCommandsOpaque(RenderCommand** cmdList);			// returns num added to list
-	uint32_t FillRenderCommandsTransparent(RenderCommand** cmdList);	// returns num added to list
-
-};
 
 
 struct EnvironmentData
@@ -258,7 +221,7 @@ void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* lig
 void RE_CreateEnvironment(struct Renderer* renderer, EnvironmentData* env, uint32_t irrWidth, uint32_t irrHeight);
 void RE_CleanUpEnvironment(EnvironmentData* env);
 
-void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num);
+void RE_BeginScene(struct Renderer* renderer, struct Scene* scene);
 
 // the objects passed to the functions need to stay alive for the entire renderpass!!!
 void RE_SetCameraBase(struct Renderer* renderer, const struct CameraBase* camBase);
@@ -280,7 +243,7 @@ void RE_RenderTransparent(struct Renderer* renderer);
 
 
 
-void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const glm::vec4& color, float thickness);
+void RE_RenderOutline(struct Renderer* renderer, const Renderable* obj, const glm::vec4& color, float thickness);
 
 
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap);
@@ -308,49 +271,3 @@ void RE_RenderPostProcessingToneMap(struct Renderer* renderer, const PostProcess
 void RE_EndScene(struct Renderer* renderer);
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-struct PBRRenderCommand : public RenderCommand
-{
-	enum PBR_RENDER_FLAGS
-	{
-		PBR_RENDER_SHADOW = 1,
-		PBR_RENDER_GEOMETRY = 2,
-		PBR_RENDER_OPAQUE = 4,
-		PBR_RENDER_TRANSPARENT = 8,
-		PBR_RENDER_SSR = 16,
-	};
-	GLuint vao = 0;
-	GLuint indexBuffer = 0;
-	GLuint animUniform = 0;
-	uint32_t startIdx = 0;
-	uint32_t numIdx = 0;
-	uint32_t primFlags = 0;
-	AABB bound = { };
-	glm::mat4 transform = glm::mat4(1.0f);
-	Material* material = 0;
-	float zDepth = 0;
-	uint32_t renderFlags = 0;
-	virtual void DrawShadow(SceneRenderData* data) override;
-	virtual void DrawGeom(SceneRenderData* data) override;
-	virtual void DrawOpaque(SceneRenderData* data) override;
-	virtual void DrawTransparent(SceneRenderData* data) override;
-	virtual void DrawSSR(SceneRenderData* data) override;
-
-	virtual bool IsTransparent() { return (renderFlags & PBR_RENDER_TRANSPARENT); }
-
-	virtual const AABB& GetBound() { return bound; };
-	virtual uint32_t GetSize() { return sizeof(PBRRenderCommand); };
-	virtual float GetZDepth() { return zDepth; };
-	virtual void SetZDepth(float zDepth) { this->zDepth = zDepth; };
-};

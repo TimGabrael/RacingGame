@@ -26,7 +26,8 @@ struct GameManager : public BaseGameManager
 	Model* foxModel;
 	AnimationInstanceData foxAnimInstance;
 	Model debugModel;
-	SceneObject* foxSceneObject;
+	FoxEntity* fox;
+
 	AtlasTexture* atlas;
 	FontMetrics* metrics;
 };

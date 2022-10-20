@@ -96,24 +96,17 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 	}
 	else
 	{
-		SceneObject obj;
-		obj.flags = 0;	// for now
-		obj.model = nullptr;
-		obj.rigidBody = nullptr;
 		Player* player = new Player;
-		obj.entity = player;
-		obj.transform = glm::mat4(1.0f);
-
+		
 		CA_InitPerspectiveCamera(&player->camera, pos, 90.0f, state->winWidth, state->winHeight);
 
 		PhysicsMaterial* mat = PH_AddMaterial(state->physics, 1.0f, 1.0f, 1.0f);
 
-		player->sceneObject = SC_AddDynamicObject(state->scene, &obj);
 #ifndef FREE_CAM
 		player->controller.controller = PH_AddCapsuleController(state->physics, mat, pos, 10.0f, 2.0f);
 		player->sceneObject->rigidBody = player->controller.controller->GetRigidBody();
 #else
-		player->sceneObject->rigidBody = nullptr;
+
 #endif
 		player->controller.yaw = yaw;
 		player->controller.pitch = pitch;
@@ -154,12 +147,9 @@ void GameManager::RenderCallback(GameState* state)
 		glm::vec3 mouseWorldPos;
 		glm::vec3 mouseDir = CA_GetMouseWorldSpace(&localPlayer->camera.base, {state->mouseX / (float)state->winWidth, state->mouseY / (float)state->winHeight}, mouseWorldPos);
 
-		SceneObject* hitObj = SC_Raycast(state->scene, mouseWorldPos, mouseDir, 1000.0f);
+		Entity* hitObj = SC_Raycast(mouseWorldPos, mouseDir, 1000.0f);
 
-		uint32_t numSceneObjects = 0;
-		SceneObject** objs = SC_GetAllSceneObjects(state->scene, &numSceneObjects);
-
-		RE_BeginScene(state->renderer, objs, numSceneObjects);
+		RE_BeginScene(state->renderer, state->scene);
 		RE_SetCameraBase(state->renderer, &localPlayer->camera.base);
 		RE_SetEnvironmentData(state->renderer, &env);
 		RE_SetLightData(state->renderer, defaultLightGroup);
@@ -179,9 +169,9 @@ void GameManager::RenderCallback(GameState* state)
 		RE_RenderOpaque(state->renderer);
 		
 		
-		if (hitObj)
+		//if (hitObj)
 		{
-			RE_RenderOutline(state->renderer, hitObj, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
+			RE_RenderOutline(state->renderer, fox->renderable, { 2.0f, 0.0f, 0.0f, 1.0f }, 0.1f);
 		}
 		RE_RenderTransparent(state->renderer);
 	}

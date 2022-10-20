@@ -3,289 +3,155 @@
 #include "GameState.h"
 #define NUM_OBJECTS_IN_LIST sizeof(uintptr_t) * 8
 
-struct SceneObjectList
+struct SceneEntity
 {
-	SceneObjectList* next;
-	uintptr_t fillMask;
-	SceneObject objects[NUM_OBJECTS_IN_LIST];
+	Entity* ent;
+	bool isAlive;
 };
 
 struct Scene
 {
-	SceneObjectList staticObjects;
-	SceneObjectList dynamicObjects;
-	uint32_t numStaticObjects;
-	uint32_t numDynamicObjects;
-	PhysicsScene* physics;
-	SceneObject** cachedList;
-	uint32_t cachedListCapacity;
-	bool needRebuild;
+	std::vector<SceneEntity> entitys;
+
+
+	// renderables don't need anything else, as they are not supposed to delete themselves or others
+	std::vector<Renderable*> renderables;
+
+
+	// this will be the output of SC_GetAllEntitys 
+	std::vector<Entity*> userEntList;
+
+	bool containsInvalidEntity;
 };
 
-static void FreeObject(SceneObject* obj)
+
+Entity::Entity()
 {
-	if (obj->entity) delete obj->entity;
+	SC_AddEntity(GetGameState()->scene, this);
+}
+Entity::~Entity()
+{
+	SC_RemoveEntity(GetGameState()->scene, this);
 }
 
 
-static SceneObject* AllocateObjectFromList(SceneObjectList* list)
-{
-	if (list->fillMask == 0xFFFFFFFFFFFFFFFFLL)
-	{
-		if (list->next)
-		{
-			return AllocateObjectFromList(list->next);
-		}
-		else
-		{
-			list->next = new SceneObjectList;
-			memset(list->next, 0, sizeof(SceneObjectList));
-			list->next->fillMask = 1;
-			return &list->next->objects[0];
-		}
-	}
-	else
-	{
-		for (uint64_t i = 0; i < NUM_OBJECTS_IN_LIST; i++)
-		{
-			uint64_t cur = (1LL << i);
-			if (!(list->fillMask & cur))
-			{
-				list->fillMask |= cur;
-				return &list->objects[i];
-			}
-		}
-	}
-	return nullptr;
-}
-static void FreeObjectFromSubList(SceneObjectList* oldList, SceneObjectList* list, SceneObject* obj)
-{
-	const uintptr_t idx = ((uintptr_t)obj - (uintptr_t)&list->objects[0]) / sizeof(SceneObject);
-	if (idx >= 0 && idx < NUM_OBJECTS_IN_LIST)
-	{
-		const uintptr_t bit = (1LL << idx);
-		if (list->fillMask & bit)
-		{
-			list->fillMask &= ~bit;
-			FreeObject(&list->objects[idx]);
-		}
-
-		if (list->fillMask == 0) // DELETE THE LIST AS IT DOES NOT CONTAIN ANY OBJECTS ANYMORE!!!
-		{
-			oldList->next = list->next;
-			delete list;
-		}
-	}
-	else
-	{
-		FreeObjectFromSubList(list, list->next, obj);
-	}
-}
-static void FreeObjectFromList(SceneObjectList* list, SceneObject* obj)
-{
-	const uintptr_t idx = ((uintptr_t)obj - (uintptr_t)&list->objects[0]) / sizeof(SceneObject);
-	if (idx >= 0 && idx < NUM_OBJECTS_IN_LIST)
-	{
-		const uintptr_t bit = (1LL << idx);
-		if (list->fillMask & bit)
-		{
-			list->fillMask &= ~bit;
-			FreeObject(&list->objects[idx]);
-		}
-	}
-	else
-	{
-		FreeObjectFromSubList(list, list->next, obj);
-	}
-}
-
-// THIS FUNCTION DOES NOT ITERATE OVER ALL CONNECTED LISTS!!!
-static void FreeObjectIfExists(SceneObjectList* list, int idx)
-{
-	const uintptr_t bit = (1LL << idx);
-	if (list->fillMask & bit)
-	{
-		list->fillMask &= ~bit;
-		FreeObject(&list->objects[idx]);
-	}
-}
-
-static void FreeEntireList(SceneObjectList* list)
-{
-	while (list->next)
-	{
-		for (int i = 0; i < NUM_OBJECTS_IN_LIST; i++)
-		{
-			FreeObjectIfExists(list->next, i);
-		}
-		SceneObjectList* old = list->next;
-		list->next = old->next;
-		delete old;
-	}
-	for (int i = 0; i < NUM_OBJECTS_IN_LIST; i++)
-	{
-		FreeObjectIfExists(list, i);
-	}
-}
-
-
-
-struct Scene* SC_CreateScene(struct PhysicsScene* ph)
+struct Scene* SC_CreateScene()
 {
 	Scene* scene = new Scene;
-	memset(scene, 0, sizeof(Scene));
-	scene->physics = ph;
-	scene->needRebuild = true;
 	return scene;
 }
 void SC_CleanUpScene(struct Scene* scene)
 {
 	SC_RemoveAll(scene);
-	if (scene->cachedList)
-	{
-		delete[] scene->cachedList;
-		scene->cachedList = nullptr;
-		scene->cachedListCapacity = 0;
-	}
 	delete scene;
 }
+
 void SC_RemoveAll(struct Scene* scene)
 {
-	FreeEntireList(&scene->staticObjects);
-	FreeEntireList(&scene->dynamicObjects);
-	scene->numStaticObjects = 0;
-	scene->numDynamicObjects = 0;
-	scene->needRebuild = true;
-}
-SceneObject* SC_AddStaticObject(struct Scene* scene, const SceneObject* obj)
-{
-	SceneObject* out = AllocateObjectFromList(&scene->staticObjects);
-	scene->numStaticObjects = scene->numStaticObjects + 1;
-	memcpy(out, obj, sizeof(SceneObject));
-	out->flags &= ~SCENE_OBJECT_FLAG_DYNAMIC;
-	out->flags |= SCENE_OBJECT_FLAG_VISIBLE;
-	scene->needRebuild = true;
-	if (out->rigidBody) PH_SetRigidBodyUserData(out->rigidBody, out);
-	if (out->model) CreateRenderableFromModel(out->model, out->anim, out->transform, &out->renderable);
-	return out;
-}
-void SC_RemoveStaticObject(struct Scene* scene, SceneObject* obj)
-{
-	CleanUpRenderable(&obj->renderable);
-	FreeObjectFromList(&scene->staticObjects, obj);
-	scene->numStaticObjects = scene->numStaticObjects - 1;
-	scene->needRebuild = true;
+	scene->entitys.clear();
+	scene->renderables.clear();
 }
 
-SceneObject* SC_AddDynamicObject(struct Scene* scene, const SceneObject* obj)
+void SC_AddEntity(struct Scene* scene, Entity* ent)
 {
-	SceneObject* out = AllocateObjectFromList(&scene->dynamicObjects);
-	scene->numDynamicObjects = scene->numDynamicObjects + 1;
-	memcpy(out, obj, sizeof(SceneObject));
-	out->flags |= SCENE_OBJECT_FLAG_DYNAMIC | SCENE_OBJECT_FLAG_VISIBLE;
-	scene->needRebuild = true;
-	if (out->rigidBody) PH_SetRigidBodyUserData(out->rigidBody, out);
-	if (out->model) CreateRenderableFromModel(out->model, out->anim, out->transform, &out->renderable);
-	return out;
+	scene->entitys.push_back({ ent, true });
 }
-void SC_RemoveDynamicObject(struct Scene* scene, SceneObject* obj)
+void SC_RemoveEntity(struct Scene* scene, Entity* ent)
 {
-	CleanUpRenderable(&obj->renderable);
-	FreeObjectFromList(&scene->dynamicObjects, obj);
-	scene->numDynamicObjects = scene->numDynamicObjects - 1;
-	scene->needRebuild = true;
-}
-
-
-SceneObject** SC_GetAllSceneObjects(struct Scene* scene, uint32_t* num)
-{
-	const uint32_t totalNum = scene->numStaticObjects + scene->numDynamicObjects;
-	*num = totalNum;
-	if (scene->needRebuild)
+	scene->containsInvalidEntity = true;
+	for (size_t i = 0; i < scene->entitys.size(); i++)
 	{
-		if (scene->cachedListCapacity <= totalNum)
+		if (scene->entitys.at(i).ent == ent)
 		{
-			if (scene->cachedList) delete[] scene->cachedList;
-			scene->cachedListCapacity = totalNum + 10;
-			scene->cachedList = new SceneObject * [scene->cachedListCapacity];
+			scene->entitys.at(i).isAlive = false;
 		}
-
-		uint32_t curIdx = 0;
-		SceneObjectList* curList = &scene->staticObjects;
-		while (curList)
-		{
-			for (int i = 0; i < NUM_OBJECTS_IN_LIST; i++)
-			{
-				const uintptr_t remaining = ~((1LL << i) - 1 | (1LL << i));
-				if (curList->fillMask & (1LL << i))
-				{
-					scene->cachedList[curIdx] = &curList->objects[i];
-					curIdx++;
-				}
-				if (!(remaining & curList->fillMask)) break;
-			}
-			curList = curList->next;
-		}
-		curList = &scene->dynamicObjects;
-		while (curList)
-		{
-			for (int i = 0; i < NUM_OBJECTS_IN_LIST; i++)
-			{
-				const uintptr_t remaining = ~((1LL << i) - 1 | (1LL << i));
-				if (curList->fillMask & (1LL << i))
-				{
-					scene->cachedList[curIdx] = &curList->objects[i];
-					curIdx++;
-				}
-				if (!(remaining & curList->fillMask)) break;
-			}
-			curList = curList->next;
-		}
-		scene->needRebuild = false;
 	}
-	return scene->cachedList;
 }
+
+void SC_AddRenderable(struct Scene* scene, struct Renderable* r)
+{
+	scene->renderables.push_back(r);
+}
+void SC_RemoveRenderable(struct Scene* scene, struct Renderable* r)
+{
+	for (size_t i = 0; i < scene->renderables.size(); i++)
+	{
+		if (scene->renderables.at(i) == r)
+		{
+			scene->renderables.erase(scene->renderables.begin() + i);
+		}
+	}
+}
+
+
+static void SC_RemoveInvalid(struct Scene* scene)
+{
+	if (scene->containsInvalidEntity)
+	{
+		std::vector<SceneEntity> newList;
+		for (SceneEntity& e : scene->entitys)
+		{
+			if (e.isAlive)
+			{
+				newList.push_back(e);
+			}
+		}
+		scene->entitys = std::move(newList);
+		scene->containsInvalidEntity = false;
+	}
+}
+
+
+Entity** SC_GetAllEntitys(struct Scene* scene, size_t* num)
+{
+	SC_RemoveInvalid(scene);
+	*num = scene->entitys.size();
+	for (uint32_t i = 0; i < scene->entitys.size(); i++)
+	{
+		scene->userEntList.push_back(scene->entitys.at(i).ent);
+	}
+	return scene->userEntList.data();
+}
+struct Renderable** SC_GetAllRenderables(struct Scene* scene, size_t* num)
+{
+	*num = scene->renderables.size();
+	return scene->renderables.data();
+}
+
 
 
 
 void SC_Update(struct Scene* scene, float dt)
 {
-	uint32_t num = 0;
-	SceneObject** obj = SC_GetAllSceneObjects(scene, &num);
-	for (int i = 0; i < num; i++)
+	for (uint32_t i = 0; i < scene->entitys.size(); i++)
 	{
-		if (obj[i]->entity)
+		if (scene->entitys.at(i).isAlive)
 		{
-			obj[i]->entity->Update(dt);
+			scene->entitys.at(i).ent->Update(dt);
 		}
 	}
-	// rebuild in case any objects were created in the entity update function
-	SC_GetAllSceneObjects(scene, &num);
+	SC_RemoveInvalid(scene);
 }
-void SC_PrepareRender(struct Scene* scene)
+void SC_UpdateFrame(struct Scene* scene, float dt)
 {
-	uint32_t num = 0;
-	SceneObject** obj = SC_GetAllSceneObjects(scene, &num);
-	for (int i = 0; i < num; i++)
+	for (uint32_t i = 0; i < scene->entitys.size(); i++)
 	{
-		if (obj[i]->rigidBody)
+		if (scene->entitys.at(i).isAlive)
 		{
-			PH_SetTransformation(obj[i]->rigidBody, obj[i]->transform);
-		}
-		if (obj[i]->model)
-		{
-			UpdateRenderableFromModel(obj[i]->model, obj[i]->anim, obj[i]->transform, &obj[i]->renderable);
+			scene->entitys.at(i).ent->UpdateFrame(dt);
 		}
 	}
+	SC_RemoveInvalid(scene);
 }
 
-SceneObject* SC_Raycast(struct Scene* scene, const glm::vec3& origin, const glm::vec3& dir, float distance)
+
+Entity* SC_Raycast(const glm::vec3& origin, const glm::vec3& dir, float distance)
 {
 	GameState* state = GetGameState();
 	RigidBody* hit = PH_RayCast(state->physics, origin, dir, distance);
 	if (hit)
 	{
-		return (SceneObject*)PH_GetRigidBodyUserData(hit);
+		return (Entity*)PH_GetRigidBodyUserData(hit);
 	}
 	return nullptr;
 }

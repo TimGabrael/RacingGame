@@ -7,10 +7,11 @@
 #define FREE_CAM
 struct Player : public Entity
 {
-	virtual ~Player() override = default;
+	Player();
+	virtual ~Player() override;
 	virtual void Update(float dt) override;
+	virtual void UpdateFrame(float dt) {};
 
-	struct SceneObject* sceneObject;
 #ifndef FREE_CAM
 	DefaultFPSController controller;
 #else
@@ -18,5 +19,29 @@ struct Player : public Entity
 #endif // !FREE_CAM
 
 	PerspectiveCamera camera;
+	RigidBody* rigidBody;
 };
 
+struct FoxEntity : public Entity
+{
+	FoxEntity(Model* m, AnimationInstanceData* data);
+	virtual ~FoxEntity() override = default;
+	virtual void Update(float dt) override {};
+	virtual void UpdateFrame(float dt);
+	Model* model;
+	RigidBody* body;
+	AnimationInstanceData* anim;
+	PBRRenderable* renderable;
+};
+
+struct SponzaEntity : public Entity
+{
+	SponzaEntity(Model* m);
+	virtual ~SponzaEntity() override = default;
+	virtual void Update(float dt) override {};
+	virtual void UpdateFrame(float dt);
+	RigidBody* body;
+	Model* model;
+	PBRRenderable* renderable;
+	
+};

@@ -43,31 +43,22 @@ int main()
 	manager->debugModel = CreateModelFromVertices(verts, 0);
 	
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-	SceneObject base;
-	memset(&base, 0, sizeof(SceneObject));
-	base.model = manager->sponzaModel;
-	base.rigidBody = PH_AddStaticRigidBody(game->physics, planeShape, glm::vec3(0.0f), def);// PH_AddStaticRigidBody(game->physics, sponzaShape, glm::vec3(0.0f), def);
-	base.transform = glm::mat4(1.0f);
-	SC_AddStaticObject(game->scene, &base);
 
-
-	base.rigidBody = nullptr;
-	base.model = &manager->debugModel;
-	//SC_AddStaticObject(game->scene, &base);
-
-	
+	SponzaEntity* ent = new SponzaEntity(manager->sponzaModel);
+	ent->body = PH_AddStaticRigidBody(game->physics, planeShape, glm::vec3(0.0f), def);
+	ent->renderable = new PBRRenderable(manager->sponzaModel, nullptr, glm::mat4(1.0f));
+	ent->model = manager->sponzaModel;
 	
 	// TEST ANIM INSTANCE DATA
 	memset(&manager->foxAnimInstance, 0, sizeof(AnimationInstanceData));
 	CreateBoneDataFromModel(manager->foxModel, &manager->foxAnimInstance);
 	
 
-	base.model = manager->foxModel;
-	base.anim = &manager->foxAnimInstance;
 	for (int i = 0; i < 10; i++)
 	{
-		base.rigidBody = PH_AddDynamicRigidBody(game->physics, foxShape, glm::vec3(0.0f, 10.0f + 10 * i, 0.0f), def);
-		manager->foxSceneObject = SC_AddDynamicObject(game->scene, &base);
+		manager->fox = new FoxEntity(manager->foxModel, &manager->foxAnimInstance);
+		manager->fox->body = PH_AddDynamicRigidBody(game->physics, foxShape, glm::vec3(0.0f, 10.0f + 10 * i, 0.0f), def);
+		manager->fox->renderable = new PBRRenderable(manager->foxModel, &manager->foxAnimInstance, glm::mat4(1.0f));
 	}
 
 	UpateGameState();

@@ -1545,7 +1545,7 @@ AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear)
 	for (uint32_t i = 0; i < atlas->numBounds; i++)
 	{
 		rect_type& r = data->rects.at(i);
-		atlas->bounds[i].start = { (float)r.x / (float)atlas->texture.width, (float)r.y / (float)atlas->texture.height };
+		atlas->bounds[i].start = { (float)(r.x + 0.5f) / (float)atlas->texture.width, (float)(r.y + 0.5f) / (float)atlas->texture.height };
 		atlas->bounds[i].end = { (float)(r.x + r.w) / (float)atlas->texture.width, (float)(r.y + r.h) / (float)atlas->texture.height };
 	}
 
@@ -1619,7 +1619,7 @@ struct AtlasTexture* AM_LoadTextureAtlas(const char* file, FontMetrics** metrics
 	{
 		rect_type* cur = (rect_type*)curRead;
 
-		out->bounds[i].start = { (float)cur->x / (float)out->texture.width, (float)cur->y / (float)out->texture.height };
+		out->bounds[i].start = { (float)(cur->x + 0.5f) / (float)out->texture.width, (float)(cur->y + 0.5f) / (float)out->texture.height };
 		out->bounds[i].end = { (float)(cur->x + cur->w) / (float)out->texture.width, (float)(cur->y + cur->h) / (float)out->texture.height };
 
 		curRead += sizeof(rect_type);

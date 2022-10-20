@@ -1255,54 +1255,6 @@ void main(void)\n\
 
 
 
-uint32_t Renderable::FillRenderCommandsOpaque(RenderCommand** cmdList)
-{
-	uint32_t addedCount = 0;
-	for (uint32_t i = 0; i < this->numCmds; i++)
-	{
-		if (!cmds->IsTransparent())
-		{
-			cmdList[i] = (RenderCommand*)((uintptr_t)cmds + cmds->GetSize() * i);
-			addedCount++;
-		}
-	}
-	return addedCount;
-}
-uint32_t Renderable::FillRenderCommandsTransparent(RenderCommand** cmdList)
-{
-	uint32_t addedCount = 0;
-	for (uint32_t i = 0; i < this->numCmds; i++)
-	{
-		if (cmds->IsTransparent())
-		{
-			cmdList[i] = (RenderCommand*)((uintptr_t)cmds + cmds->GetSize() * i);
-			addedCount++;
-		}
-	}
-	return addedCount;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -3381,7 +3333,7 @@ static AABB GenerateAABB(const glm::mat4& invViewProj)
 
 
 
-void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint32_t num)
+void RE_BeginScene(struct Renderer* renderer, struct Scene* scene)
 {
 	renderer->bindInfo.curBoundIbo = 0;
 	renderer->bindInfo.curBoundVao = 0;
@@ -3393,12 +3345,15 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 
 	memset(&renderer->pbrData.baseUniforms.bound, 0, sizeof(renderer->pbrData.baseUniforms.bound));
 
+	size_t numRenderables = 0;
+	Renderable** r = SC_GetAllRenderables(scene, &numRenderables);
+
 	uint32_t numCommands = 0;
-	for (uint32_t i = 0; i < num; i++)
+	for (uint32_t i = 0; i < numRenderables; i++)
 	{
-		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
+		if (!(r[i]->GetFlags() & INACTIVE))
 		{
-			numCommands += objList[i]->renderable.numCmds;
+			numCommands += r[i]->GetNumCommands();
 		}
 	}
 	if (renderer->cmdlistCapacity <= numCommands)
@@ -3413,11 +3368,11 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 	RenderCommand** curCmdList = renderer->drawCmds;
 	numCommands = 0;
 	// FILL OPAQUE OBJECTS
-	for (uint32_t i = 0; i < num; i++)
+	for (uint32_t i = 0; i < numRenderables; i++)
 	{
-		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
+		if (!(r[i]->GetFlags() & INACTIVE))
 		{
-			uint32_t added = objList[i]->renderable.FillRenderCommandsOpaque(curCmdList);
+			uint32_t added = r[i]->FillRenderCommandsOpaque(curCmdList);
 			curCmdList += added;
 			numCommands += added;
 			renderer->firstTransparentCmd += added;
@@ -3425,11 +3380,11 @@ void RE_BeginScene(struct Renderer* renderer, struct SceneObject** objList, uint
 	}
 	uint32_t curOffset = renderer->firstTransparentCmd;
 	// FILL TRANSPARENT OBJECTS
-	for (uint32_t i = 0; i < num; i++)
+	for (uint32_t i = 0; i < numRenderables; i++)
 	{
-		if (objList[i]->flags & SCENE_OBJECT_FLAG_VISIBLE && objList[i]->model)
+		if (!(r[i]->GetFlags() & INACTIVE))
 		{
-			uint32_t added = objList[i]->renderable.FillRenderCommandsTransparent(curCmdList);
+			uint32_t added = r[i]->FillRenderCommandsTransparent(curCmdList);
 			curCmdList += added;
 			numCommands += added;
 		}
@@ -3806,12 +3761,11 @@ void RE_RenderTransparent(struct Renderer* renderer)
 }
 
 
-void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, const glm::vec4& color, float thickness)
+void RE_RenderOutline(struct Renderer* renderer, const Renderable* obj, const glm::vec4& color, float thickness)
 {
 	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
-	if (!obj->model || obj->renderable.numCmds == 0) return;
 	glm::mat4 transform;
 
 	glEnable(GL_STENCIL_TEST);
@@ -3835,12 +3789,12 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 	data.cam = renderer->currentCam;
 	data.shadowMapTexture = renderer->currentLightData->shadowGroup.texture;
 
-	for (uint32_t i = 0; i < obj->renderable.numCmds; i++)
+	const size_t numCmds = obj->GetNumCommands();
+	for (uint32_t i = 0; i < numCmds; i++)
 	{
-		RenderCommand* cmd = (RenderCommand*)((uintptr_t)obj->renderable.cmds + obj->renderable.cmds->GetSize() * i);
+		const RenderCommand* cmd = obj->GetRenderCommand(i);
 		cmd->DrawGeom(&data);
 	}
-
 	glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
 	glStencilMask(0x00);
 	
@@ -3853,42 +3807,12 @@ void RE_RenderOutline(struct Renderer* renderer, const struct SceneObject* obj, 
 
 	glUniform1f(renderer->pbrData.outlineUniforms.thicknessLoc, thickness);
 	glUniform4fv(renderer->pbrData.outlineUniforms.colorLoc, 1, (const GLfloat*)&color);
-	
-	glBindVertexArray(obj->model->vao);
-	if (obj->model->indexBuffer) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, obj->model->indexBuffer);
-	
 
 
-	for (uint32_t nodeIdx = 0; nodeIdx < obj->model->numNodes; nodeIdx++)
+	for (uint32_t i = 0; i < numCmds; i++)
 	{
-		Joint* curNode = obj->model->nodes[nodeIdx];
-		for (uint32_t i = 0; i < curNode->mesh->numPrimitives; i++)
-		{
-			Primitive* prim = &curNode->mesh->primitives[i];
-			if (obj->anim && curNode->skinIndex < obj->anim->numSkins)
-			{
-				transform = obj->transform * obj->model->baseTransform *obj->anim->data[curNode->skinIndex].baseTransform;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.outlineUniforms.boneDataLoc, obj->anim->data[curNode->skinIndex].skinUniform);
-			}
-			else
-			{
-				transform = obj->transform * obj->model->baseTransform * curNode->defMatrix;
-				glBindBufferBase(GL_UNIFORM_BUFFER, renderer->pbrData.baseUniforms.boneDataLoc, renderer->pbrData.defaultBoneData);
-			}
-			transform = transform;
-			glUniformMatrix4fv(renderer->pbrData.outlineUniforms.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
-	
-			Mesh* m = curNode->mesh;
-			GLenum renderMode = (prim->flags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
-			if (prim->flags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
-			{
-				glDrawArrays(renderMode, prim->startIdx, prim->numInd);
-			}
-			else
-			{
-				glDrawElements(renderMode, prim->numInd, GL_UNSIGNED_INT, (void*)(prim->startIdx * sizeof(uint32_t)));
-			}
-		}
+		const RenderCommand* cmd = obj->GetRenderCommand(i);
+		cmd->DrawOutline(&data);
 	}
 	glDisable(GL_STENCIL_TEST);
 }
@@ -4192,12 +4116,12 @@ void RE_RenderPostProcessingToneMap(struct Renderer* renderer, const PostProcess
 
 
 
-void PBRRenderCommand::DrawShadow(SceneRenderData* data)
+void PBRRenderCommand::DrawShadow(SceneRenderData* data) const
 {
 	if(renderFlags & PBR_RENDER_FLAGS::PBR_RENDER_SHADOW)
 		DrawGeom(data);
 }
-void PBRRenderCommand::DrawGeom(SceneRenderData* data)
+void PBRRenderCommand::DrawGeom(SceneRenderData* data) const
 {
 	if (!(renderFlags & PBR_RENDER_GEOMETRY)) return;
 	BaseGeometryProgramUniforms& un = data->renderer->pbrData.geomUniforms;
@@ -4246,7 +4170,7 @@ void PBRRenderCommand::DrawGeom(SceneRenderData* data)
 		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
 	}
 }
-void PBRRenderCommand::DrawOpaque(SceneRenderData* data)
+void PBRRenderCommand::DrawOpaque(SceneRenderData* data) const
 {
 	if (!(renderFlags & PBR_RENDER_OPAQUE)) { return; }
 	BaseProgramUniforms& un = data->renderer->pbrData.baseUniforms;
@@ -4339,7 +4263,7 @@ void PBRRenderCommand::DrawOpaque(SceneRenderData* data)
 		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
 	}
 }
-void PBRRenderCommand::DrawTransparent(SceneRenderData* data)
+void PBRRenderCommand::DrawTransparent(SceneRenderData* data) const
 {
 	if (!(renderFlags & PBR_RENDER_TRANSPARENT)) return;
 	BaseProgramUniforms& un = data->renderer->pbrData.baseUniforms;
@@ -4408,7 +4332,7 @@ void PBRRenderCommand::DrawTransparent(SceneRenderData* data)
 		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
 	}
 }
-void PBRRenderCommand::DrawSSR(SceneRenderData* data)
+void PBRRenderCommand::DrawSSR(SceneRenderData* data) const
 {
 	if (!(renderFlags & PBR_RENDER_SSR)) return;
 	BaseSSRProgramUniforms& un = data->renderer->pbrData.ssrUniforms;
@@ -4447,6 +4371,31 @@ void PBRRenderCommand::DrawSSR(SceneRenderData* data)
 
 	glUniformMatrix4fv(un.modelLoc, 1, GL_FALSE, (const GLfloat*)&transform);
 	BindMaterialSSR(data->renderer, material);
+	GLenum renderMode = (primFlags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
+	if (primFlags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
+	{
+		glDrawArrays(renderMode, startIdx, numIdx);
+	}
+	else
+	{
+		glDrawElements(renderMode, numIdx, GL_UNSIGNED_INT, (void*)(startIdx * sizeof(uint32_t)));
+	}
+}
+void PBRRenderCommand::DrawOutline(SceneRenderData* data) const
+{
+	BaseOutlineProgramUniforms& un = data->renderer->pbrData.outlineUniforms;
+	if (animUniform)
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, animUniform);
+		un.bound.bBone = animUniform;
+	}
+	else
+	{
+		glBindBufferBase(GL_UNIFORM_BUFFER, un.boneDataLoc, data->renderer->pbrData.defaultBoneData);
+		un.bound.bBone = data->renderer->pbrData.defaultBoneData;
+	}
+	
+	glUniformMatrix4fv(un.modelLoc, 1, GL_FALSE, (GLfloat*)&transform);
 	GLenum renderMode = (primFlags & PRIMITIVE_FLAG_LINE) ? GL_LINES : GL_TRIANGLES;
 	if (primFlags & PRIMITIVE_FLAG_NO_INDEX_BUFFER)
 	{
