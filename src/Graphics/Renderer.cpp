@@ -4021,8 +4021,6 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 	fboSizes[0] = { ppData->width, ppData->height };
 	int curSizeX = ppData->width; int curSizeY = ppData->height;
 	{	// BLUR AND DOWNSAMPLE EACH ITERATION
-		glUseProgram(renderer->ppInfo.bloom.program);
-		glActiveTexture(GL_TEXTURE0);
 		for (int i = 1; i < ppData->numPPFbos; i++)
 		{
 			curSizeX = std::max(curSizeX >> 1, 1); curSizeY = std::max(curSizeY >> 1, 1);
