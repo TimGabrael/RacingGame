@@ -4021,15 +4021,15 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 	fboSizes[0] = { ppData->width, ppData->height };
 	int curSizeX = ppData->width; int curSizeY = ppData->height;
 	{	// BLUR AND DOWNSAMPLE EACH ITERATION
+		glUseProgram(renderer->ppInfo.bloom.program);
+		glActiveTexture(GL_TEXTURE0);
 		for (int i = 1; i < ppData->numPPFbos; i++)
 		{
 			curSizeX = std::max(curSizeX >> 1, 1); curSizeY = std::max(curSizeY >> 1, 1);
 			fboSizes[i] = { curSizeX, curSizeY };
 			glBindFramebuffer(GL_FRAMEBUFFER, ppData->ppFBOs2[i]);
 			glViewport(0, 0, curSizeX, curSizeY);
-			glUseProgram(renderer->ppInfo.bloom.program);
 
-			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, ppData->ppTexture1);
 
 			glUniform1f(renderer->ppInfo.bloom.blurRadiusLoc, ppData->blurRadius);
@@ -4053,13 +4053,13 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 	{	// UPSAMPLE FROM LOWER MIPMAP TO HIGHER
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_ONE, GL_ONE);
+		glUseProgram(renderer->ppInfo.upsampling.program);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, ppData->ppTexture1);
 		for (int i = ppData->numPPFbos - 2; i >= 0; i--)
 		{
 			glBindFramebuffer(GL_FRAMEBUFFER, ppData->ppFBOs1[i]);
 			glViewport(0, 0, fboSizes[i].x, fboSizes[i].y);
-			glUseProgram(renderer->ppInfo.upsampling.program);
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, ppData->ppTexture1);
 			glUniform1f(renderer->ppInfo.upsampling.mipLevelLoc, i + 1);
 			glDrawArrays(GL_TRIANGLES, 0, 3);
 		}
@@ -4085,6 +4085,7 @@ void RE_RenderPostProcessingBloom(struct Renderer* renderer, const PostProcessin
 }
 void RE_RenderPostProcessingToneMap(struct Renderer* renderer, const PostProcessingRenderData* ppData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {
+	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 	glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
 	glViewport(0, 0, targetWidth, targetHeight);

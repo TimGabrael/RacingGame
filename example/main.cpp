@@ -46,7 +46,7 @@ int main()
 		physx::PxConvexMeshGeometry geomConvex(manager->foxModel->convexMesh, physx::PxMeshScale(physx::PxVec3(5.0f, 5.0f, 5.0f)));
 		foxShape = game->physics->physicsSDK->createShape(geomConvex, *material);
 
-		physx::PxBoxGeometry geomBox(100.0f, 1.0f, 100.f);
+		physx::PxBoxGeometry geomBox(1000.0f, 1.0f, 1000.f);
 		planeShape = game->physics->physicsSDK->createShape(geomBox, *material);
 	}
 	Vertex3D verts[4] = {};
@@ -55,7 +55,7 @@ int main()
 	glm::quat def = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
 	SponzaEntity* ent = new SponzaEntity(manager->sponzaModel);
-	ent->body = game->physics->AddStaticBody(sponzaShape, glm::vec3(0.0f), def);
+	ent->body = game->physics->AddStaticBody(planeShape, glm::vec3(0.0f), def);
 	ent->renderable = new PBRRenderable(manager->sponzaModel, nullptr, glm::mat4(1.0f));
 	ent->model = manager->sponzaModel;
 	
