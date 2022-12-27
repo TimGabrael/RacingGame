@@ -1,8 +1,11 @@
+#include <atomic>
 #include "AudioManager.h"
 #include "WavFile.h"
 #include "NFDriver/NFDriver.h"
 #include "stb_vorbis.h"
-#include <atomic>
+#include "util/Utility.h"
+#include <chrono>
+#include <mutex>
 #undef min
 #undef max
 
@@ -10,6 +13,10 @@
 #define NUM_AUDIO_FILES_IN_LIST sizeof(uintptr_t) * 8
 using namespace nativeformat;
 using namespace driver;
+
+
+
+
 
 struct AudioPlaybackContext
 {
@@ -67,7 +74,7 @@ static void DeallocWavFile(AudioFileList* list, WavFile* file)
 			memset(&list->files[idx], 0, sizeof(WavFile));
 		}
 	}
-	else if(list->next)
+	else if (list->next)
 	{
 		DeallocWavFile(list->next, file);
 	}
@@ -92,14 +99,35 @@ static void CleanUpAllInList(AudioFileList* list)
 }
 
 
+
 struct AudioManager
 {
 	NFDriver* nfdriver = nullptr;
 	float* tempBuffer = nullptr;
 	AudioFileList stored;
-	AudioPlaybackContext active[NUM_CONCURRENT_AUDIO_STREAMS];
-	std::atomic<int> currentNumPlaying = 0;
+	AudioPlaybackContext** active;
+	AudioPlaybackContextList* tempStorage;
+	int currentNumPlaying = 0;
+	std::atomic_flag spinLock;
+	int numConcurrent;
 };
+
+static void AU_Lock(AudioManager* manager)
+{
+	while (!manager->spinLock.test_and_set(std::memory_order_acquire)) {}
+}
+static void AU_Unlock(AudioManager* manager)
+{
+	manager->spinLock.clear(std::memory_order_release);
+}
+
+static bool AU_IsTempStorage(AudioManager* manager, AudioPlaybackContext* ctx)
+{
+	uintptr_t sz = (uintptr_t)ctx - (uintptr_t)manager->tempStorage;
+	if (sz < manager->numConcurrent * sizeof(AudioPlaybackContext))
+		return true;
+	return false;
+}
 
 static void AudioStutterCallback(void* clientData)
 {
@@ -108,13 +136,15 @@ static int AudioRenderCallback(void* clientData, float* frames, int numberOfFram
 {
 	AudioManager* manager = (AudioManager*)clientData;
 	memset(frames, 0, sizeof(float) * numberOfFrames * 2);
+	AU_Lock(manager);
 	if (manager->currentNumPlaying > 0)
 	{
 		float max = 0.0f;
-		for (int i = 0; i < NUM_CONCURRENT_AUDIO_STREAMS; i++)
+		for (int i = 0; i < manager->numConcurrent; i++)
 		{
-			AudioPlaybackContext* cur = &manager->active[i];
-			if (cur->isPlaying && cur->file.wav)
+			AudioPlaybackContext* cur = manager->active[i];
+			if (!cur) continue;
+			if (cur->file.wav && cur->isPlaying)
 			{
 				if (!cur->isOgg)
 				{
@@ -138,8 +168,9 @@ static int AudioRenderCallback(void* clientData, float* frames, int numberOfFram
 						else
 						{
 							cur->isPlaying = false;
-							cur->inUse = false;
+							if (AU_IsTempStorage(manager, cur)) cur->inUse = false;
 							manager->currentNumPlaying -= 1;
+							manager->active[i] = nullptr;
 						}
 					}
 				}
@@ -149,7 +180,7 @@ static int AudioRenderCallback(void* clientData, float* frames, int numberOfFram
 					int added = stb_vorbis_get_samples_float_interleaved(cur->file.ogg, 2, manager->tempBuffer, numberOfFrames * 2);
 					for (uint32_t i = 0; i < added * 2; i++)
 					{
-						frames[i] += manager->tempBuffer[i];
+						frames[i] += manager->tempBuffer[i] * cur->volume;
 					}
 					cur->index += added;
 					cur->remaining -= added;
@@ -163,8 +194,9 @@ static int AudioRenderCallback(void* clientData, float* frames, int numberOfFram
 						else
 						{
 							cur->isPlaying = false;
-							cur->inUse = false;
+							if (AU_IsTempStorage(manager, cur)) cur->inUse = false;
 							manager->currentNumPlaying -= 1;
+							manager->active[i] = nullptr;
 						}
 					}
 				}
@@ -182,6 +214,8 @@ static int AudioRenderCallback(void* clientData, float* frames, int numberOfFram
 			}
 		}
 	}
+	AU_Unlock(manager);
+
 	return numberOfFrames;
 }
 static void AudioErrorCallback(void* clientData, const char* errorMessage, int errorCode)
@@ -197,19 +231,23 @@ static void AudioDidRenderCallback(void* clientData)
 
 }
 
-struct AudioManager* AU_CreateAudioManager()
+struct AudioManager* AU_CreateAudioManager(int numConcurrent)
 {
 	AudioManager* out = new AudioManager;
-	out = new AudioManager;
-	memset(out->active, 0, sizeof(AudioPlaybackContext));
 	NFDriver* driver = NFDriver::createNFDriver(out,
-			AudioStutterCallback,AudioRenderCallback,
-			AudioErrorCallback, AudioWillRenderCallback,
-			AudioDidRenderCallback, OutputType::OutputTypeSoundCard);
+		AudioStutterCallback, AudioRenderCallback,
+		AudioErrorCallback, AudioWillRenderCallback,
+		AudioDidRenderCallback, OutputType::OutputTypeSoundCard);
 
 	out->nfdriver = driver;
 	out->currentNumPlaying = 0;
 	memset(&out->stored, 0, sizeof(AudioFileList));
+
+
+	out->active = new AudioPlaybackContext * [numConcurrent];
+	out->tempStorage = AU_CreateAudioPlaybackContextList(numConcurrent);
+	memset(out->active, 0, sizeof(AudioPlaybackContext*) * numConcurrent);
+	out->numConcurrent = numConcurrent;
 
 	out->tempBuffer = new float[NF_DRIVER_SAMPLE_BLOCK_SIZE * 2];
 
@@ -258,131 +296,231 @@ void AU_FreeOggFile(struct AudioManager* manager, struct OggFile* file)
 }
 
 
-AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, WavFile* file, float volume)
+struct AudioPlaybackContextList* AU_CreateAudioPlaybackContextList(int num)
 {
-	if (!file) return nullptr;
-
-	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
-	
+	return (AudioPlaybackContextList*)new AudioPlaybackContext[num];
+}
+void AU_DestroyAudioPlaybackContextList(struct AudioPlaybackContextList* list)
+{
+	AudioPlaybackContext* l = (AudioPlaybackContext*)list;
+	if (l) delete[] l;
+}
+struct AudioPlaybackContext* AU_AllocContext(AudioPlaybackContextList* list, int num)
+{
 	AudioPlaybackContext* result = nullptr;
-	for (int i = 0; i < NUM_CONCURRENT_AUDIO_STREAMS; i++)
+	for (int i = 0; i < num; i++)
 	{
-		AudioPlaybackContext* cur = &manager->active[i];
+		AudioPlaybackContext* cur = &((AudioPlaybackContext*)list)[i];
 		if (!cur->inUse)
 		{
-			cur->file.wav = file;
-			cur->remaining = cur->file.wav->GetNumSamples();
+			cur->file.wav = nullptr;
 			cur->index = 0;
-			cur->volume = volume;
 			cur->inUse = true;
 			result = cur;
-			cur->isPlaying = true;
+			cur->isPlaying = false;
 			cur->isOgg = false;
 			break;
 		}
 	}
-	manager->currentNumPlaying += 1;
 	return result;
+}
+void AU_FreeContext(struct AudioManager* manager, AudioPlaybackContext* ctx)
+{
+	AU_Lock(manager);
+	ctx->inUse = false;
+	ctx->isPlaying = false;
+	ctx->index = 0;
+	AU_Unlock(manager);
+}
+
+static bool AU_InternalPlayAudio(struct AudioManager* manager, struct AudioPlaybackContext* ctx, void* file, float volume, bool isOgg, bool repeat)
+{
+	if (!file || manager->currentNumPlaying >= manager->numConcurrent) return false;
+	AU_Lock(manager);
+	bool found = false;
+
+	for (int i = 0; i < manager->numConcurrent; i++)
+	{
+		if (!manager->active[i])
+		{
+			if (isOgg)
+			{
+				stb_vorbis* f = (stb_vorbis*)file;
+				ctx->file.ogg = f;
+				ctx->remaining = f->total_samples;
+			}
+			else
+			{
+				WavFile* f = (WavFile*)file;
+				ctx->file.wav = f;
+				ctx->remaining = f->GetNumSamples();
+			}
+			ctx->index = 0;
+			ctx->volume = volume;
+			ctx->repeat = repeat;
+			ctx->isPlaying = true;
+			ctx->isOgg = isOgg;
+
+			found = true;
+			manager->active[i] = ctx;
+			manager->currentNumPlaying += 1;
+			break;
+		}
+	}
+
+	AU_Unlock(manager);
+
+	return found;
+}
+
+bool AU_PlayAudio(struct AudioManager* manager, struct AudioPlaybackContext* ctx, struct WavFile* file, float volume)
+{
+	return AU_InternalPlayAudio(manager, ctx, file, volume, false, false);
+}
+bool AU_PlayOggAudio(struct AudioManager* manager, struct AudioPlaybackContext* ctx, struct OggFile* file, float volume)
+{
+	return AU_InternalPlayAudio(manager, ctx, file, volume, true, false);
+}
+bool AU_PlayAudioOnRepeat(struct AudioManager* manager, struct AudioPlaybackContext* ctx, struct WavFile* file, float volume)
+{
+	return AU_InternalPlayAudio(manager, ctx, file, volume, false, true);
+}
+bool AU_PlayOggAudioOnRepeat(struct AudioManager* manager, struct AudioPlaybackContext* ctx, struct OggFile* file, float volume)
+{
+	return AU_InternalPlayAudio(manager, ctx, file, volume, true, true);
+}
+
+AudioPlaybackContext* AU_PlayAudio(struct AudioManager* manager, WavFile* file, float volume)
+{
+	AudioPlaybackContext* out = AU_AllocContext(manager->tempStorage, manager->numConcurrent);
+	if (!out) return nullptr;
+	if (!AU_PlayAudio(manager, out, file, volume)) return nullptr;
+	return out;
 }
 struct AudioPlaybackContext* AU_PlayOggAudio(struct AudioManager* manager, struct OggFile* file, float volume)
 {
-	if (!file) return nullptr;
-	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
-
-	AudioPlaybackContext* result = nullptr;
-	for (int i = 0; i < NUM_CONCURRENT_AUDIO_STREAMS; i++)
-	{
-		AudioPlaybackContext* cur = &manager->active[i];
-		if (!cur->inUse)
-		{
-			cur->file.ogg = (stb_vorbis*)file;
-			cur->remaining = cur->file.ogg->total_samples;
-			cur->index = 0;
-			cur->volume = volume;
-			cur->inUse = true;
-			result = cur;
-			cur->isPlaying = true;
-			cur->isOgg = true;
-			break;
-		}
-	}
-	manager->currentNumPlaying += 1;
-	return result;
+	AudioPlaybackContext* out = AU_AllocContext(manager->tempStorage, manager->numConcurrent);
+	if (!out) return nullptr;
+	if (!AU_PlayOggAudio(manager, out, file, volume)) return nullptr;
+	return out;
 }
 struct AudioPlaybackContext* AU_PlayAudioOnRepeat(struct AudioManager* manager, WavFile* file, float volume)
 {
-	if (!file) return nullptr;
-	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
-
-	AudioPlaybackContext* result = nullptr;
-	for (int i = 0; i < NUM_CONCURRENT_AUDIO_STREAMS; i++)
-	{
-		AudioPlaybackContext* cur = &manager->active[i];
-		if (!cur->inUse)
-		{
-			cur->file.wav = file;
-			cur->remaining = cur->file.wav->GetNumSamples();
-			cur->index = 0;
-			cur->volume = volume;
-			cur->repeat = true;
-			cur->inUse = true;
-			result = cur;
-			cur->isPlaying = true;
-			cur->isOgg = false;
-			break;
-		}
-	}
-	if (result)
-	{
-		manager->currentNumPlaying += 1;
-		return result;
-	}
-	return nullptr;
+	AudioPlaybackContext* out = AU_AllocContext(manager->tempStorage, manager->numConcurrent);
+	if (!out) return nullptr;
+	if (!AU_PlayAudioOnRepeat(manager, out, file, volume)) return nullptr;
+	return out;
 }
 struct AudioPlaybackContext* AU_PlayOggAudioOnRepeat(struct AudioManager* manager, struct OggFile* file, float volume)
 {
-	if (!file) return nullptr;
-	if (manager->currentNumPlaying >= NUM_CONCURRENT_AUDIO_STREAMS) return nullptr;
-
-	AudioPlaybackContext* result = nullptr;
-	for (int i = 0; i < NUM_CONCURRENT_AUDIO_STREAMS; i++)
-	{
-		AudioPlaybackContext* cur = &manager->active[i];
-		if (!cur->inUse)
-		{
-			cur->file.ogg = (stb_vorbis*)file;
-			cur->remaining = cur->file.ogg->total_samples;
-			cur->index = 0;
-			cur->volume = volume;
-			cur->inUse = true;
-			result = cur;
-			cur->isPlaying = true;
-			cur->isOgg = true;
-			cur->repeat = true;
-			break;
-		}
-	}
-	manager->currentNumPlaying += 1;
+	AudioPlaybackContext* out = AU_AllocContext(manager->tempStorage, manager->numConcurrent);
+	if (!out) return nullptr;
+	if (!AU_PlayOggAudioOnRepeat(manager, out, file, volume)) return nullptr;
+	return out;
 }
 void AU_StopAudio(struct AudioManager* manager, struct AudioPlaybackContext* audioCtx)
 {
 	AU_PauseAudio(manager, audioCtx);
-	audioCtx->inUse = false;
+	AU_FreeContext(manager, audioCtx);
 }
 void AU_PauseAudio(struct AudioManager* manager, struct AudioPlaybackContext* audioCtx)
 {
+	AU_Lock(manager);
 	if (audioCtx->isPlaying)
 	{
+		for (int i = 0; i < manager->numConcurrent; i++)
+		{
+			if (manager->active[i] == audioCtx)
+			{
+				manager->active[i] = nullptr;
+				manager->currentNumPlaying -= 1;
+				break;
+			}
+		}
 		audioCtx->isPlaying = false;
-		manager->currentNumPlaying -= 1;
 	}
+	AU_Unlock(manager);
 }
-void AU_ResumeAudio(struct AudioManager* manager, struct AudioPlaybackContext* audioCtx)
+bool AU_ResumeAudio(struct AudioManager* manager, struct AudioPlaybackContext* audioCtx)
 {
-	if (!audioCtx->isPlaying)
+	AU_Lock(manager);
+	bool succeeded = false;
+	if (!audioCtx->isPlaying && manager->currentNumPlaying < manager->numConcurrent)
 	{
-		audioCtx->isPlaying = true;
-		manager->currentNumPlaying += 1;
+		for (int i = 0; i < manager->numConcurrent; i++)
+		{
+			if (!manager->active[i])
+			{
+				manager->active[i] = audioCtx;
+				audioCtx->isPlaying = true;
+				manager->currentNumPlaying += 1;
+				succeeded = true;
+			}
+		}
+	}
+	AU_Unlock(manager);
+	return succeeded;
+}
+
+bool AU_IsPlaying(struct AudioPlaybackContext* ctx)
+{
+	if (!ctx) return false;
+	return ctx->isPlaying;
+}
+bool AU_IsOgg(struct AudioPlaybackContext* ctx)
+{
+	if (!ctx) return false;
+	return ctx->isOgg;
+}
+struct WavFile* AU_GetWavFile(struct AudioPlaybackContext* ctx)
+{
+	if (!ctx) return nullptr;
+	return ctx->file.wav;
+}
+struct stb_vorbis* AU_GetOggFile(struct AudioPlaybackContext* ctx)
+{
+	if (!ctx) return nullptr;
+	return ctx->file.ogg;
+}
+int AU_GetSampleCount(struct AudioPlaybackContext* ctx)
+{
+	if (!ctx) return -1;
+	if (ctx->file.wav)
+	{
+		if (ctx->isOgg)
+		{
+			return ctx->file.ogg->total_samples;
+		}
+		else
+		{
+			return ctx->file.wav->GetNumSamples();
+		}
+	}
+	return -1;
+}
+int AU_GetSampleIndex(struct AudioPlaybackContext* ctx)
+{
+	return ctx->index;
+}
+void AU_SetSampleIndex(struct AudioManager* manager, struct AudioPlaybackContext* ctx, int index)
+{
+	int maxCount = AU_GetSampleCount(ctx);
+	if (index >= 0 && index < maxCount)
+	{
+		AU_Lock(manager);
+		ctx->remaining = (maxCount - index);
+		ctx->index = index;
+		AU_Unlock(manager);
 	}
 
+}
+float AU_GetVolume(struct AudioPlaybackContext* ctx)
+{
+	if (!ctx) return 0.0f;
+	return ctx->volume;
+}
+void AU_SetVolume(struct AudioPlaybackContext* ctx, float volume)
+{
+	if (!ctx) return;
+	ctx->volume = volume;
 }

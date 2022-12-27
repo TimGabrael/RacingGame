@@ -11,7 +11,7 @@
 int main()
 {
 
-	GameState* game = CreateGameState("RacingGame", 1600, 900);
+	GameState* game = CreateGameState("RacingGame", 1600, 900, 20);
 	GameManager* manager =  GM_CreateGameManager(game);
 	game->manager =  manager;
 	GM_AddPlayerToScene(manager, { 0.0f, 12.0f, 0.0f }, 90.0f, 0.0f);

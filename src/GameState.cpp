@@ -102,7 +102,7 @@ static void JoystickCallback(int jid, int event)
 	}
 }
 
-GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_t windowHeight)
+GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_t windowHeight, int numConcurrentAudio)
 {
 	if (g_gameState) return g_gameState;
 
@@ -168,7 +168,7 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	g_gameState->physics = PH_CreatePhysicsScene();
 	g_gameState->scene = SC_CreateScene();
 	g_gameState->renderer = RE_CreateRenderer(g_gameState->assets);
-	g_gameState->audio = AU_CreateAudioManager();
+	g_gameState->audio = AU_CreateAudioManager(numConcurrentAudio);
 
 
 	if (g_gameState->isFullscreen)
