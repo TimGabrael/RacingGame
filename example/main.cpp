@@ -27,10 +27,9 @@ int main()
 	}
 	SetConsumeMouse(false);
 
-	manager->sponzaModel = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONCAVE);
-	//manager->sponzaModel = AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/RocketLeagueStadium.glb", MODEL_LOAD_CONCAVE);
+	manager->sponzaModel = AM_AddModel(game->assets, "../assets/Sponza/glTF/Sponza.gltf", MODEL_LOAD_CONCAVE);
 	manager->sponzaModel->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f)) * glm::inverse(manager->sponzaModel->nodes[0]->defMatrix);
-	manager->foxModel= AM_AddModel(game->assets, "C:/Users/deder/OneDrive/Desktop/3DModels/glTF-Sample-Models-master/2.0/BrainStem/glTF-Binary/BrainStem.glb", MODEL_LOAD_CONVEX);
+	manager->foxModel= AM_AddModel(game->assets, "../assets/BrainStem/glTF-Binary/BrainStem.glb", MODEL_LOAD_CONVEX);
 	manager->foxModel->baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
 	physx::PxMaterial* material = game->physics->physicsSDK->createMaterial(0.5f, 0.5f, 0.5f);

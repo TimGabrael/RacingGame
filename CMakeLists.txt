@@ -22,8 +22,8 @@ add_executable(RacingGame "example/main.cpp" ${ENGINE_FILES} "example/GameManage
 
 
 
-target_include_directories(RacingGame PRIVATE ${ENGINE_INCLUDES})
-target_link_libraries(RacingGame PRIVATE ${ENGINE_LIBRARYS} zlib unofficial::omniverse-physx-sdk::sdk Mfplat.lib)
+target_include_directories(RacingGame PRIVATE ${ENGINE_INCLUDES} D:/vcpkg/packages/zlib_x64-windows-static/include)
+target_link_libraries(RacingGame PRIVATE ${ENGINE_LIBRARYS} D:/vcpkg/packages/zlib_x64-windows-static/lib/zlib.lib unofficial::omniverse-physx-sdk::sdk Mfplat.lib)
 
 
 set_target_properties(RacingGame PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
