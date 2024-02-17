@@ -1,5 +1,5 @@
 #include "Physics.h"
-
+#include <cooking/PxCooking.h>
 
 using namespace physx;
 class MyRaycastCallback : public PxRaycastCallback
@@ -48,8 +48,6 @@ PhysicsScene* PH_CreatePhysicsScene()
 	sceneDesc.cpuDispatcher = dispatcher;
 	sceneDesc.filterShader = PxDefaultSimulationFilterShader;
 
-	PxCookingParams cookingParams = PxCookingParams::PxCookingParams(out->physicsSDK->getTolerancesScale());
-	out->cooking = PxCreateCooking(PX_PHYSICS_VERSION, *out->foundation, cookingParams);
 
 	out->scene = out->physicsSDK->createScene(sceneDesc);
 	out->manager = PxCreateControllerManager(*out->scene);
@@ -66,7 +64,6 @@ void PH_CleanUpPhysicsScene(PhysicsScene* scene)
 {
 	delete scene->raycastCallback;
 	scene->manager->release();
-	scene->cooking->release();
 	scene->scene->release();
 	scene->physicsSDK->release();
 }
@@ -79,14 +76,15 @@ void PH_Update(PhysicsScene* scene, float dt)
 
 physx::PxConvexMesh* PhysicsScene::AddConvexMesh(const void* verts, uint32_t numVerts, uint32_t vertStride)
 {
-	PxConvexMeshDesc desc;
+	PxCookingParams cookingParams = PxCookingParams(this->physicsSDK->getTolerancesScale());
+	PxConvexMeshDesc desc = {};
 	desc.points.data = verts;
 	desc.points.count = numVerts;
 	desc.points.stride = vertStride;
 	desc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
 
-	PxDefaultMemoryOutputStream buf;
-	if (!cooking->cookConvexMesh(desc, buf))
+	PxDefaultMemoryOutputStream buf = {};
+	if (!PxCookConvexMesh(cookingParams, desc, buf))
 	{
 		LOG("FAILED TO COOK CONVEX MESH\n");
 		return nullptr;
@@ -98,7 +96,8 @@ physx::PxConvexMesh* PhysicsScene::AddConvexMesh(const void* verts, uint32_t num
 }
 physx::PxTriangleMesh* PhysicsScene::AddConcaveMesh(const void* verts, uint32_t numVerts, uint32_t vertStride, const uint32_t* inds, uint32_t numInds)
 {
-	PxTriangleMeshDesc desc;
+	PxCookingParams cookingParams = PxCookingParams(this->physicsSDK->getTolerancesScale());
+	PxTriangleMeshDesc desc = {};
 	desc.points.data = verts;
 	desc.points.count = numVerts;
 	desc.points.stride = vertStride;
@@ -106,8 +105,8 @@ physx::PxTriangleMesh* PhysicsScene::AddConcaveMesh(const void* verts, uint32_t 
 	desc.triangles.stride = 3 * sizeof(uint32_t);
 	desc.triangles.data = inds;
 
-	PxDefaultMemoryOutputStream buf;
-	if (!cooking->cookTriangleMesh(desc, buf))
+	PxDefaultMemoryOutputStream buf = {};
+	if (!PxCookTriangleMesh(cookingParams, desc, buf))
 	{
 		LOG("FAILED TO COOK CONCAVE MESH\n");
 		return nullptr;

@@ -5,6 +5,7 @@
 #include "Scene.h"
 
 #include "finders_interface.h"
+#define assert(a, ...) 
 
 static const char* baseVertexShader = "#version 330\n\
 layout(location = 0) in vec3 position;\n\

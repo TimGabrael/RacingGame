@@ -28,7 +28,6 @@ struct PhysicsScene
 	physx::PxSimulationFilterShader defaultFilterShader = physx::PxDefaultSimulationFilterShader;
 	physx::PxControllerManager* manager = NULL;
 	physx::PxFoundation* foundation = NULL;
-	physx::PxCooking* cooking = NULL;
 	physx::PxScene* scene = NULL;
 	struct MyRaycastCallback* raycastCallback;
 

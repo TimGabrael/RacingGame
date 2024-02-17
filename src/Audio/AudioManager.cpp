@@ -1,7 +1,8 @@
 #include <atomic>
 #include "AudioManager.h"
 #include "WavFile.h"
-#include "NFDriver/NFDriver.h"
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
 #include "stb_vorbis.h"
 #include "util/Utility.h"
 #include <chrono>
@@ -9,13 +10,8 @@
 #undef min
 #undef max
 
-
+#define MAX_SAMPLE_BLOCK_SIZE 10000
 #define NUM_AUDIO_FILES_IN_LIST sizeof(uintptr_t) * 8
-using namespace nativeformat;
-using namespace driver;
-
-
-
 
 
 struct AudioPlaybackContext
@@ -102,7 +98,7 @@ static void CleanUpAllInList(AudioFileList* list)
 
 struct AudioManager
 {
-	NFDriver* nfdriver = nullptr;
+	ma_device device;
 	float* tempBuffer = nullptr;
 	AudioFileList stored;
 	AudioPlaybackContext** active;
@@ -129,12 +125,11 @@ static bool AU_IsTempStorage(AudioManager* manager, AudioPlaybackContext* ctx)
 	return false;
 }
 
-static void AudioStutterCallback(void* clientData)
+
+static void AudioRenderCallback(ma_device* device, void* out, const void* in, uint32_t numberOfFrames)
 {
-}
-static int AudioRenderCallback(void* clientData, float* frames, int numberOfFrames)
-{
-	AudioManager* manager = (AudioManager*)clientData;
+	AudioManager* manager = (AudioManager*)device->pUserData;
+	float* frames = (float*)out;
 	memset(frames, 0, sizeof(float) * numberOfFrames * 2);
 	AU_Lock(manager);
 	if (manager->currentNumPlaying > 0)
@@ -149,7 +144,7 @@ static int AudioRenderCallback(void* clientData, float* frames, int numberOfFram
 				if (!cur->isOgg)
 				{
 					const float* data = cur->file.wav->GetData();
-					const int end = std::min(numberOfFrames, cur->remaining);
+					const int end = std::min(numberOfFrames, (uint32_t)cur->remaining);
 					for (int j = 0; j < end; j++)
 					{
 						frames[j * 2] += data[(j + cur->index) * 2] * cur->volume;
@@ -216,30 +211,25 @@ static int AudioRenderCallback(void* clientData, float* frames, int numberOfFram
 	}
 	AU_Unlock(manager);
 
-	return numberOfFrames;
 }
-static void AudioErrorCallback(void* clientData, const char* errorMessage, int errorCode)
-{
 
-}
-static void AudioWillRenderCallback(void* clientData)
-{
-
-}
-static void AudioDidRenderCallback(void* clientData)
-{
-
-}
 
 struct AudioManager* AU_CreateAudioManager(int numConcurrent)
 {
 	AudioManager* out = new AudioManager;
-	NFDriver* driver = NFDriver::createNFDriver(out,
-		AudioStutterCallback, AudioRenderCallback,
-		AudioErrorCallback, AudioWillRenderCallback,
-		AudioDidRenderCallback, OutputType::OutputTypeSoundCard);
+	
 
-	out->nfdriver = driver;
+	ma_device_config dev_cfg = ma_device_config_init(ma_device_type_playback);
+	dev_cfg.playback.format = ma_format::ma_format_f32;
+	dev_cfg.playback.channels = 2;
+	dev_cfg.dataCallback = &AudioRenderCallback;
+	dev_cfg.pUserData = out;
+
+
+	ma_device_init(NULL, &dev_cfg, &out->device);
+	ma_device_start(&out->device);
+
+
 	out->currentNumPlaying = 0;
 	memset(&out->stored, 0, sizeof(AudioFileList));
 
@@ -249,18 +239,17 @@ struct AudioManager* AU_CreateAudioManager(int numConcurrent)
 	memset(out->active, 0, sizeof(AudioPlaybackContext*) * numConcurrent);
 	out->numConcurrent = numConcurrent;
 
-	out->tempBuffer = new float[NF_DRIVER_SAMPLE_BLOCK_SIZE * 2];
+	out->tempBuffer = new float[MAX_SAMPLE_BLOCK_SIZE * 2];
 
-	out->nfdriver->setPlaying(true);
+	ma_device_start(&out->device);
 	return out;
 }
 void AU_ShutdownAudioManager(struct AudioManager* manager)
 {
-	manager->nfdriver->setPlaying(false);
+	ma_device_stop(&manager->device);
 	manager->currentNumPlaying = 0;
 	CleanUpAllInList(&manager->stored);
-	delete manager->nfdriver;
-	manager->nfdriver = nullptr;
+	ma_device_uninit(&manager->device);
 	delete manager;
 	manager = nullptr;
 }
