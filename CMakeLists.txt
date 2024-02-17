@@ -12,13 +12,13 @@ find_package(glad CONFIG REQUIRED)
 
 set(IMGUI_FILES "3rd-party/imgui/imgui.cpp" "3rd-party/imgui/imgui_demo.cpp" "3rd-party/imgui/imgui_draw.cpp" "3rd-party/imgui/imgui_tables.cpp" "3rd-party/imgui/imgui_widgets.cpp" "3rd-party/imgui/backends/imgui_impl_glfw.cpp" "3rd-party/imgui/backends/imgui_impl_opengl3.cpp")
 
-set(ENGINE_FILES "src/Graphics/Renderer.h" "src/Graphics/Renderer.cpp"   "src/Util/Math.h" "src/Util/Assets.h" "src/Graphics/Scene.h" "src/Graphics/Scene.cpp" "src/GameState.h" "src/Util/Assets.cpp" "src/Graphics/ModelInfo.h" "src/Graphics/ModelInfo.cpp" "src/Util/Utility.h" "src/Graphics/GLIncludes.h" "src/GameState.cpp" "src/Graphics/Camera.h" "src/Graphics/Camera.cpp" "src/Physics/Physics.h" "src/Physics/Physics.cpp" "src/Audio/WavFile.cpp" "src/Audio/AudioManager.cpp" "src/Physics/Controller.h" "src/Physics/Controller.cpp" ${IMGUI_FILES})
-set(ENGINE_INCLUDES D:/vcpkg/packages/physx_x64-windows/include ${ZLIB_INCLUDE_DIR} 3rd-party/glm 3rd-party/rectpack2D/src 3rd-party/imgui 3rd-party/imgui/backends src/)
+set(ENGINE_FILES "engine/Graphics/Renderer.h" "engine/Graphics/Renderer.cpp"   "engine/Util/Math.h" "engine/Util/Assets.h" "engine/Graphics/Scene.h" "engine/Graphics/Scene.cpp" "engine/GameState.h" "engine/Util/Assets.cpp" "engine/Graphics/ModelInfo.h" "engine/Graphics/ModelInfo.cpp" "engine/Util/Utility.h" "engine/Graphics/GLIncludes.h" "engine/GameState.cpp" "engine/Graphics/Camera.h" "engine/Graphics/Camera.cpp" "engine/Physics/Physics.h" "engine/Physics/Physics.cpp" "engine/Audio/WavFile.cpp" "engine/Audio/AudioManager.cpp" "engine/Physics/Controller.h" "engine/Physics/Controller.cpp" "engine/Graphics/Renderable.h" "engine/Graphics/Renderable.cpp" "engine/Audio/miniaudio.h" ${IMGUI_FILES})
+set(ENGINE_INCLUDES D:/vcpkg/packages/physx_x64-windows/include ${ZLIB_INCLUDE_DIR} 3rd-party/glm 3rd-party/rectpack2D/src 3rd-party/imgui 3rd-party/imgui/backends engine/)
 set(ENGINE_LIBRARYS glfw assimp::assimp glad::glad Xinput)
 
 
 
-add_executable(RacingGame "example/main.cpp" ${ENGINE_FILES} "example/GameManager.cpp" "example/Entitys.cpp" "src/Graphics/Renderable.h" "src/Graphics/Renderable.cpp")
+add_executable(RacingGame "src/main.cpp" ${ENGINE_FILES} "src/GameManager.cpp" "src/Entitys.cpp" "src/GameManager.h" "src/Entitys.h")
 
 
 

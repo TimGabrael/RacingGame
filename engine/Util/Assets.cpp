@@ -617,7 +617,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				
 				j.children = new Joint*[gm->nodes[curNode].children.size()];
 				memset(j.children, 0, sizeof(Joint*) * gm->nodes[curNode].children.size());
-				j.numChildren = gm->nodes[curNode].children.size();
+				j.numChildren = static_cast<uint32_t>(gm->nodes[curNode].children.size());
 				glm::vec3 translation = glm::vec3(0.0f);
 				if (node.translation.size() == 3) {
 					translation = glm::make_vec3(node.translation.data());
@@ -638,7 +638,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				j.rotation = rotation;
 				j.scale = scale;
 
-				for (size_t k = 0; k < j.numChildren; k++)
+				for (uint32_t k = 0; k < j.numChildren; k++)
 				{
 					int cur = gm->nodes[curNode].children.at(k);
 					if (cur > -1 && static_cast<uint32_t>(cur) < m->numJoints)
