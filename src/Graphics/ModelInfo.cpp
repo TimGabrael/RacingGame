@@ -114,7 +114,7 @@ void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim)
 		
 		BoneData boneData{};
 		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
-		boneData.numJoints = numJoints;
+		boneData.numJoints = static_cast<float>(numJoints);
 
 		for (uint32_t j = 0; j < model->numJoints; j++)
 		{
@@ -203,7 +203,7 @@ void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skin
 
 		BoneData boneData{};
 		const uint32_t numJoints = glm::min(skin.numJoints, (uint32_t)MAX_NUM_JOINTS);
-		boneData.numJoints = numJoints;
+		boneData.numJoints = static_cast<float>(numJoints);
 
 		for (uint32_t j = 0; j < model->numJoints; j++)
 		{

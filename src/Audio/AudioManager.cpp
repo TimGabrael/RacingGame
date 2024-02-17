@@ -1,14 +1,15 @@
-#include <atomic>
 #include "AudioManager.h"
-#include "WavFile.h"
-#define MINIAUDIO_IMPLEMENTATION
-#include "miniaudio.h"
-#include "stb_vorbis.h"
-#include "util/Utility.h"
+#include <atomic>
 #include <chrono>
 #include <mutex>
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
 #undef min
 #undef max
+#include "util/Utility.h"
+#include "WavFile.h"
+#include "stb_vorbis.h"
+
 
 #define MAX_SAMPLE_BLOCK_SIZE 10000
 #define NUM_AUDIO_FILES_IN_LIST sizeof(uintptr_t) * 8
@@ -173,7 +174,7 @@ static void AudioRenderCallback(ma_device* device, void* out, const void* in, ui
 				{
 					stb_vorbis_seek(cur->file.ogg, cur->index);
 					int added = stb_vorbis_get_samples_float_interleaved(cur->file.ogg, 2, manager->tempBuffer, numberOfFrames * 2);
-					for (uint32_t i = 0; i < added * 2; i++)
+					for (int i = 0; i < added * 2; i++)
 					{
 						frames[i] += manager->tempBuffer[i] * cur->volume;
 					}
@@ -197,13 +198,13 @@ static void AudioRenderCallback(ma_device* device, void* out, const void* in, ui
 				}
 			}
 		}
-		for (int i = 0; i < numberOfFrames * 2; i++)
+		for (uint32_t i = 0; i < numberOfFrames * 2; i++)
 		{
 			if (std::abs(frames[i]) > max) max = std::abs(frames[i]);
 		}
 		if (max > 1.0f)
 		{
-			for (int i = 0; i < numberOfFrames * 2; i++)
+			for (uint32_t i = 0; i < numberOfFrames * 2; i++)
 			{
 				frames[i] /= max;
 			}

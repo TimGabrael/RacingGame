@@ -92,13 +92,13 @@ void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, flo
 		game->localPlayer->controller.pitch = pitch;
 		game->localPlayer->controller.yaw = yaw;
 		game->localPlayer->controller.forwardDir = CA_YawPitchToFoward(yaw, pitch);
-		CA_InitPerspectiveCamera(&game->localPlayer->camera, pos, 90.0f, state->winWidth, state->winHeight);
+		CA_InitPerspectiveCamera(&game->localPlayer->camera, pos, 90.0f, static_cast<float>(state->winWidth), static_cast<float>(state->winHeight));
 	}
 	else
 	{
 		Player* player = new Player;
 		
-		CA_InitPerspectiveCamera(&player->camera, pos, 90.0f, state->winWidth, state->winHeight);
+		CA_InitPerspectiveCamera(&player->camera, pos, 90.0f, static_cast<float>(state->winWidth), static_cast<float>(state->winHeight));
 
 
 #ifndef FREE_CAM
@@ -219,7 +219,7 @@ void GameManager::RenderCallback(GameState* state, float dt)
 void DrawString(AtlasTexture* atlas, FontMetrics* metrics, const glm::vec2& start, const char* text)
 {
 	glm::vec2 curPos = start;
-	const int len = strnlen(text, 1000);
+	const int len = static_cast<int>(strnlen(text, 1000));
 	const float unkownAdvance = roundf(metrics->size * 2.0f / 4.0f);
 	ImDrawList* list = ImGui::GetForegroundDrawList();
 	for (int i = 0; i < len; i++)
@@ -235,7 +235,7 @@ void DrawString(AtlasTexture* atlas, FontMetrics* metrics, const glm::vec2& star
 			const ImVec2 br = { roundf(tl.x + g.width), roundf(tl.y + g.height) };
 
 			auto bound = atlas->bounds[metrics->atlasIdx + idx];
-			list->AddImage((ImTextureID)atlas->texture.uniform, tl, br, { bound.start.x, bound.start.y }, { bound.end.x, bound.end.y });
+			list->AddImage(reinterpret_cast<ImTextureID>(static_cast<uint64_t>(atlas->texture.uniform)), tl, br, { bound.start.x, bound.start.y }, { bound.end.x, bound.end.y });
 
 			curPos.x += g.advance;
 		}
@@ -278,5 +278,5 @@ void GameManager::OnMouseButton(int button, int action, int mods)
 
 void GameManager::OnMousePositionChanged(float x, float y, float dx, float dy)
 {
-	if (localPlayer) localPlayer->controller.HandleMouseMovement(dx, dy);
+	if (localPlayer) localPlayer->controller.HandleMouseMovement(static_cast<int>(dx), static_cast<int>(dy));
 }

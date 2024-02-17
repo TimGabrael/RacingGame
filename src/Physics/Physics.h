@@ -1,8 +1,5 @@
 #pragma once
-#include "../Util/Math.h"
 #include <vector>
-#include "../Graphics/ModelInfo.h"
-
 
 #include <extensions/PxExtensionsAPI.h>
 #include <extensions/PxDefaultErrorCallback.h>
@@ -19,6 +16,8 @@
 #include "vehicle/PxVehicleUtil.h"
 
 #include "../Util/Utility.h"
+#include "../Util/Math.h"
+#include "../Graphics/ModelInfo.h"
 
 struct PhysicsScene
 {
@@ -29,7 +28,7 @@ struct PhysicsScene
 	physx::PxControllerManager* manager = NULL;
 	physx::PxFoundation* foundation = NULL;
 	physx::PxScene* scene = NULL;
-	struct MyRaycastCallback* raycastCallback;
+	class MyRaycastCallback* raycastCallback;
 
 
 	physx::PxConvexMesh* AddConvexMesh(const void* verts, uint32_t numVerts, uint32_t vertStride);

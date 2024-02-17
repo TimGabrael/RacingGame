@@ -78,7 +78,7 @@ void PBRRenderable::Update(const Model* model, AnimationInstanceData* optionalAn
 
 				if (model->animations && optionalAnim)
 				{
-					if (model->nodes[j]->skinIndex < optionalAnim->numSkins)
+					if (static_cast<uint32_t>(model->nodes[j]->skinIndex) < optionalAnim->numSkins)
 					{
 						cmd->transform = transform * model->baseTransform * optionalAnim->data[model->nodes[j]->skinIndex].baseTransform;
 						cmd->animUniform = optionalAnim->data[model->nodes[j]->skinIndex].skinUniform;

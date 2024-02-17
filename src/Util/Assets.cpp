@@ -2,10 +2,10 @@
 #include "assimp/scene.h"
 #include "assimp/Importer.hpp"
 #include "assimp/postprocess.h"
-#include "../Graphics/ModelInfo.h"
-#include "../Graphics/Renderer.h"
 #include "assimp/BaseImporter.h"
 #include "zlib.h"
+#include "../Graphics/ModelInfo.h"
+#include "../Graphics/Renderer.h"
 
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
@@ -78,7 +78,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 	Model* model = new Model;
 	memset(model, 0, sizeof(Model));
 
-	int fileLen = strnlen(file, 250);
+	size_t fileLen = strnlen(file, 250);
 	if (strncmp(file + fileLen - 4, ".glb", 4) == 0) isGlb = true;
 	else if (strncmp(file + fileLen - 5, ".gltf", 5) == 0) isGltf = true;
 
@@ -132,12 +132,12 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			{
 				if ((p.mode == TINYGLTF_MODE_LINE || p.mode == TINYGLTF_MODE_TRIANGLES) && p.indices > -1)
 				{
-					model->numVertices += gltfModel.accessors[p.attributes.find("POSITION")->second].count;
-					model->numIndices += gltfModel.accessors[p.indices].count;
+					model->numVertices += static_cast<uint32_t>(gltfModel.accessors[p.attributes.find("POSITION")->second].count);
+					model->numIndices += static_cast<uint32_t>(gltfModel.accessors[p.indices].count);
 				}
 				else if (p.mode == TINYGLTF_MODE_LINE || p.mode == TINYGLTF_MODE_TRIANGLES)
 				{
-					model->numVertices += gltfModel.accessors[p.attributes.find("POSITION")->second].count;
+					model->numVertices += static_cast<uint32_t>(gltfModel.accessors[p.attributes.find("POSITION")->second].count);
 				}
 				else
 				{
@@ -147,12 +147,12 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				
 			}
 		}
-		model->numMeshes = gltfModel.meshes.size();
-		model->numAnimations = gltfModel.animations.size();
-		model->numTextures = gltfModel.textures.size(); 
-		model->numMaterials = gltfModel.materials.size();
-		model->numJoints = gltfModel.nodes.size();
-		model->numSkins = gltfModel.skins.size();
+		model->numMeshes = static_cast<uint32_t>(gltfModel.meshes.size());
+		model->numAnimations = static_cast<uint32_t>(gltfModel.animations.size());
+		model->numTextures = static_cast<uint32_t>(gltfModel.textures.size()); 
+		model->numMaterials = static_cast<uint32_t>(gltfModel.materials.size());
+		model->numJoints = static_cast<uint32_t>(gltfModel.nodes.size());
+		model->numSkins = static_cast<uint32_t>(gltfModel.skins.size());
 
 		model->meshes = new Mesh[model->numMeshes];
 		memset(model->meshes, 0, sizeof(Mesh) * model->numMeshes);
@@ -184,7 +184,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			{
 				int curPrimIdx = 0;
 				Mesh& myMesh = model->meshes[curMeshIdx];
-				myMesh.numPrimitives = m.primitives.size();
+				myMesh.numPrimitives = static_cast<uint32_t>(m.primitives.size());
 				myMesh.primitives = new Primitive[myMesh.numPrimitives];
 				memset(myMesh.primitives, 0, sizeof(Primitive) * myMesh.numPrimitives);
 				myMesh.bound = { glm::vec3(FLT_MAX), glm::vec3(-FLT_MAX) };
@@ -228,7 +228,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 							myMesh.bound.max = glm::max(myMesh.bound.max, myPrim.bound.max);
 
 
-							if (primitive.material > -1 && primitive.material < model->numMaterials)
+							if (primitive.material > -1 && static_cast<uint32_t>(primitive.material) < model->numMaterials)
 							{
 								myPrim.material = &model->materials[primitive.material];
 							}
@@ -597,7 +597,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		}
 		// LOAD NODES(JOINTS)
 		{
-			std::function<void(Model* m, tinygltf::Model* gm, Joint* parent, int curNode)> setJointNodeHirarchy = [&](Model* m, tinygltf::Model* gm, Joint* parent, int curNode)
+			std::function<void(Model* m, tinygltf::Model* gm, Joint* parent, int curNode)> setJointNodeHirarchy = [&setJointNodeHirarchy](Model* m, tinygltf::Model* gm, Joint* parent, int curNode)
 			{
 				tinygltf::Node& node = gm->nodes[curNode];
 				Joint& j = m->joints[curNode];
@@ -641,7 +641,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				for (size_t k = 0; k < j.numChildren; k++)
 				{
 					int cur = gm->nodes[curNode].children.at(k);
-					if (cur > -1 && cur < m->numJoints)
+					if (cur > -1 && static_cast<uint32_t>(cur) < m->numJoints)
 					{
 						j.children[k] = &m->joints[cur];
 						setJointNodeHirarchy(m, gm, &m->joints[curNode], cur);
@@ -654,7 +654,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			};
 			for (size_t i = 0; i < gltfModel.nodes.size(); i++)
 			{
-				setJointNodeHirarchy(model, &gltfModel, nullptr, i);
+				setJointNodeHirarchy(model, &gltfModel, nullptr, static_cast<int>(i));
 			}
 		}
 
@@ -664,7 +664,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			{
 				tinygltf::Skin& source = gltfModel.skins.at(i);
 				Skin* curSkin = &model->skins[i];
-				curSkin->numJoints = source.joints.size();
+				curSkin->numJoints = static_cast<uint32_t>(source.joints.size());
 				curSkin->joints = new Joint*[curSkin->numJoints];
 				memset(curSkin->joints, 0, sizeof(Joint*) * curSkin->numJoints);
 
@@ -695,8 +695,8 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 				Animation& myAnim = model->animations[i];
 				myAnim.start = FLT_MAX;
 				myAnim.end = -FLT_MAX;
-				myAnim.numSamplers = anim.samplers.size();
-				myAnim.numChannels = anim.channels.size();
+				myAnim.numSamplers = static_cast<uint32_t>(anim.samplers.size());
+				myAnim.numChannels = static_cast<uint32_t>(anim.channels.size());
 				myAnim.samplers = new AnimationSampler[myAnim.numSamplers];
 				memset(myAnim.samplers, 0, sizeof(AnimationSampler)* myAnim.numSamplers);
 				myAnim.channels = new  AnimationChannel[myAnim.numChannels];
@@ -724,7 +724,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 						assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
 						mySamp.inputs = new float[accessor.count];
 						memset(mySamp.inputs, 0, sizeof(float)* accessor.count);
-						mySamp.numInOut = accessor.count;
+						mySamp.numInOut = static_cast<uint32_t>(accessor.count);
 
 						const void* dataPtr = &buffer.data[accessor.byteOffset + bufferView.byteOffset];
 						const float* buf = static_cast<const float*>(dataPtr);
@@ -836,7 +836,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 
 		uint32_t numVerts = 0;
 		uint32_t numInds = 0;
-		for (int i = 0; i < scene->mNumMeshes; i++)
+		for (uint32_t i = 0; i < scene->mNumMeshes; i++)
 		{
 			aiMesh* mesh = scene->mMeshes[i];
 			Mesh* myMesh = &model->meshes[i];
@@ -845,7 +845,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 			myMesh->bound.max = { mesh->mAABB.mMax.x, mesh->mAABB.mMax.y, mesh->mAABB.mMax.z };
 
 			uint32_t localNumInds = 0;
-			for (int j = 0; j < mesh->mNumFaces; j++)
+			for (uint32_t j = 0; j < mesh->mNumFaces; j++)
 			{
 				localNumInds += mesh->mFaces[j].mNumIndices;
 			}
@@ -980,12 +980,12 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		model->numIndices = numInds;
 
 		// GENERATE MATERIAL
-		for (int i = 0; i < scene->mNumMaterials; i++)
+		for (uint32_t i = 0; i < scene->mNumMaterials; i++)
 		{
 			aiMaterial* mat = scene->mMaterials[i];
 			Material& myMat = model->materials[i];
 
-			auto loadTexture = [&](aiTextureType type, uint8_t* uvOut) -> Texture*
+			auto loadTexture = [m, mat, scene, file, &filePath](aiTextureType type, uint8_t* uvOut) -> Texture*
 			{
 				uint32_t uvIndex = 0;
 				aiString textureFile;
@@ -999,7 +999,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 					resTex->height = glm::min(glm::max(texture->mHeight, 1u), 0x8000u);
 					resTex->type = GL_TEXTURE_2D;
 					uint32_t* data = new uint32_t[resTex->width * resTex->height];
-					for (int i = 0; i < resTex->width * resTex->height; i++)
+					for (uint32_t i = 0; i < resTex->width * resTex->height; i++)
 					{
 						data[i] = RGBA(texture->pcData[i].r, texture->pcData[i].g, texture->pcData[i].b, 255);
 					}
@@ -1205,6 +1205,7 @@ struct Texture* AM_AddCubemapTexture(AssetManager* m, const char* name, const ch
 
 		m->textures[name] = resTex;
 	}
+	return resTex;
 }
 
 
@@ -1226,9 +1227,9 @@ struct AtlasBuildData
 	std::vector<rect_type> rects;
 	void CopyRectToRect(const rect_type& cpyRec, uint32_t dstStartX, uint32_t dstStartY)
 	{
-		for (uint32_t y = 0; y < cpyRec.h; y++)
+		for (uint32_t y = 0; y < static_cast<uint32_t>(cpyRec.h); y++)
 		{
-			for (uint32_t x = 0; x < cpyRec.w; x++)
+			for (uint32_t x = 0; x < static_cast<uint32_t>(cpyRec.w); x++)
 			{
 				data[x + dstStartX + (y + dstStartY) * curWidth] = copyData[x + cpyRec.x + (y + cpyRec.y) * copyWidth];
 			}
@@ -1288,7 +1289,7 @@ FontMetrics* AM_AtlasAddGlyphRangeFromFile(struct AtlasBuildData* data, const ch
 	FontMetrics* metrics = new FontMetrics;
 	memset(metrics, 0, sizeof(FontMetrics));
 	metrics->size = fontSize;
-	metrics->atlasIdx = data->rects.size();
+	metrics->atlasIdx = static_cast<uint32_t>(data->rects.size());
 
 	int ascent, descent, lineGap;
 	stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
@@ -1314,19 +1315,19 @@ FontMetrics* AM_AtlasAddGlyphRangeFromFile(struct AtlasBuildData* data, const ch
 		int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
 		stbtt_GetCodepointBitmapBox(&info, i, scale, scale, &x1, &y1, &x2, &y2);
 
-		g.width = (float)(x2 - x1);
-		g.height = (float)(y2 - y1);
-		g.leftSideBearing = x1;
-		g.yStart = (float)y1;
+		g.width = static_cast<float>(x2 - x1);
+		g.height = static_cast<float>(y2 - y1);
+		g.leftSideBearing = static_cast<float>(x1);
+		g.yStart = static_cast<float>(y1);
 
-		stbtt_MakeCodepointBitmap(&info, tempBitmap, g.width, g.height, tempWidthHeight, scale, scale, i);
+		stbtt_MakeCodepointBitmap(&info, tempBitmap, static_cast<int>(g.width), static_cast<int>(g.height), tempWidthHeight, scale, scale, i);
 
 		for(uint32_t j = 0; j < tempWidthHeight * tempWidthHeight; j++)
 		{
 			tempColor[j] = 0xFFFFFF | (tempBitmap[j] << 24);
 		}
 
-		if (!AM_AtlasAddSubRawData(data, tempColor, 0, 0, g.width, g.height, tempWidthHeight))
+		if (!AM_AtlasAddSubRawData(data, tempColor, 0, 0, static_cast<uint32_t>(g.width), static_cast<uint32_t>(g.height), tempWidthHeight))
 		{
 			delete[] fontData;
 			delete[] metrics->glyphs;
@@ -1357,8 +1358,8 @@ bool AM_AtlasAddSubRawData(struct AtlasBuildData* data, uint32_t* rawData, uint3
 	data->rects.emplace_back(0, 0, width, height);
 	const int discard_step = -4;
 	bool failed = false;
-	auto report_successful = [&](rect_type&) { failed = false;  return callback_result::CONTINUE_PACKING; };
-	auto report_unsuccessful = [&](rect_type&) { failed = true; return callback_result::ABORT_PACKING; };
+	auto report_successful = [&failed](rect_type&) { failed = false;  return callback_result::CONTINUE_PACKING; };
+	auto report_unsuccessful = [&failed](rect_type&) { failed = true; return callback_result::ABORT_PACKING; };
 
 
 	const rect_wh result_size = find_best_packing<spaces_type>(data->rects, make_finder_input(AtlasBuildData::max, discard_step, report_successful, report_unsuccessful, runtime_flipping_mode));
@@ -1379,7 +1380,7 @@ bool AM_AtlasAddSubRawData(struct AtlasBuildData* data, uint32_t* rawData, uint3
 			memset(data->copyData, 0, sizeof(uint32_t) * dataSize);
 		}
 		memcpy(data->copyData, data->data, sizeof(uint32_t) * data->curWidth * data->curHeight);
-		if (data->curWidth <= result_size.w || data->curHeight <= result_size.h)
+		if (data->curWidth <= static_cast<uint32_t>(result_size.w) || data->curHeight <= static_cast<uint32_t>(result_size.h))
 		{
 			sizeChanged = true;
 			delete[] data->data;
@@ -1440,7 +1441,7 @@ struct TextureAltasSerializedFontMetrics
 void AM_StoreTextureAtlas(const char* file, struct AtlasBuildData* data, FontMetrics** metrics, uint32_t numFontMetrics)
 {
 
-	uint32_t fullDataSize = sizeof(TextureAtlasSerializedHeader) + data->curWidth * data->curHeight * sizeof(uint32_t) + sizeof(rect_type) * data->rects.size();
+	uint32_t fullDataSize = static_cast<uint32_t>(sizeof(TextureAtlasSerializedHeader) + data->curWidth * data->curHeight * sizeof(uint32_t) + sizeof(rect_type) * data->rects.size());
 	for (uint32_t i = 0; i < numFontMetrics; i++)
 	{
 		fullDataSize += (sizeof(FontMetrics) - 8) + sizeof(Glyph) * metrics[i]->numGlyphs;
@@ -1452,7 +1453,7 @@ void AM_StoreTextureAtlas(const char* file, struct AtlasBuildData* data, FontMet
 	header->width = data->curWidth;
 	header->height = data->curHeight;
 	header->numMetrics = numFontMetrics;
-	header->numRects = data->rects.size();
+	header->numRects = static_cast<uint32_t>(data->rects.size());
 
 	memcpy(curFill, data->data, sizeof(uint32_t) * data->curWidth * data->curHeight);
 	curFill += sizeof(uint32_t) * data->curWidth * data->curHeight;
@@ -1539,7 +1540,7 @@ AtlasTexture* AM_EndTextureAtlas(struct AtlasBuildData* data, bool linear)
 
 
 
-	atlas->numBounds = data->rects.size();
+	atlas->numBounds = static_cast<uint32_t>(data->rects.size());
 	atlas->bounds = new AtlasTexture::UVBound[atlas->numBounds];
 	memset(atlas->bounds, 0, sizeof(AtlasTexture::UVBound) * atlas->numBounds);
 	for (uint32_t i = 0; i < atlas->numBounds; i++)
@@ -1758,7 +1759,7 @@ void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName
 {
 
 	uint32_t dataSize = sizeof(EnvironmentFileHeader);
-	for (int i = 0; i < env->mipLevels; i++)
+	for (uint32_t i = 0; i < env->mipLevels; i++)
 	{
 		dataSize += (glm::max(env->width, 1u) * glm::max(env->height, 1u) * 4) * 6;
 	}
@@ -1774,7 +1775,7 @@ void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName
 	header->irrHeight = env->irradianceMapHeight;
 	uint8_t* curData = fullData + sizeof(EnvironmentFileHeader);
 
-	for (int i = 0; i < env->mipLevels; i++)
+	for (uint32_t i = 0; i < env->mipLevels; i++)
 	{
 		const uint32_t cw = glm::max(env->width >> i, 1u);
 		const uint32_t ch = glm::max(env->height >> i, 1u);
@@ -1902,7 +1903,7 @@ bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName)
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-	for (int i = 0; i < env->mipLevels; i++)
+	for (uint32_t i = 0; i < env->mipLevels; i++)
 	{
 		uint32_t cw = glm::max(header->width >> i, 1);
 		uint32_t ch = glm::max(header->height >> i, 1);

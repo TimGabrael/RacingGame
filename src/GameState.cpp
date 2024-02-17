@@ -62,21 +62,21 @@ static void MousePositionCallback(GLFWwindow* window, double x, double y)
 	static double oldY = y;
 	if (g_gameState && g_gameState->manager)
 	{
-		double dx = x - g_gameState->mouseX;
-		double dy = g_gameState->mouseY - y;
+		const double dx = x - static_cast<double>(g_gameState->mouseX);
+		const double dy = static_cast<double>(g_gameState->mouseY) - y;
 
 		if (!ImGui::GetIO().WantCaptureMouse)
-			g_gameState->manager->OnMousePositionChanged(x, y, dx, dy);
+			g_gameState->manager->OnMousePositionChanged(static_cast<float>(x), static_cast<float>(y), static_cast<float>(dx), static_cast<float>(dy));
 		
-		g_gameState->mouseX = x;
-		g_gameState->mouseY = y;
+		g_gameState->mouseX = static_cast<float>(x);
+		g_gameState->mouseY = static_cast<float>(y);
 	}
 }
 static void WindowFocusCallback(GLFWwindow* window, int focused)
 {
 	if (g_gameState)
 	{
-		g_gameState->hasFocus = focused;
+		g_gameState->hasFocus = static_cast<bool>(focused);
 	}
 }
 static void WindowMaximizedCallback(GLFWwindow* window, int maximized)
@@ -266,7 +266,7 @@ void UpateGameState()
 		static double timer = glfwGetTime();
 		double curTime = glfwGetTime();
 
-		float dt = (curTime - timer) * g_gameState->tickMultiplier;
+		const float dt = static_cast<float>(curTime - timer) * g_gameState->tickMultiplier;
 		timer = curTime;
 		g_gameState->accumulatedTime += dt;
 
