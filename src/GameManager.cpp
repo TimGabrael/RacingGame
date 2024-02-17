@@ -3,6 +3,7 @@
 #include "Graphics/ModelInfo.h"
 #include "Graphics/Scene.h"
 #include "Physics/Physics.h"
+#include "Audio/AudioManager.h"
 
 GameManager* GM_CreateGameManager(GameState* state)
 {
@@ -25,8 +26,11 @@ GameManager* GM_CreateGameManager(GameState* state)
 		AM_StoreEnvironment(&out->env, "Assets/Environment.menv");
 	}
 
-	out->defaultLightGroup = RELI_AddLightGroup(state->renderer);
 
+	
+
+	out->defaultLightGroup = RELI_AddLightGroup(state->renderer);
+	
 	//DirectionalLight* l = RELI_AddDirectionalLight(out->defaultLightGroup);
 	//l->direction = { 0.0f, -1.0f, 0.0f };
 	//l->color = { 2.0f, 2.0f, 0.0f };
@@ -35,7 +39,7 @@ GameManager* GM_CreateGameManager(GameState* state)
 	sl->pos = { 0.0f, 30.0f, 0.0f };
 	sl->light.direction = { 0.0f, -1.0f, 0.0f };
 	sl->light.color = { 2.0f, 2.0f, 2.0f };
-	//
+	
 	//SpotLight* spot = RELI_AddSpotLight(out->defaultLightGroup);
 	//spot->color = { 2.0f, 2.0f, 2.0f, 1.0f };
 	//spot->direction = { 0.0f, -1.0f, 0.0f };
@@ -47,23 +51,23 @@ GameManager* GM_CreateGameManager(GameState* state)
 	//spot->light.direction = { 0.0f, -1.0f, 0.0f };
 	//spot->light.cutOff = M_PI_4;
 	//spot->light.pos = { 0.0f, 30.0f, 0.0f };
-	
+	//
 	//PointLight* point = RELI_AddPointLight(out->defaultLightGroup);
 	//point->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->pos = { 0.0f, 30.0f, 0.0f, 0.0f };
-	
+	//
 	//PointShadowLight* point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
 	//point->light.color = { 3.0f, 6.0f, 3.0f, 1.0f };
 	//point->light.pos = { 0.0f, 30.0f, 0.0f, 0.0f };
-
+	//
 	//point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
 	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->light.pos = { 0.0f, 20.0f, 10.0f, 0.0f };
-
+	//
 	//point = RELI_AddPointShadowLight(out->defaultLightGroup, 2048, 2048);
 	//point->light.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//point->light.pos = { 0.0f, 20.0f, -10.0f, 0.0f };
-
+	//
 	//RELI_SetAmbientLightColor(out->defaultLightGroup, glm::vec3(0.2f));
 
 	RELI_Update(out->defaultLightGroup, nullptr);
@@ -278,5 +282,7 @@ void GameManager::OnMouseButton(int button, int action, int mods)
 
 void GameManager::OnMousePositionChanged(float x, float y, float dx, float dy)
 {
-	if (localPlayer) localPlayer->controller.HandleMouseMovement(static_cast<int>(dx), static_cast<int>(dy));
+	if (localPlayer) {
+		localPlayer->controller.HandleMouseMovement(dx, dy);
+	}
 }

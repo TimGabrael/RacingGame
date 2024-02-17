@@ -58,8 +58,6 @@ static void MouseButtonCallback(GLFWwindow* window, int button, int action, int 
 }
 static void MousePositionCallback(GLFWwindow* window, double x, double y)
 {
-	static double oldX = x;
-	static double oldY = y;
 	if (g_gameState && g_gameState->manager)
 	{
 		const double dx = x - static_cast<double>(g_gameState->mouseX);

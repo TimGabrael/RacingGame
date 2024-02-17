@@ -71,7 +71,7 @@ void DefaultFPSController::SetCamera(PerspectiveCamera* cam, float camOffsetY)
 	cam->base.pos = PH_ControllerGetPosition(controller) + glm::vec3(0.0f, camOffsetY, 0.0f);
 	CA_UpdatePerspectiveCamera(cam, forwardDir);
 }
-void DefaultFPSController::HandleMouseMovement(int dx, int dy)
+void DefaultFPSController::HandleMouseMovement(float dx, float dy)
 {
 	if (movement.actionDown)
 	{
@@ -104,7 +104,7 @@ void FreecamFPSController::SetCamera(struct PerspectiveCamera* cam)
 	cam->base.pos = pos;
 	CA_UpdatePerspectiveCamera(cam, forwardDir);
 }
-void FreecamFPSController::HandleMouseMovement(int dx, int dy)
+void FreecamFPSController::HandleMouseMovement(float dx, float dy)
 {
 	if (movement.actionDown)
 	{

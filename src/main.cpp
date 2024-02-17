@@ -14,7 +14,7 @@ int main()
 	GameState* game = CreateGameState("RacingGame", 1600, 900, 20);
 	GameManager* manager =  GM_CreateGameManager(game);
 	game->manager =  manager;
-	GM_AddPlayerToScene(manager, { 0.0f, 12.0f, 0.0f }, 90.0f, 0.0f);
+	GM_AddPlayerToScene(manager, { 2.0f, 12.0f, 2.0f }, 0.0f, 0.0f);
 
 	uint32_t numMetrics = 0;
 	manager->atlas = AM_LoadTextureAtlas("Assets/atlas.atl", &manager->metrics, &numMetrics, false);

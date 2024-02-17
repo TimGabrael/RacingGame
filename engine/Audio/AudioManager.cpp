@@ -223,6 +223,7 @@ struct AudioManager* AU_CreateAudioManager(int numConcurrent)
 	ma_device_config dev_cfg = ma_device_config_init(ma_device_type_playback);
 	dev_cfg.playback.format = ma_format::ma_format_f32;
 	dev_cfg.playback.channels = 2;
+	dev_cfg.sampleRate = 44100;
 	dev_cfg.dataCallback = &AudioRenderCallback;
 	dev_cfg.pUserData = out;
 

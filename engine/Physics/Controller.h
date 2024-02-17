@@ -19,7 +19,7 @@ struct DefaultFPSController
 	void Update(float dt);
 	void SetCamera(struct PerspectiveCamera* cam, float camOffsetY);
 
-	void HandleMouseMovement(int dx, int dy);
+	void HandleMouseMovement(float dx, float dy);
 
 	physx::PxController* controller;
 	FPSUserInput movement;
@@ -37,7 +37,7 @@ struct FreecamFPSController
 	void Update(float dt);
 	void SetCamera(struct PerspectiveCamera* cam);
 
-	void HandleMouseMovement(int dx, int dy);
+	void HandleMouseMovement(float dx, float dy);
 
 	FPSUserInput movement;
 	glm::vec3 pos;
