@@ -60,7 +60,7 @@ struct FontMetrics
 
 
 AssetManager* AM_CreateAssetManager();
-void AM_CleanUpAssetManager(AssetManager* assets);
+void AM_DestroyAssetManager(AssetManager* assets);
 
 
 
@@ -85,7 +85,10 @@ AtlasTexture* AM_LoadTextureAtlas(const char* file, FontMetrics** metrics, uint3
 
 
 void AM_DeleteModel(struct Model* model);
+void AM_DeleteTextureAtlas(AtlasTexture* atl);
 
 
 void AM_StoreEnvironment(const struct EnvironmentData* env, const char* fileName);
 bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName);
+
+void AM_CleanupEnvironment(struct EnvironmentData* env);

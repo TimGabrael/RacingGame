@@ -66,9 +66,18 @@ AssetManager* AM_CreateAssetManager()
 
 	return out;
 }
-void AM_CleanUpAssetManager(AssetManager* assets)
+void AM_DestroyAssetManager(AssetManager* assets)
 {
-
+    for(auto& t : assets->textures) {
+        glDeleteTextures(1, &t.second->uniform);
+        delete t.second;
+    }
+    assets->textures.clear();
+    for(auto& m : assets->models) {
+        AM_DeleteModel(m);
+    }
+    assets->models.clear();
+    delete assets;
 }
 
 struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
@@ -1729,6 +1738,15 @@ void AM_DeleteModel(struct Model* model)
 	model->materials = nullptr;
 	model->animations = nullptr;
 }
+void AM_DeleteTextureAtlas(AtlasTexture* atl) {
+    if(atl->bounds) {
+        delete[] atl->bounds;
+    }
+    if(atl->texture.uniform) {
+        glDeleteTextures(1, &atl->texture.uniform);
+    }
+    delete atl;
+}
 
 
 
@@ -1935,4 +1953,8 @@ bool AM_LoadEnvironment(struct EnvironmentData* env, const char* fileName)
 
 	delete[] uncompressedData;
 	return true;
+}
+void AM_CleanupEnvironment(struct EnvironmentData* env) {
+    glDeleteTextures(1, &env->irradianceMap);
+    glDeleteTextures(1, &env->prefilteredMap);
 }

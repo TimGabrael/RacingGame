@@ -26,7 +26,7 @@ struct FoxEntity : public Entity
 	FoxEntity(Model* m, AnimationInstanceData* data);
 	virtual ~FoxEntity() override;
 	virtual void Update(float dt) override {};
-	virtual void UpdateFrame(float dt);
+	virtual void UpdateFrame(float dt) override;
 	Model* model;
 	physx::PxRigidActor* body;
 	AnimationInstanceData* anim;
@@ -38,7 +38,7 @@ struct SponzaEntity : public Entity
 	SponzaEntity(Model* m);
 	virtual ~SponzaEntity() override;
 	virtual void Update(float dt) override {};
-	virtual void UpdateFrame(float dt);
+	virtual void UpdateFrame(float dt) override;
 	physx::PxRigidActor* body;
 	Model* model;
 	PBRRenderable* renderable;

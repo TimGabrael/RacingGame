@@ -16,7 +16,7 @@ Player::~Player()
 		controller.controller->release();
 	}
 #endif
-	
+
 }
 void Player::Update(float dt)
 {

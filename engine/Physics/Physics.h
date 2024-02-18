@@ -69,7 +69,7 @@ struct VehicleDesc
 };
 
 PhysicsScene* PH_CreatePhysicsScene();
-void PH_CleanUpPhysicsScene(PhysicsScene* scene);
+void PH_DestroyPhysicsScene(PhysicsScene* scene);
 
 void PH_Update(PhysicsScene* scene, float dt);
 

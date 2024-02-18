@@ -238,7 +238,7 @@ struct AudioManager* AU_CreateAudioManager(int numConcurrent)
 
 	out->active = new AudioPlaybackContext * [numConcurrent];
 	out->tempStorage = AU_CreateAudioPlaybackContextList(numConcurrent);
-	memset(out->active, 0, sizeof(AudioPlaybackContext*) * numConcurrent);
+	memset(out->active, 0, sizeof(void*) * numConcurrent);
 	out->numConcurrent = numConcurrent;
 
 	out->tempBuffer = new float[MAX_SAMPLE_BLOCK_SIZE * 2];
@@ -246,7 +246,7 @@ struct AudioManager* AU_CreateAudioManager(int numConcurrent)
 	ma_device_start(&out->device);
 	return out;
 }
-void AU_ShutdownAudioManager(struct AudioManager* manager)
+void AU_DestroyAudioManager(struct AudioManager* manager)
 {
 	ma_device_stop(&manager->device);
 	manager->currentNumPlaying = 0;

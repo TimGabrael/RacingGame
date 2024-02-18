@@ -62,3 +62,5 @@ bool GetKey(int key);
 bool GetMouseButton(int button);
 
 void UpateGameState();
+
+void DestroyGameState(GameState* state);

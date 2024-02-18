@@ -2,7 +2,7 @@
 
 
 struct AudioManager* AU_CreateAudioManager(int numConcurrent);
-void AU_ShutdownAudioManager(struct AudioManager* manager);
+void AU_DestroyAudioManager(struct AudioManager* manager);
 
 struct WavFile* AU_LoadFile(struct AudioManager* manager, const char* file);
 struct OggFile* AU_LoadOggFile(struct AudioManager* manager, const char* file);

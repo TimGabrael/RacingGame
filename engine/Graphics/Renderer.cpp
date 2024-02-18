@@ -5,7 +5,11 @@
 #include "Scene.h"
 
 #include "finders_interface.h"
-#define assert(a, ...) 
+#ifndef NDEBUG
+#define ASSERT(a, ...) assert(a)
+#else
+#define ASSERT(a, ...) 
+#endif
 
 static const char* baseVertexShader = "#version 330\n\
 layout(location = 0) in vec3 position;\n\
@@ -1822,9 +1826,9 @@ static void PackShadowLights(LightGroup* g)
 	}
 
 	auto report_result = [&rectangles](const rect_wh& result_size) {
-		LOG("Resultant bin: %d, %d\n", result_size.w, result_size.h);
+		LOG("shadow map bin: %d, %d\n", result_size.w, result_size.h);
 		for (const auto& r : rectangles) {
-			LOG("%d %d %d %d\n", r.x, r.y, r.w, r.h);
+			LOG("shadow_rectangles: %d %d %d %d\n", r.x, r.y, r.w, r.h);
 		}
 	};
 	const auto result_size = find_best_packing<spaces_type>(rectangles, make_finder_input(max_side, discard_step, report_successful, report_unsuccessful, runtime_flipping_mode));
@@ -2299,7 +2303,7 @@ struct Renderer* RE_CreateRenderer(struct AssetManager* assets)
 	renderer->pbrData.brdfLut = CreateBRDFLut(512, 512);
 	return renderer;
 }
-void RE_CleanUpRenderer(struct Renderer* renderer)
+void RE_DestroyRenderer(struct Renderer* renderer)
 {
 	CleanUpPostProcessingRenderInfo(&renderer->ppInfo);
 
@@ -2973,7 +2977,7 @@ void RELI_RemoveDirectionalLight(struct LightGroup* group, DirectionalLight* lig
 	{
 		InternalDirLight* l = &group->dirLights[idx];
 		memset(l, 0, sizeof(InternalDirLight));
-		InternalDirLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		InternalDirLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(void*) * MAX_NUM_LIGHTS);
 		int curListIdx = 0;
 		for (uint32_t i = 0; i < group->numDirLights; i++)
 		{
@@ -2987,7 +2991,7 @@ void RELI_RemoveDirectionalLight(struct LightGroup* group, DirectionalLight* lig
 				curListIdx++;
 			}
 		}
-		memcpy(group->dirs, remainingList, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		memcpy(group->dirs, remainingList, sizeof(void*) * MAX_NUM_LIGHTS);
 		group->numDirLights--;
 	}
 }
@@ -3016,7 +3020,7 @@ void RELI_RemovePointLight(struct LightGroup* group, PointLight* light)
 	{
 		InternalPointLight* l = &group->pointLights[idx];
 		memset(l, 0, sizeof(InternalPointLight));
-		InternalPointLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		InternalPointLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(void*) * MAX_NUM_LIGHTS);
 		int curListIdx = 0;
 		for (uint32_t i = 0; i < group->numDirLights; i++)
 		{
@@ -3030,7 +3034,7 @@ void RELI_RemovePointLight(struct LightGroup* group, PointLight* light)
 				curListIdx++;
 			}
 		}
-		memcpy(group->dirs, remainingList, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		memcpy(group->dirs, remainingList, sizeof(void*) * MAX_NUM_LIGHTS);
 		group->numPointLights--;
 	}
 }
@@ -3059,7 +3063,7 @@ void RELI_RemoveSpotLight(struct LightGroup* group, SpotLight* light)
 	{
 		InternalSpotLight* l = &group->spotLights[idx];
 		memset(l, 0, sizeof(InternalSpotLight));
-		InternalSpotLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		InternalSpotLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(void*) * MAX_NUM_LIGHTS);
 		int curListIdx = 0;
 		for (uint32_t i = 0; i < group->numDirLights; i++)
 		{
@@ -3073,7 +3077,7 @@ void RELI_RemoveSpotLight(struct LightGroup* group, SpotLight* light)
 				curListIdx++;
 			}
 		}
-		memcpy(group->dirs, remainingList, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		memcpy(group->dirs, remainingList, sizeof(void*) * MAX_NUM_LIGHTS);
 		group->numSpotLights--;
 	}
 }
@@ -3085,8 +3089,14 @@ DirShadowLight* RELI_AddDirectionalShadowLight(struct LightGroup* group, uint16_
 	{
 		AddShadowLightGroup(group);
 	}
-	if (useCascade) if ((group->shadowGroup.numUsedProjections + 4) >= MAX_NUM_LIGHTS) return nullptr;
-	else if ((group->shadowGroup.numUsedProjections + 1) >= MAX_NUM_LIGHTS) return nullptr;
+	if (useCascade) {
+        if ((group->shadowGroup.numUsedProjections + 4) >= MAX_NUM_LIGHTS) {
+            return nullptr;
+        }
+    }
+	else if ((group->shadowGroup.numUsedProjections + 1) >= MAX_NUM_LIGHTS) {
+        return nullptr;
+    }
 	
 	
 	DirShadowLight* light = nullptr;
@@ -3133,7 +3143,7 @@ void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight*
 			group->shadowGroup.numUsedProjections -= 1;
 		}
 		memset(l, 0, sizeof(InternalDirLight));
-		InternalDirLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		InternalDirLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(void*) * MAX_NUM_LIGHTS);
 		int curListIdx = 0;
 		for (uint32_t i = 0; i < group->numDirLights; i++)
 		{
@@ -3147,7 +3157,7 @@ void RELI_RemoveDirectionalShadowLight(struct LightGroup* group, DirShadowLight*
 				curListIdx++;
 			}
 		}
-		memcpy(group->dirs, remainingList, sizeof(InternalDirLight*) * MAX_NUM_LIGHTS);
+		memcpy(group->dirs, remainingList, sizeof(void*) * MAX_NUM_LIGHTS);
 		group->numDirLights--;
 	}
 	CheckShadowGroupAndDeleteIfEmpty(group);
@@ -3189,7 +3199,7 @@ void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light
 		group->shadowGroup.numUsedProjections -= 1;
 		memset(l, 0, sizeof(InternalSpotLight));
 
-		InternalSpotLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		InternalSpotLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(void*) * MAX_NUM_LIGHTS);
 		int curListIdx = 0;
 		for (uint32_t i = 0; i < group->numSpotLights; i++)
 		{
@@ -3203,7 +3213,7 @@ void RELI_RemoveSpotShadowLight(struct LightGroup* group, SpotShadowLight* light
 				curListIdx++;
 			}
 		}
-		memcpy(group->spots, remainingList, sizeof(InternalSpotLight*) * MAX_NUM_LIGHTS);
+		memcpy(group->spots, remainingList, sizeof(void*) * MAX_NUM_LIGHTS);
 		group->numSpotLights--;
 	}
 	CheckShadowGroupAndDeleteIfEmpty(group);
@@ -3246,7 +3256,7 @@ void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* lig
 		group->shadowGroup.numUsedProjections -= 6;
 		memset(l, 0, sizeof(InternalPointLight));
 
-		InternalPointLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		InternalPointLight* remainingList[MAX_NUM_LIGHTS]; memset(remainingList, 0, sizeof(void*) * MAX_NUM_LIGHTS);
 		int curListIdx = 0;
 		for (uint32_t i = 0; i < group->numSpotLights; i++)
 		{
@@ -3260,7 +3270,7 @@ void RELI_RemovePointShadowLight(struct LightGroup* group, PointShadowLight* lig
 				curListIdx++;
 			}
 		}
-		memcpy(group->points, remainingList, sizeof(InternalPointLight*) * MAX_NUM_LIGHTS);
+		memcpy(group->points, remainingList, sizeof(void*) * MAX_NUM_LIGHTS);
 		group->numPointLights--;
 	}
 	CheckShadowGroupAndDeleteIfEmpty(group);
@@ -3363,8 +3373,8 @@ void RE_BeginScene(struct Renderer* renderer, struct Scene* scene)
 		if (renderer->drawCmds) delete[] renderer->drawCmds;
 		renderer->drawCmds = new RenderCommand*[renderer->cmdlistCapacity];
 	}
-	renderer->numCmds = numCommands;
 	renderer->firstTransparentCmd = 0;
+
 
 	RenderCommand** curCmdList = renderer->drawCmds;
 	numCommands = 0;
@@ -3408,9 +3418,9 @@ void RE_SetLightData(struct Renderer* renderer, LightGroup* group)
 
 void RE_RenderShadows(struct Renderer* renderer)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
-	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
+	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	LightGroup* g = renderer->currentLightData;
 	if (!g->shadowGroup.fbo) return;
 
@@ -3506,8 +3516,8 @@ void RE_RenderShadows(struct Renderer* renderer)
 
 void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaTheta, CUBE_MAP_SIDE side)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->currentEnvironmentData != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->currentEnvironmentData != nullptr, "The Camera base needs to be set before rendering");
 
 	glUseProgram(renderer->cubemapInfo.irradianceFilterProgram);
 	glDisable(GL_DEPTH_TEST);
@@ -3548,8 +3558,8 @@ void RE_RenderIrradiance(struct Renderer* renderer, float deltaPhi, float deltaT
 }
 void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint32_t numSamples, CUBE_MAP_SIDE side)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->currentEnvironmentData != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->currentEnvironmentData != nullptr, "The Camera base needs to be set before rendering");
 
 	glUseProgram(renderer->cubemapInfo.preFilterProgram);
 	glDisable(GL_DEPTH_TEST);
@@ -3593,9 +3603,9 @@ void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint3
 
 void RE_RenderGeometry(struct Renderer* renderer)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
-	if (renderer->numCmds == 0) return;
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
+    if (renderer->numCmds == 0) return;
 
 	
 	glEnable(GL_DEPTH_TEST);
@@ -3626,10 +3636,10 @@ void RE_RenderGeometry(struct Renderer* renderer)
 
 void RE_RenderOpaque(struct Renderer* renderer)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
-	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
-	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
+	ASSERT(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numCmds == 0) return;
 	
 	glEnable(GL_DEPTH_TEST);
@@ -3659,10 +3669,10 @@ void RE_RenderOpaque(struct Renderer* renderer)
 }
 void RE_RenderAdditionalOpaque(struct Renderer* renderer)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
-	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
-	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
+	ASSERT(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numCmds == 0) return;
 
 	glEnable(GL_DEPTH_TEST);
@@ -3694,10 +3704,10 @@ void RE_RenderAdditionalOpaque(struct Renderer* renderer)
 }
 void RE_RenderTransparent(struct Renderer* renderer)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
-	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
-	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
+	ASSERT(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numCmds == renderer->firstTransparentCmd) return;
 
 	const glm::mat4 viewProj = renderer->currentCam->proj * renderer->currentCam->view;
@@ -3764,9 +3774,9 @@ void RE_RenderTransparent(struct Renderer* renderer)
 
 void RE_RenderOutline(struct Renderer* renderer, const Renderable* obj, const glm::vec4& color, float thickness)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
-	assert(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
+	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 
 	glEnable(GL_STENCIL_TEST);
 	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
@@ -3819,7 +3829,7 @@ void RE_RenderOutline(struct Renderer* renderer, const Renderable* obj, const gl
 
 void RE_RenderCubeMap(struct Renderer* renderer, GLuint cubemap)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
@@ -3877,8 +3887,8 @@ void RE_EndScene(struct Renderer* renderer)
 
 void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	assert(renderer->numCmds == 0, "Need to Call Begin Scene Before Rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
 	glDisable(GL_BLEND);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
@@ -3959,7 +3969,7 @@ void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpace
 }
 void RE_RenderScreenSpaceAmbientOcclusion(struct Renderer* renderer, GLuint srcColorTexture, GLuint srcDepthTexture, uint32_t srcWidth, uint32_t srcHeight, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {
-	assert(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
+	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
 	glDisable(GL_BLEND);
 	glDisable(GL_DEPTH_TEST);
 

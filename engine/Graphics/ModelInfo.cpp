@@ -144,6 +144,21 @@ void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim)
 		glBufferData(GL_UNIFORM_BUFFER, sizeof(BoneData), &boneData, GL_DYNAMIC_DRAW);
 	}
 }
+void CleanUpBoneData(AnimationInstanceData* anim) {
+    for(uint32_t i = 0; i < anim->numSkins; ++i) {
+        if(anim->data[i].current) {
+            delete[] anim->data[i].current;
+            anim->data[i].current = nullptr;
+            glDeleteBuffers(1, &anim->data[i].skinUniform);
+            anim->data[i].skinUniform = 0;
+        }
+    }
+    if(anim->data) {
+        delete[] anim->data;
+        anim->data = nullptr;
+    }
+
+}
 void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skinIdx, AnimationInstanceData* animInstance, float time)
 {
 	if (model->numAnimations <= animIdx) { LOG("WARNING TRYING TO UPDATE INVALID ANIMATION\n"); return; }

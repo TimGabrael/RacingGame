@@ -86,6 +86,18 @@ void GM_CleanUpGameManager(GameManager* manager)
 {
 	RE_CleanUpAntialiasingData(&manager->AAbuffer);
 	RE_CleanUpPostProcessingRenderData(&manager->PPbuffer);
+    AM_CleanupEnvironment(&manager->env);
+
+    delete manager->fox;
+    AM_DeleteModel(manager->foxModel);
+    AM_DeleteModel(manager->sponzaModel);
+    AM_DeleteTextureAtlas(manager->atlas);
+    manager->foxModel = nullptr;
+    manager->sponzaModel = nullptr;
+    manager->atlas = nullptr;
+    CleanUpBoneData(&manager->foxAnimInstance);
+    delete manager->localPlayer;
+    manager->localPlayer = nullptr;
 }
 
 void GM_AddPlayerToScene(GameManager* game, const glm::vec3& pos, float yaw, float pitch)

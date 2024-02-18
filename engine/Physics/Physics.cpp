@@ -60,12 +60,14 @@ PhysicsScene* PH_CreatePhysicsScene()
 	return out;
 }
 
-void PH_CleanUpPhysicsScene(PhysicsScene* scene)
+void PH_DestroyPhysicsScene(PhysicsScene* scene)
 {
 	delete scene->raycastCallback;
 	scene->manager->release();
 	scene->scene->release();
 	scene->physicsSDK->release();
+    scene->foundation->release();
+    delete scene;
 }
 
 void PH_Update(PhysicsScene* scene, float dt)

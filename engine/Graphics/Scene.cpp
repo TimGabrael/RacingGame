@@ -40,7 +40,7 @@ struct Scene* SC_CreateScene()
 	Scene* scene = new Scene;
 	return scene;
 }
-void SC_CleanUpScene(struct Scene* scene)
+void SC_DestroyScene(struct Scene* scene)
 {
 	SC_RemoveAll(scene);
 	delete scene;

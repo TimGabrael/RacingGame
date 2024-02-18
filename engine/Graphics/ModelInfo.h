@@ -194,6 +194,7 @@ Model CreateModelFromVertices(Vertex3D* verts, uint32_t numVerts);
 void UpdateModelFromVertices(Model* model, Vertex3D* verts, uint32_t numVerts);
 
 void CreateBoneDataFromModel(const Model* model, AnimationInstanceData* anim);
+void CleanUpBoneData(AnimationInstanceData* anim);
 void UpdateBoneDataFromModel(const Model* model, uint32_t animIdx, uint32_t skinIdx, AnimationInstanceData* anim, float time);
 
 

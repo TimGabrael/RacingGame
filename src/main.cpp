@@ -14,7 +14,7 @@ int main()
 	GameState* game = CreateGameState("RacingGame", 1600, 900, 20);
 	GameManager* manager =  GM_CreateGameManager(game);
 	game->manager =  manager;
-	GM_AddPlayerToScene(manager, { 2.0f, 12.0f, 2.0f }, 0.0f, 0.0f);
+	GM_AddPlayerToScene(manager, { -40.0f, 12.0f, -40.0f }, 0.0f, 0.0f);
 
 	uint32_t numMetrics = 0;
 	manager->atlas = AM_LoadTextureAtlas("Assets/atlas.atl", &manager->metrics, &numMetrics, false);
@@ -34,14 +34,10 @@ int main()
 
 	physx::PxMaterial* material = game->physics->physicsSDK->createMaterial(0.5f, 0.5f, 0.5f);
 
-	physx::PxShape* sponzaShape = nullptr;
 	physx::PxShape* foxShape = nullptr;
 	physx::PxShape* planeShape = nullptr;
 
 	{
-		physx::PxTriangleMeshGeometry geomTriangle(manager->sponzaModel->concaveMesh, physx::PxMeshScale(physx::PxVec3(0.1f, 0.1f, 0.1f)));
-		sponzaShape = game->physics->physicsSDK->createShape(geomTriangle, *material);
-
 		physx::PxConvexMeshGeometry geomConvex(manager->foxModel->convexMesh, physx::PxMeshScale(physx::PxVec3(5.0f, 5.0f, 5.0f)));
 		foxShape = game->physics->physicsSDK->createShape(geomConvex, *material);
 
@@ -63,15 +59,26 @@ int main()
 	CreateBoneDataFromModel(manager->foxModel, &manager->foxAnimInstance);
 	
 
-	for (int i = 0; i < 10; i++)
-	{
-		manager->fox = new FoxEntity(manager->foxModel, &manager->foxAnimInstance);
-		manager->fox->body = game->physics->AddDynamicBody(foxShape, glm::vec3(0.0f, 10.0f + 10 * i, 0.0f), def);
-		manager->fox->renderable = new PBRRenderable(manager->foxModel, &manager->foxAnimInstance, glm::mat4(1.0f));
-		manager->fox->body->userData = manager->fox;
-	}
+    manager->fox = new FoxEntity(manager->foxModel, &manager->foxAnimInstance);
+    manager->fox->body = game->physics->AddDynamicBody(foxShape, glm::vec3(0.0f, 10.0f + 10.0f, 0.0f), def);
+    manager->fox->renderable = new PBRRenderable(manager->foxModel, &manager->foxAnimInstance, glm::mat4(1.0f));
+    manager->fox->body->userData = manager->fox;
 	
 	UpateGameState();
+
+    
+    material->release();
+    delete ent;
+    foxShape->release();
+    foxShape = nullptr;
+    planeShape->release();
+    planeShape = nullptr;
+    GM_CleanUpGameManager(manager);
+    delete manager;
+    manager = nullptr;
+    DestroyGameState(game);
+    game = nullptr;
+
 
 	return 0;
 }

@@ -143,7 +143,7 @@ struct ScreenSpaceReflectionRenderData
 
 
 struct Renderer* RE_CreateRenderer(struct AssetManager* assets);
-void RE_CleanUpRenderer(struct Renderer* renderer);
+void RE_DestroyRenderer(struct Renderer* renderer);
 
 
 

@@ -19,7 +19,7 @@ struct Entity
 
 
 struct Scene* SC_CreateScene();
-void SC_CleanUpScene(struct Scene* scene);
+void SC_DestroyScene(struct Scene* scene);
 
 
 void SC_RemoveAll(struct Scene* scene);

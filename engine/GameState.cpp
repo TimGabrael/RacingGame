@@ -117,7 +117,6 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 		return nullptr;
 	}
 
-
 	g_gameState = new GameState;
 	g_gameState->numGamepads = 0;
 	g_gameState->swapChainInterval = 2;
@@ -130,6 +129,7 @@ GameState* CreateGameState(const char* windowName, uint32_t windowWidth, uint32_
 	g_gameState->mouseX = 0;
 	g_gameState->mouseY = 0;
 	g_gameState->tickMultiplier = 1.0f;
+    g_gameState->accumulatedTime = 0.0f;
 
 	glfwMakeContextCurrent(window);
 	glfwSetWindowAspectRatio(window, 16, 9);
@@ -258,7 +258,9 @@ void UpateGameState()
 	while (true)
 	{
 		glfwPollEvents();
-		if (glfwWindowShouldClose(g_gameState->window)) break;
+		if (glfwWindowShouldClose(g_gameState->window)) {
+            break;
+        }
 
 
 		static double timer = glfwGetTime();
@@ -276,7 +278,6 @@ void UpateGameState()
 			PH_Update(g_gameState->physics, TIME_STEP);
 			g_gameState->manager->PostUpdate(TIME_STEP);
 			g_gameState->accumulatedTime -= TIME_STEP;
-			break;
 		}
 		
 		if (g_gameState->winWidth > 0 && g_gameState->winHeight > 0)
@@ -296,3 +297,27 @@ void UpateGameState()
 
 	}
 }
+void DestroyGameState(GameState* state) {
+    if(state == g_gameState) {
+        g_gameState = nullptr;
+    }
+    
+
+    glfwDestroyWindow(state->window);
+	
+	AM_DestroyAssetManager(state->assets);
+    PH_DestroyPhysicsScene(state->physics);
+    SC_DestroyScene(state->scene);
+    RE_DestroyRenderer(state->renderer);
+    AU_DestroyAudioManager(state->audio);
+    
+	state->assets = nullptr;
+	state->physics = nullptr;
+	state->scene = nullptr;
+	state->renderer = nullptr;
+	state->audio = nullptr;
+
+    delete state;
+    
+}
+
