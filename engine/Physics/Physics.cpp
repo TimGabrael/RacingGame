@@ -29,11 +29,11 @@ PhysicsScene* PH_CreatePhysicsScene()
 	PhysicsScene* out = new PhysicsScene;
 
 	out->foundation = PxCreateFoundation(PX_PHYSICS_VERSION, out->defaultAllocatorCallback, out->defaultErrorCallback);
-
+	
 	// Creating instance of PhysX SDK
 	out->physicsSDK = PxCreatePhysics(PX_PHYSICS_VERSION, *out->foundation, PxTolerancesScale(), true);
 	PxInitVehicleSDK(*out->physicsSDK);
-
+	
 	if (out->physicsSDK == NULL) {
 		LOG("Error creating PhysX3 device.\n");
 		LOG("Exiting...\n");
@@ -41,19 +41,18 @@ PhysicsScene* PH_CreatePhysicsScene()
 	}
 	if (!PxInitExtensions(*out->physicsSDK, nullptr))
 		LOG("PxInitExtensions failed!\n");
-
+	
 	PxSceneDesc sceneDesc(out->physicsSDK->getTolerancesScale());
 	sceneDesc.gravity = PxVec3(0.0f, -9.81f, 0.0f);
 	PxDefaultCpuDispatcher* dispatcher = PxDefaultCpuDispatcherCreate(1);
 	sceneDesc.cpuDispatcher = dispatcher;
 	sceneDesc.filterShader = PxDefaultSimulationFilterShader;
-
-
+	
 	out->scene = out->physicsSDK->createScene(sceneDesc);
 	out->manager = PxCreateControllerManager(*out->scene);
-
+	
 	out->raycastCallback = new MyRaycastCallback();
-
+	
 	out->scene->setVisualizationParameter(PxVisualizationParameter::eSCALE, 1.0f);
 	out->scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, 1.0f);
 
@@ -66,6 +65,13 @@ void PH_DestroyPhysicsScene(PhysicsScene* scene)
 	scene->manager->release();
 	scene->scene->release();
 	scene->physicsSDK->release();
+
+	// Foundation destruction failed due to pending module references. Close/release all depending modules first.
+	// 
+	// this comes up in the console whenever the foundation is released, but I don't really understand if this is
+	// trying to point out memory leaks or not.
+	// (cause I removed EVERY physics component creation except for the scene and it works but the scene always adds the message again to the output,
+	//  even though nothing is attached to the scene...)
     scene->foundation->release();
     delete scene;
 }

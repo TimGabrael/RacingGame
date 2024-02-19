@@ -3419,10 +3419,9 @@ void RE_SetLightData(struct Renderer* renderer, LightGroup* group)
 void RE_RenderShadows(struct Renderer* renderer)
 {
 	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
 	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	LightGroup* g = renderer->currentLightData;
-	if (!g->shadowGroup.fbo) return;
+	if (!g->shadowGroup.fbo || renderer->numCmds == 0) return;
 
 	glEnable(GL_POLYGON_OFFSET_FILL);
 	glPolygonOffset(2.0f, 4.0f);
@@ -3604,7 +3603,6 @@ void RE_RenderPreFilterCubeMap(struct Renderer* renderer, float roughness, uint3
 void RE_RenderGeometry(struct Renderer* renderer)
 {
 	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
     if (renderer->numCmds == 0) return;
 
 	
@@ -3637,7 +3635,6 @@ void RE_RenderGeometry(struct Renderer* renderer)
 void RE_RenderOpaque(struct Renderer* renderer)
 {
 	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
 	ASSERT(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numCmds == 0) return;
@@ -3670,7 +3667,6 @@ void RE_RenderOpaque(struct Renderer* renderer)
 void RE_RenderAdditionalOpaque(struct Renderer* renderer)
 {
 	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
 	ASSERT(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
 	if (renderer->numCmds == 0) return;
@@ -3705,10 +3701,9 @@ void RE_RenderAdditionalOpaque(struct Renderer* renderer)
 void RE_RenderTransparent(struct Renderer* renderer)
 {
 	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
 	ASSERT(renderer->currentEnvironmentData != 0, "Need to Set Current Environment Before Rendering");
 	ASSERT(renderer->currentLightData != 0, "Need to Set Current Light Data Before Rendering");
-	if (renderer->numCmds == renderer->firstTransparentCmd) return;
+	if (renderer->numCmds <= renderer->firstTransparentCmd) return;
 
 	const glm::mat4 viewProj = renderer->currentCam->proj * renderer->currentCam->view;
 	const glm::mat4 invViewProj = glm::inverse(viewProj);
@@ -3888,7 +3883,7 @@ void RE_EndScene(struct Renderer* renderer)
 void RE_RenderScreenSpaceReflection(struct Renderer* renderer, const ScreenSpaceReflectionRenderData* ssrData, GLuint srcTexture, GLuint targetFBO, uint32_t targetWidth, uint32_t targetHeight)
 {
 	ASSERT(renderer->currentCam != nullptr, "The Camera base needs to be set before rendering");
-	ASSERT(renderer->numCmds != 0, "Need to Call Begin Scene Before Rendering");
+    if(renderer->numCmds == 0) return;
 	glDisable(GL_BLEND);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);

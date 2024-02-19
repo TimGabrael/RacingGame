@@ -10,7 +10,7 @@ struct Player : public Entity
 	Player();
 	virtual ~Player() override;
 	virtual void Update(float dt) override;
-	virtual void UpdateFrame(float dt) {};
+	virtual void UpdateFrame(float dt) override {};
 
 #ifndef FREE_CAM
 	DefaultFPSController controller;

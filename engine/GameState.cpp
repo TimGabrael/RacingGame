@@ -306,9 +306,9 @@ void DestroyGameState(GameState* state) {
     glfwDestroyWindow(state->window);
 	
 	AM_DestroyAssetManager(state->assets);
-    PH_DestroyPhysicsScene(state->physics);
     SC_DestroyScene(state->scene);
     RE_DestroyRenderer(state->renderer);
+    PH_DestroyPhysicsScene(state->physics);
     AU_DestroyAudioManager(state->audio);
     
 	state->assets = nullptr;

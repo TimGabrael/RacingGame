@@ -166,7 +166,7 @@ struct Model* AM_AddModel(AssetManager* m, const char* file, uint32_t flags)
 		model->meshes = new Mesh[model->numMeshes];
 		memset(model->meshes, 0, sizeof(Mesh) * model->numMeshes);
 		model->textures = new Texture*[model->numTextures];
-		memset(model->textures, 0, sizeof(Texture*) * model->numTextures);
+		memset(model->textures, 0, sizeof(void*) * model->numTextures);
 		model->materials = new Material[model->numMaterials];
 		memset(model->materials, 0, sizeof(Material) * model->numMaterials);
 		model->joints = new Joint[model->numJoints];

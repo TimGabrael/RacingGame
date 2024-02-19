@@ -59,6 +59,7 @@ int main()
 	CreateBoneDataFromModel(manager->foxModel, &manager->foxAnimInstance);
 	
 
+    manager->fox = nullptr;
     manager->fox = new FoxEntity(manager->foxModel, &manager->foxAnimInstance);
     manager->fox->body = game->physics->AddDynamicBody(foxShape, glm::vec3(0.0f, 10.0f + 10.0f, 0.0f), def);
     manager->fox->renderable = new PBRRenderable(manager->foxModel, &manager->foxAnimInstance, glm::mat4(1.0f));
